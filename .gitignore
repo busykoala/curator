@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+data/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+coverage/
+playwright-report/
+test-results/
+npm-debug.log*
+.DS_Store
+.idea/
+.vscode/

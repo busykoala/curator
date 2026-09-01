@@ -1,0 +1,5 @@
+import { config } from "@/config";
+import { stateGet, stateSet } from "@/features/db/client";
+async function request(path: string, init?: RequestInit): Promise<Response> { return fetch(`${config.LIDARR_URL}/api/v1${path}`, { ...init, headers: { "X-Api-Key": config.LIDARR_API_KEY, "Content-Type": "application/json", ...init?.headers }, signal: AbortSignal.timeout(15_000) }); }
+export async function importedSinceLastPoll(): Promise<boolean> { if (!config.LIDARR_API_KEY) return false; const response = await request("/history?page=1&pageSize=1&sortKey=date&sortDirection=descending&eventType=3"); if (!response.ok) return false; const data = await response.json() as { records?: Array<{ date: string }> }; const newest = data.records?.[0]?.date ?? ""; const previous = stateGet("lidarr_last_import"); if (newest) stateSet("lidarr_last_import", newest); return Boolean(previous && newest && previous !== newest); }
+export async function rescanFolders(folders: string[]): Promise<void> { if (!config.LIDARR_API_KEY || !folders.length) return; await request("/command", { method: "POST", body: JSON.stringify({ name: "RescanFolders", folders: [...new Set(folders)] }) }); }

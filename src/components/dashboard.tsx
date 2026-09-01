@@ -1,0 +1,19 @@
+"use client";
+import { useCallback,useEffect,useState } from "react";
+import { Activity,Archive,Disc3,ListMusic,Menu,PlusCircle,RefreshCw,X } from "lucide-react";
+import { AddMusic } from "@/components/add-music";
+import { CuratorConsole } from "@/components/curator-console";
+import { LibraryBrowser } from "@/components/library-browser";
+import { PlaylistStudio } from "@/components/playlist-studio";
+
+type Summary={paused:boolean;metrics:Record<string,number>;operational:{running:boolean;phase:string;lastError?:string};jobs?:Array<{phase:string;status:string;subject:string;progress_json?:string}>};
+const destinations=[{name:"Dashboard",icon:Disc3,description:"Browse and edit your music"},{name:"Playlists",icon:ListMusic,description:"Design nightly smart mixes"},{name:"Curator",icon:Activity,description:"Automation, health and issues"},{name:"Add Music",icon:PlusCircle,description:"Find and queue new albums"}];
+export function Dashboard(){
+  const[view,setView]=useState("Dashboard"),[data,setData]=useState<Summary|null>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[menu,setMenu]=useState(false);
+  const refresh=useCallback(async()=>{try{const response=await fetch("/api/summary",{cache:"no-store"});if(response.ok)setData(await response.json())}catch{}},[]);
+  useEffect(()=>{void refresh();const interval=setInterval(()=>void refresh(),view==="Curator"?(data?.operational.running?5_000:15_000):30_000),focus=()=>void refresh();window.addEventListener("focus",focus);return()=>{clearInterval(interval);window.removeEventListener("focus",focus)}},[refresh,view,data?.operational.running]);
+  async function action(name:string){setBusy(true);setNotice("");try{const response=await fetch("/api/actions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:name})});if(!response.ok)throw new Error(await response.text());setNotice(name==="pause"?"Curator will pause safely after the current album.":`${name.replaceAll("-"," ")} accepted.`);await refresh()}catch(reason){setNotice(String(reason))}finally{setBusy(false)}}
+  function navigate(name:string){setView(name);setMenu(false)}
+  const status=data?.paused?"Paused":data?.operational.running?"Working":"Ready";
+  return <div className="app-shell"><aside className={`sidebar ${menu?"open":""}`}><div className="brand"><div className="brand-mark"><Archive/></div><div><span>Personal archive</span><strong>Music Curator</strong></div><button className="mobile-close" onClick={()=>setMenu(false)}><X/></button></div><nav>{destinations.map(({name,icon:Icon,description})=><button key={name} onClick={()=>navigate(name)} className={view===name?"active":""}><Icon/><span><strong>{name}</strong><small>{description}</small></span></button>)}</nav><div className="sidebar-status"><span className={`live-dot ${data?.paused?"paused":data?.operational.running?"running":"idle"}`}/><div><strong>{status}</strong><small>{data?.operational.running?data.operational.phase:"Automatic monitoring"}</small></div></div></aside>{menu&&<button className="sidebar-scrim" onClick={()=>setMenu(false)} aria-label="Close navigation"/>}<main className="content"><header className="topbar"><button className="mobile-menu" onClick={()=>setMenu(true)}><Menu/></button><div><span className="kicker">Music Curator</span><h1>{view}</h1></div><div className="top-actions">{notice&&<span className="notice">{notice}</span>}{view==="Curator"&&<button className="icon-button" disabled={busy} onClick={()=>void refresh()} aria-label="Refresh Curator data"><RefreshCw/></button>}</div></header><div className="page-content">{view==="Dashboard"&&<LibraryBrowser/>}{view==="Playlists"&&<PlaylistStudio/>}{view==="Curator"&&<CuratorConsole data={data} busy={busy} action={action}/>} {view==="Add Music"&&<AddMusic/>}</div></main></div>
+}
