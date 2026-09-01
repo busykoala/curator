@@ -14,6 +14,10 @@ export function pendingAlbumKeys(limit:number):string[]{
   return(db().prepare(`SELECT f.album_key FROM files f LEFT JOIN track_profiles p ON p.file_id=f.id WHERE f.status IN ('analyzed','written') AND (p.file_id IS NULL OR p.album_key<>f.album_key OR p.schema_version<>? OR p.classifier_version<>? OR coalesce(json_extract(p.provenance_json,'$.audioAnalyzer'),0)<>? OR p.status='pending' OR (p.status IN ('partial','failed') AND coalesce(p.next_retry_at,CURRENT_TIMESTAMP)<=CURRENT_TIMESTAMP) OR f.updated_at>p.source_updated_at) GROUP BY f.album_key ORDER BY min(CASE WHEN p.status IN ('partial','failed') AND coalesce(p.next_retry_at,CURRENT_TIMESTAMP)<=CURRENT_TIMESTAMP THEN 0 WHEN p.file_id IS NULL THEN 1 ELSE 2 END),min(f.updated_at),f.album_key LIMIT ?`).all(versions.categorizationSchema,versions.categorizationPrompt,versions.audioAnalysis,limit) as Array<{album_key:string}>).map(row=>row.album_key);
 }
 
+export function albumNeedsCategorization(albumKey:string):boolean{
+  return Boolean(db().prepare(`SELECT 1 FROM files f LEFT JOIN track_profiles p ON p.file_id=f.id WHERE f.album_key=? AND f.status IN ('analyzed','written') AND (p.file_id IS NULL OR p.album_key<>f.album_key OR p.schema_version<>? OR p.classifier_version<>? OR coalesce(json_extract(p.provenance_json,'$.audioAnalyzer'),0)<>? OR p.status='pending' OR (p.status IN ('partial','failed') AND coalesce(p.next_retry_at,CURRENT_TIMESTAMP)<=CURRENT_TIMESTAMP) OR f.updated_at>p.source_updated_at) LIMIT 1`).get(albumKey,versions.categorizationSchema,versions.categorizationPrompt,versions.audioAnalysis));
+}
+
 export function categorizationPendingCount():number{
   return(db().prepare(`SELECT count(*) count FROM files f LEFT JOIN track_profiles p ON p.file_id=f.id WHERE f.status IN ('analyzed','written') AND (p.file_id IS NULL OR p.album_key<>f.album_key OR p.schema_version<>? OR p.classifier_version<>? OR coalesce(json_extract(p.provenance_json,'$.audioAnalyzer'),0)<>? OR p.status='pending' OR (p.status IN ('partial','failed') AND coalesce(p.next_retry_at,CURRENT_TIMESTAMP)<=CURRENT_TIMESTAMP) OR f.updated_at>p.source_updated_at)`).get(versions.categorizationSchema,versions.categorizationPrompt,versions.audioAnalysis) as{count:number}).count;
 }
@@ -28,7 +32,13 @@ export function albumEvidence(albumKey:string):Record<string,unknown>{
   return{albumEnrichment:enrichment?{model:enrichment.model,createdAt:enrichment.created_at,value:bounded(parse(enrichment.result_json))}:null,sources:sources.map(source=>({provider:source.provider,sourceId:source.source_id,fetchedAt:source.fetched_at,value:bounded(parse(source.payload_json))}))};
 }
 
+function stableEvidence(value:unknown):unknown{
+  if(Array.isArray(value))return value.map(stableEvidence).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  if(value&&typeof value==="object")return Object.fromEntries(Object.entries(value as Record<string,unknown>).filter(([key])=>key!=="createdAt"&&key!=="fetchedAt").sort(([a],[b])=>a.localeCompare(b)).map(([key,item])=>[key,stableEvidence(item)]));
+  return value;
+}
+
 export function sourceFingerprint(file:CategorizationFile,evidence:Record<string,unknown>):string{
-  const relevant={artist:file.artist,album:file.album,tags:bounded(file.tags),evidence:bounded(evidence)};
+  const relevant={artist:file.artist,album:file.album,tags:bounded(file.tags),evidence:stableEvidence(bounded(evidence))};
   return createHash("sha256").update(JSON.stringify(relevant)).digest("hex");
 }

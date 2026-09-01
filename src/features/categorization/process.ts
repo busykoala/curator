@@ -4,7 +4,7 @@ import { analyzeAudio } from "./audio";
 import { aggregateAlbum } from "./aggregate";
 import { classifyTracks } from "./classify";
 import { fallbackProfile } from "./fallback";
-import { albumEvidence,categorizationPendingCount,loadAlbumFiles,pendingAlbumKeys,sourceFingerprint } from "./context";
+import { albumEvidence,albumNeedsCategorization,categorizationPendingCount,loadAlbumFiles,pendingAlbumKeys,sourceFingerprint } from "./context";
 import { normalizeProfile,profileIsSparse } from "./vocabulary";
 import { semanticProfileSchema } from "./schema";
 import { acquireAlbumLease,releaseAlbumLease } from "@/features/scheduler/album-lease";
@@ -34,6 +34,7 @@ export async function processCategorizationBatch(albumLimit:number,report:Report
   const keys=pendingAlbumKeys(albumLimit);let albums=0,tracks=0,classified=0,reused=0,partial=0;
   for(const key of keys){
     if(stateGet("paused")==="true")break;
+    if(!albumNeedsCategorization(key))continue;
     if(!acquireAlbumLease(key,"categorize"))continue;
     try{
       const prepared=await prepare(key),needed=prepared.tracks.filter(track=>!unchanged(track));tracks+=prepared.tracks.length;reused+=prepared.tracks.length-needed.length;

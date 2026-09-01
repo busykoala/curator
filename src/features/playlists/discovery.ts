@@ -12,6 +12,7 @@ const outputSchema = z.object({ candidates: z.array(candidateSchema).max(2) });
 const jsonSchema = { type: "object", additionalProperties: false, required: ["candidates"], properties: { candidates: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["lane", "artist", "album", "releaseDate", "genres", "sources", "rationale"], properties: { lane: { type: "string" }, artist: { type: "string" }, album: { type: "string" }, releaseDate: { type: "string" }, genres: { type: "array", maxItems: 4, items: { type: "string" } }, sources: { type: "array", minItems: 1, maxItems: 3, items: { type: "string" } }, rationale: { type: "string", maxLength: 300 } } } } } } as const;
 const norm = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const hoursSince = (value?: string | null) => value ? Math.max(0, (Date.now() - new Date(`${value.replace(" ", "T")}Z`).getTime()) / 3_600_000) : Number.POSITIVE_INFINITY;
+const validSource = (value: unknown): value is string => { try { const url = new URL(String(value)); return url.protocol === "https:" || url.protocol === "http:"; } catch { return false; } };
 
 type Lane = { name: string; category: string; intent: string; tasteLanes: string[]; genres: string[]; sourceDomains: string[] };
 type Candidate = { id: number; lane: string; artist: string; album: string; release_date: string; status: string; lidarr_album_id: number | null; queued_at: string | null; last_search_at: string | null; last_progress_at: string | null; last_size_left: number | null; search_attempts: number };
@@ -78,7 +79,10 @@ export async function researchDiscovery() {
   const evidence = known.map(({ name, category, intent, tasteLanes, genres, sourceDomains }) => ({ name, category, intent: intent.slice(0, 240), tasteLanes: tasteLanes.slice(0, 6), genres: genres.slice(0, 6), sourceDomains: sourceDomains.slice(0, 5) }));
   const response = await client.responses.create({ model: config.OPENAI_SOL_MODEL, reasoning: { effort: "low" }, tools: [{ type: "web_search", search_context_size: "low" }], max_output_tokens: 2_000, store: false, input: `Use exactly one web search query. Find one or two editorially supported music releases from the last 120 days for each supplied lane. Use exact lane names. Be concise. Favor reputable criticism and labels; reject charts, sponsorship, and unsupported claims. LANES=${JSON.stringify(evidence)}`, text: { format: { type: "json_schema", name: "playlist_discovery", strict: true, schema: jsonSchema } } }, { timeout: 120_000, maxRetries: 0 });
   recordAiUsage("playlist_discovery",config.OPENAI_SOL_MODEL,response);
-  const output = outputSchema.parse(JSON.parse(response.output_text));
+  const raw = JSON.parse(response.output_text) as { candidates?: Array<Record<string, unknown>> };
+  const output = outputSchema.parse({ candidates: (raw.candidates ?? []).map((candidate) => ({
+    ...candidate, sources: Array.isArray(candidate.sources) ? candidate.sources.filter(validSource) : [],
+  })).filter((candidate) => candidate.sources.length > 0) });
   stateSet("playlist_research_cursor", String((cursor + known.length) % all.length));
   const insert = db().prepare("INSERT INTO discovery_candidates(lane,artist,album,release_date,genres_json,sources_json,rationale) VALUES (?,?,?,?,?,?,?) ON CONFLICT(lane,artist,album) DO UPDATE SET release_date=excluded.release_date,genres_json=excluded.genres_json,sources_json=excluded.sources_json,rationale=excluded.rationale,updated_at=CURRENT_TIMESTAMP");
   let researched = 0;

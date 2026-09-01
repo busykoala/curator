@@ -29,7 +29,8 @@ const similarity = (a, b) => {
   return common / (left.size + right.size - common);
 };
 const exists = path => stat(path).then(x => x.isFile() && x.size > 10_000).catch(() => false);
-const artistPath = name => join(music,".artist-images",`${name.replaceAll("/","_")}.jpg`);
+const safeName = value => value.normalize("NFC").replace(/[\/:*?"<>|\u0000-\u001F\u007F]/g,"_").replace(/[. ]+$/g,"").trim() || "Unknown Artist";
+const artistPath = name => join(music,".artist-images",`${safeName(name)}.jpg`);
 const pause = ms => new Promise(done => setTimeout(done, ms));
 let musicBrainzQueue = Promise.resolve();
 

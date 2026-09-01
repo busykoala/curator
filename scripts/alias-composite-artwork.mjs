@@ -6,7 +6,8 @@ import sharp from "sharp";
 
 const root = process.env.MUSIC_ROOT ?? "/music";
 const imageDir = path.join(root, ".artist-images");
-const safeName = (value) => value.replaceAll("/", "_");
+const safeName = (value) => value.normalize("NFC")
+  .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/[. ]+$/g, "_");
 const key = (value) => value.normalize("NFKD").replace(/\p{M}/gu, "")
   .toLocaleLowerCase("en").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
