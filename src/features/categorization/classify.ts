@@ -4,6 +4,7 @@ import { semanticBatchJsonSchema,semanticBatchSchema } from "./schema";
 import { normalizeProfile,profileIsSparse } from "./vocabulary";
 import { canonicalPrompt } from "./canonical";
 import type { TrackClassificationInput,TrackSemanticProfile } from "./types";
+import { recordAiUsage } from "@/features/ai/usage";
 
 const instructions=`Categorize each supplied recording independently for long-term music discovery. Return strict structured data only. Keep every dimension conceptually distinct and preserve track differences within an album.
 GENRE must stay broad: rock, pop, electronic, hip_hop, rnb_soul_funk, jazz, classical, folk_acoustic, country_americana, metal, punk_hardcore, reggae_dub_ska, latin, african, middle_eastern_north_african, south_asian, east_southeast_asian, ambient, experimental_avant_garde, soundtrack_score, spoken_word_comedy, religious_spiritual, childrens, blues, or another genuinely broad family. Put subgenres in STYLE.
@@ -16,13 +17,13 @@ function compact(value:unknown,key:string):unknown{const limit=key==="lyrics"?30
 function payload(track:TrackClassificationInput){const tags=Object.fromEntries(Object.entries(track.file.tags).filter(([key])=>["title","artist","artists","album","albumArtist","date","year","genre","style","mood","scene","composer","label","bpm","key","lyrics","comment","trackNumber","discNumber"].includes(key)).slice(0,30).map(([key,value])=>[key,compact(value,key)]));return{fileId:track.file.id,artist:track.file.artist,album:track.file.album,path:track.file.path.replace(/^\/music\//,""),tags,audio:track.audio}}
 
 async function request(model:string,effort:"low"|"medium",tracks:TrackClassificationInput[],albumEvidence:Record<string,unknown>){
-  const client=new OpenAI({apiKey:config.OPENAI_API_KEY});const response=await client.responses.create({model,instructions,input:JSON.stringify({albumEvidence,tracks:tracks.map(payload)}),reasoning:{effort},text:{format:{type:"json_schema",name:"track_semantic_profiles",strict:true,schema:semanticBatchJsonSchema}},store:false});return semanticBatchSchema.parse(JSON.parse(response.output_text));
+  const client=new OpenAI({apiKey:config.OPENAI_API_KEY});const response=await client.responses.create({model,instructions,input:JSON.stringify({albumEvidence,tracks:tracks.map(payload)}),reasoning:{effort},text:{format:{type:"json_schema",name:"track_semantic_profiles",strict:true,schema:semanticBatchJsonSchema}},store:false});recordAiUsage("track_categorization",model,response);return semanticBatchSchema.parse(JSON.parse(response.output_text));
 }
 
 export async function classifyTracks(tracks:TrackClassificationInput[],albumEvidence:Record<string,unknown>):Promise<Map<number,{profile:TrackSemanticProfile;model:string}>>{
-  if(!config.OPENAI_API_KEY)throw new Error("OPENAI_API_KEY is not configured");let result,model=config.OPENAI_LUNA_MODEL;
-  try{result=await request(model,"low",tracks,albumEvidence)}catch{model=config.OPENAI_TERRA_MODEL;result=await request(model,"medium",tracks,albumEvidence)}
+  if(!config.OPENAI_API_KEY)throw new Error("OPENAI_API_KEY is not configured");let result,model=config.OPENAI_LUNA_MODEL,usedTerra=false;
+  try{result=await request(model,"low",tracks,albumEvidence)}catch{model=config.OPENAI_TERRA_MODEL;usedTerra=true;result=await request(model,"medium",tracks,albumEvidence)}
   const expected=new Set(tracks.map(track=>track.file.id)),output=new Map<number,{profile:TrackSemanticProfile;model:string}>();for(const item of result.tracks)if(expected.has(item.fileId))output.set(item.fileId,{profile:normalizeProfile(item.profile),model});
-  const retry=tracks.filter(track=>{const decision=output.get(track.file.id);return !decision||profileIsSparse(decision.profile)});if(retry.length)try{const escalated=await request(config.OPENAI_TERRA_MODEL,"medium",retry,albumEvidence);for(const item of escalated.tracks)if(expected.has(item.fileId))output.set(item.fileId,{profile:normalizeProfile(item.profile),model:config.OPENAI_TERRA_MODEL})}catch{}
+  const retry=tracks.filter(track=>{const decision=output.get(track.file.id);return !decision||profileIsSparse(decision.profile)});if(retry.length&&!usedTerra)try{const escalated=await request(config.OPENAI_TERRA_MODEL,"medium",retry,albumEvidence);for(const item of escalated.tracks)if(expected.has(item.fileId))output.set(item.fileId,{profile:normalizeProfile(item.profile),model:config.OPENAI_TERRA_MODEL})}catch{}
   return output;
 }

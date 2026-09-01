@@ -36,15 +36,16 @@ export async function runPlaylistSchedule() {
   if (
     ["Tue", "Fri"].includes(now.weekday) &&
     now.minutes >= 210 &&
+    now.minutes < 240 &&
     stateGet("playlist_research_date") !== now.date
   ) {
+    stateSet("playlist_research_date", now.date);
     stateSet("playlist_phase", "research");
     try {
       stateSet(
         "playlist_research_result",
         JSON.stringify(await researchDiscovery()),
       );
-      stateSet("playlist_research_date", now.date);
     } catch (error) {
       stateSet("playlist_error", String(error));
     }
@@ -52,8 +53,10 @@ export async function runPlaylistSchedule() {
 
   if (
     now.minutes >= 270 &&
+    now.minutes < 300 &&
     stateGet("playlist_run_date") !== now.date
   ) {
+    stateSet("playlist_run_date", now.date);
     stateSet("playlist_phase", "clusters");
     await refreshListeningClusters().catch((error) =>
       stateSet("playlist_error", String(error)),
@@ -78,7 +81,6 @@ export async function runPlaylistSchedule() {
         ),
       ),
     );
-    stateSet("playlist_run_date", now.date);
   }
 
   stateSet("playlist_phase", "idle");

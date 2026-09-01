@@ -1,14 +1,15 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import { config } from "@/config";
-import { db } from "@/features/db/client";
+import { db, stateGet, stateSet } from "@/features/db/client";
 import { addMusic, lidarrQueue, searchMusic } from "@/features/integrations/music";
 import { targetByAlbum } from "@/features/acquisition/repository";
+import { recordAiUsage } from "@/features/ai/usage";
 
 const client = new OpenAI({ apiKey: config.OPENAI_API_KEY || "build-placeholder" });
-const candidateSchema = z.object({ lane: z.string(), artist: z.string(), album: z.string(), releaseDate: z.string(), genres: z.array(z.string()), sources: z.array(z.string().url()).min(1), rationale: z.string() });
-const outputSchema = z.object({ candidates: z.array(candidateSchema).max(30) });
-const jsonSchema = { type: "object", additionalProperties: false, required: ["candidates"], properties: { candidates: { type: "array", maxItems: 30, items: { type: "object", additionalProperties: false, required: ["lane", "artist", "album", "releaseDate", "genres", "sources", "rationale"], properties: { lane: { type: "string" }, artist: { type: "string" }, album: { type: "string" }, releaseDate: { type: "string" }, genres: { type: "array", items: { type: "string" } }, sources: { type: "array", minItems: 1, items: { type: "string" } }, rationale: { type: "string" } } } } } } as const;
+const candidateSchema = z.object({ lane: z.string(), artist: z.string(), album: z.string(), releaseDate: z.string(), genres: z.array(z.string()).max(4), sources: z.array(z.string().url()).min(1).max(3), rationale: z.string().max(300) });
+const outputSchema = z.object({ candidates: z.array(candidateSchema).max(2) });
+const jsonSchema = { type: "object", additionalProperties: false, required: ["candidates"], properties: { candidates: { type: "array", maxItems: 2, items: { type: "object", additionalProperties: false, required: ["lane", "artist", "album", "releaseDate", "genres", "sources", "rationale"], properties: { lane: { type: "string" }, artist: { type: "string" }, album: { type: "string" }, releaseDate: { type: "string" }, genres: { type: "array", maxItems: 4, items: { type: "string" } }, sources: { type: "array", minItems: 1, maxItems: 3, items: { type: "string" } }, rationale: { type: "string", maxLength: 300 } } } } } } as const;
 const norm = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const hoursSince = (value?: string | null) => value ? Math.max(0, (Date.now() - new Date(`${value.replace(" ", "T")}Z`).getTime()) / 3_600_000) : Number.POSITIVE_INFINITY;
 
@@ -66,11 +67,19 @@ async function queueNext(lane: string) {
 }
 
 export async function researchDiscovery() {
-  const known = lanes();
-  if (!known.length) return { researched: 0, queued: 0 };
+  const all = lanes().filter((lane) => {
+    const row = db().prepare("SELECT count(*) count FROM discovery_candidates WHERE lane=? AND status IN ('researched','queued','downloading')").get(lane.name) as { count: number };
+    return Number(row.count) < 2;
+  });
+  if (!all.length) return { researched: 0, queued: 0 };
+  const cursor = Math.max(0, Number(stateGet("playlist_research_cursor") ?? 0)) % all.length;
+  const known = Array.from({ length: Math.min(1, all.length) }, (_, index) => all[(cursor + index) % all.length]);
   if (!config.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required for editorial discovery");
-  const response = await client.responses.create({ model: config.OPENAI_SOL_MODEL, reasoning: { effort: "medium" }, tools: [{ type: "web_search" }], input: `Research interesting music releases from the last 120 days for these user-selected taste lanes. The lane field MUST exactly equal one supplied name. Favor reputable music magazines, specialist publications, labels, and editorial criticism. Avoid popularity charts, sponsored placement, streaming popularity, and unsupported releases. Return several candidates per lane so stalled acquisitions can be replaced without another research call. INPUT=${JSON.stringify(known)}`, text: { format: { type: "json_schema", name: "playlist_discovery", strict: true, schema: jsonSchema } } }, { timeout: 180_000, maxRetries: 1 });
+  const evidence = known.map(({ name, category, intent, tasteLanes, genres, sourceDomains }) => ({ name, category, intent: intent.slice(0, 240), tasteLanes: tasteLanes.slice(0, 6), genres: genres.slice(0, 6), sourceDomains: sourceDomains.slice(0, 5) }));
+  const response = await client.responses.create({ model: config.OPENAI_SOL_MODEL, reasoning: { effort: "low" }, tools: [{ type: "web_search", search_context_size: "low" }], max_output_tokens: 2_000, store: false, input: `Use exactly one web search query. Find one or two editorially supported music releases from the last 120 days for each supplied lane. Use exact lane names. Be concise. Favor reputable criticism and labels; reject charts, sponsorship, and unsupported claims. LANES=${JSON.stringify(evidence)}`, text: { format: { type: "json_schema", name: "playlist_discovery", strict: true, schema: jsonSchema } } }, { timeout: 120_000, maxRetries: 0 });
+  recordAiUsage("playlist_discovery",config.OPENAI_SOL_MODEL,response);
   const output = outputSchema.parse(JSON.parse(response.output_text));
+  stateSet("playlist_research_cursor", String((cursor + known.length) % all.length));
   const insert = db().prepare("INSERT INTO discovery_candidates(lane,artist,album,release_date,genres_json,sources_json,rationale) VALUES (?,?,?,?,?,?,?) ON CONFLICT(lane,artist,album) DO UPDATE SET release_date=excluded.release_date,genres_json=excluded.genres_json,sources_json=excluded.sources_json,rationale=excluded.rationale,updated_at=CURRENT_TIMESTAMP");
   let researched = 0;
   for (const item of output.candidates) {
