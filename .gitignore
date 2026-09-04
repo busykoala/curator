@@ -11,6 +11,7 @@ data/
 coverage/
 playwright-report/
 test-results/
+tsconfig.tsbuildinfo
 npm-debug.log*
 .DS_Store
 .idea/
