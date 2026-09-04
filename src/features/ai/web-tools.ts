@@ -34,7 +34,8 @@ async function boundedFetch(value:string,maxBytes:number):Promise<{url:URL;conte
 function entities(value:string):string{return value.replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").replace(/&#(\d+);/g,(_,code:string)=>String.fromCodePoint(Number(code))).replace(/&#x([0-9a-f]+);/gi,(_,code:string)=>String.fromCodePoint(Number.parseInt(code,16)))}
 function plain(value:string):string{return entities(value.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi," ").replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ")).replace(/\s+/g," ").trim()}
 function attr(value:string,name:string):string|undefined{return entities(value.match(new RegExp(`${name}=["']([^"']+)["']`,"i"))?.[1]??"")||undefined}
-function resultUrl(value:string):string|undefined{try{const raw=entities(value),url=new URL(raw.startsWith("//")?`https:${raw}`:raw);return url.hostname.endsWith("duckduckgo.com")&&url.searchParams.get("uddg")?url.searchParams.get("uddg")??undefined:url.toString()}catch{return undefined}}
+function canonicalUrl(value:string|URL):string{const url=new URL(value.toString());for(const key of [...url.searchParams.keys()])if(/^utm_/i.test(key)||/^(fbclid|gclid|dclid|mc_cid|mc_eid)$/i.test(key))url.searchParams.delete(key);return url.toString()}
+function resultUrl(value:string):string|undefined{try{const raw=entities(value),url=new URL(raw.startsWith("//")?`https:${raw}`:raw),unwrapped=url.hostname.endsWith("duckduckgo.com")&&url.searchParams.get("uddg")?url.searchParams.get("uddg")!:url.toString();return canonicalUrl(unwrapped)}catch{return undefined}}
 
 export async function webSearch(query:string):Promise<WebResult[]>{
   const normalized=query.replace(/\s+/g," ").trim().slice(0,300);if(!normalized)throw new Error("Search query is empty");
@@ -54,6 +55,6 @@ export async function openWebPage(value:string):Promise<OpenedPage>{
   const {url,text}=await boundedFetch(value,1_500_000),head=text.slice(0,250_000);
   const title=plain(head.match(/<title\b[^>]*>[\s\S]*?<\/title>/i)?.[0]??"").slice(0,240);
   const metas=[...head.matchAll(/<meta\b[^>]*>/gi)].map((match)=>match[0]),images:string[]=[];let description="";
-  for(const meta of metas){const key=(attr(meta,"property")??attr(meta,"name")??"").toLowerCase(),content=attr(meta,"content");if(!content)continue;if(!description&&["description","og:description","twitter:description"].includes(key))description=plain(content).slice(0,600);if(["og:image","og:image:secure_url","twitter:image"].includes(key))try{const image=new URL(content,url).toString();if(!images.includes(image))images.push(image)}catch{}}
-  return{url:url.toString(),title,description,images:images.slice(0,8),text:plain(text).slice(0,8_000)};
+  for(const meta of metas){const key=(attr(meta,"property")??attr(meta,"name")??"").toLowerCase(),content=attr(meta,"content");if(!content)continue;if(!description&&["description","og:description","twitter:description"].includes(key))description=plain(content).slice(0,600);if(["og:image","og:image:secure_url","twitter:image"].includes(key))try{const image=canonicalUrl(new URL(content,url));if(!images.includes(image))images.push(image)}catch{}}
+  return{url:canonicalUrl(url),title,description,images:images.slice(0,8),text:plain(text).slice(0,8_000)};
 }
