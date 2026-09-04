@@ -26,6 +26,7 @@ function local() {
 }
 
 export async function runPlaylistSchedule() {
+  stateSet("playlist_error", "");
   const now = local();
   await refreshDiscoveryStates();
   await ensureAutomaticPlaylists().catch((error) =>
