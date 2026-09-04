@@ -3,7 +3,7 @@ import { db, stateGet, stateSet } from "@/features/db/client";
 import { addMusic, lidarrQueue, searchMusic } from "@/features/integrations/music";
 import { targetByAlbum } from "@/features/acquisition/repository";
 import { recordAiUsage } from "@/features/ai/usage";
-import { aiClient,aiConfigured,modelFor } from "@/features/ai/client";
+import { aiClient,aiConfigured,aiModel } from "@/features/ai/client";
 
 const candidateSchema = z.object({ lane: z.string(), artist: z.string(), album: z.string(), releaseDate: z.string(), genres: z.array(z.string()).max(4), sources: z.array(z.string().url()).min(1).max(3), rationale: z.string().max(300) });
 export const playlistDiscoveryOutputSchema = z.object({ candidates: z.array(candidateSchema).max(2) });
@@ -11,6 +11,12 @@ export const playlistDiscoveryJsonSchema = { type: "object", additionalPropertie
 const norm = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const hoursSince = (value?: string | null) => value ? Math.max(0, (Date.now() - new Date(`${value.replace(" ", "T")}Z`).getTime()) / 3_600_000) : Number.POSITIVE_INFINITY;
 const validSource = (value: unknown): value is string => { try { const url = new URL(String(value)); return url.protocol === "https:" || url.protocol === "http:"; } catch { return false; } };
+export function validatedDiscoveryOutput(raw:{candidates?:Array<Record<string,unknown>>},sourceUrls:Set<string>|undefined,earliestBoundary:number,latestBoundary:number){
+  const candidates=(raw.candidates??[])
+    .map((candidate):Record<string,unknown>&{sources:string[]}=>({...candidate,sources:Array.isArray(candidate.sources)?candidate.sources.filter((source):source is string=>validSource(source)&&(!sourceUrls||sourceUrls.has(String(source)))):[]}))
+    .filter((candidate)=>{const released=Date.parse(String(candidate.releaseDate));return candidate.sources.length>0&&Number.isFinite(released)&&released>=earliestBoundary&&released<=latestBoundary});
+  return playlistDiscoveryOutputSchema.parse({candidates});
+}
 
 type Lane = { name: string; category: string; intent: string; tasteLanes: string[]; genres: string[]; sourceDomains: string[] };
 type Candidate = { id: number; lane: string; artist: string; album: string; release_date: string; status: string; lidarr_album_id: number | null; queued_at: string | null; last_search_at: string | null; last_progress_at: string | null; last_size_left: number | null; search_attempts: number };
@@ -73,14 +79,11 @@ export async function researchDiscovery() {
   if (!all.length) return { researched: 0, queued: 0 };
   const cursor = Math.max(0, Number(stateGet("playlist_research_cursor") ?? 0)) % all.length;
   const known = Array.from({ length: Math.min(1, all.length) }, (_, index) => all[(cursor + index) % all.length]);
-  if (!aiConfigured) throw new Error("An AI API key is required for editorial discovery");
-  const evidence = known.map(({ name, category, intent, tasteLanes, genres, sourceDomains }) => ({ name, category, intent: intent.slice(0, 240), tasteLanes: tasteLanes.slice(0, 6), genres: genres.slice(0, 6), sourceDomains: sourceDomains.slice(0, 5) }));
-  const model=modelFor("sol"),response = await aiClient.structured<{candidates?:Array<Record<string,unknown>>}>({model,effort:"low",web:true,maxOutputTokens:2_000,input:`Find one or two editorially supported music releases from the last 120 days for each supplied lane. Use exact lane names. Be concise. Favor reputable criticism and labels; reject charts, sponsorship, and unsupported claims. LANES=${JSON.stringify(evidence)}`,schemaName:"playlist_discovery",schema:playlistDiscoveryJsonSchema});
-  recordAiUsage("playlist_discovery",model,response);
-  const raw = response.data;
-  const output = playlistDiscoveryOutputSchema.parse({ candidates: (raw.candidates ?? []).map((candidate) => ({
-    ...candidate, sources: Array.isArray(candidate.sources) ? candidate.sources.filter((source)=>validSource(source)&&(!response.sourceUrls||response.sourceUrls.has(String(source)))) : [],
-  })).filter((candidate) => candidate.sources.length > 0) });
+  if (!aiConfigured) throw new Error("A local AI API key is required for editorial discovery");
+  const evidence = known.map(({ name, category, intent, tasteLanes, genres, sourceDomains }) => ({ name, category, intent: intent.slice(0, 240), tasteLanes: tasteLanes.slice(0, 6), genres: genres.slice(0, 6), sourceDomains: sourceDomains.slice(0, 5) })),latest=new Date(),earliest=new Date(latest.getTime()-120*86_400_000),latestDate=latest.toISOString().slice(0,10),earliestDate=earliest.toISOString().slice(0,10),earliestBoundary=Date.parse(earliestDate),latestBoundary=Date.parse(`${latestDate}T23:59:59.999Z`);
+  const response = await aiClient.structured<{candidates?:Array<Record<string,unknown>>}>({web:true,maxOutputTokens:2_000,input:`Find one or two editorially supported music releases released from ${earliestDate} through ${latestDate}, inclusive, for each supplied lane. Use exact lane names and verify every release date. Be concise. Favor reputable criticism and labels; reject charts, sponsorship, and unsupported claims. LANES=${JSON.stringify(evidence)}`,schemaName:"playlist_discovery",schema:playlistDiscoveryJsonSchema});
+  recordAiUsage("playlist_discovery",aiModel,response);
+  const output = validatedDiscoveryOutput(response.data,response.sourceUrls,earliestBoundary,latestBoundary);
   stateSet("playlist_research_cursor", String((cursor + known.length) % all.length));
   const insert = db().prepare("INSERT INTO discovery_candidates(lane,artist,album,release_date,genres_json,sources_json,rationale) VALUES (?,?,?,?,?,?,?) ON CONFLICT(lane,artist,album) DO UPDATE SET release_date=excluded.release_date,genres_json=excluded.genres_json,sources_json=excluded.sources_json,rationale=excluded.rationale,updated_at=CURRENT_TIMESTAMP");
   let researched = 0;

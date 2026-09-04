@@ -40,8 +40,8 @@ async function main(): Promise<void> {
   const inputPath = process.argv[2] ?? "/app/data/credit-representatives-2.json";
   const outputPath = process.argv[3] ?? "/app/data/credit-alias-resolutions.json";
   const audit = firstJson(readFileSync(inputPath, "utf8"));
-  const client = new CuratorAiClient({ apiKey: process.env.CURATOR_AI_API_KEY || process.env.OPENAI_API_KEY || "", baseURL: process.env.OPENAI_BASE_URL, style: process.env.OPENAI_API_STYLE === "chat" ? "chat" : "responses" });
-  const model = process.env.OPENAI_MODEL || process.env.OPENAI_LUNA_MODEL || "gpt-5.6-luna";
+  const model = process.env.CURATOR_AI_MODEL || "curator";
+  const client = new CuratorAiClient({ apiKey: process.env.CURATOR_AI_API_KEY || "", baseURL: process.env.CURATOR_AI_BASE_URL || "http://inference-api.inference.svc.cluster.local:8080/v1", model });
   const source = audit.report.composer.missing.map((inputName) => ({
     inputName,
     contexts: audit.report.composer.contexts[inputName] ?? [],
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
 
   for (let offset = 0; offset < source.length; offset += 20) {
     const batch = source.slice(offset, offset + 20);
-    const response = await client.structured<{items:Resolution[]}>({model,effort:"low",instructions:"Resolve composer-credit identities using the supplied album context. Expand initials, surnames, legal names, and stage names only when evidence is strong. Return the best canonical public name for finding a portrait. Use null when ambiguous. Do not invent people or catalog facts.",input:JSON.stringify(batch),schemaName:"credit_aliases",schema});
+    const response = await client.structured<{items:Resolution[]}>({instructions:"Resolve composer-credit identities using the supplied album context. Expand initials, surnames, legal names, and stage names only when evidence is strong. Return the best canonical public name for finding a portrait. Use null when ambiguous. Do not invent people or catalog facts.",input:JSON.stringify(batch),schemaName:"credit_aliases",schema});
     const parsed = response.data;
     resolved.push(...parsed.items);
     writeFileSync(outputPath, JSON.stringify({ model, resolved }, null, 2));

@@ -3,7 +3,7 @@ import { normalizeProfile,profileIsSparse } from "./vocabulary";
 import { canonicalPrompt } from "./canonical";
 import type { TrackClassificationInput,TrackSemanticProfile } from "./types";
 import { recordAiUsage } from "@/features/ai/usage";
-import { aiClient,aiConfigured,tierModels } from "@/features/ai/client";
+import { aiClient,aiConfigured,aiModel } from "@/features/ai/client";
 
 export const categorizationInstructions=`Categorize each supplied recording independently for long-term music discovery. Return strict structured data only. Keep every dimension conceptually distinct and preserve track differences within an album.
 GENRE must stay broad: rock, pop, electronic, hip_hop, rnb_soul_funk, jazz, classical, folk_acoustic, country_americana, metal, punk_hardcore, reggae_dub_ska, latin, african, middle_eastern_north_african, south_asian, east_southeast_asian, ambient, experimental_avant_garde, soundtrack_score, spoken_word_comedy, religious_spiritual, childrens, blues, or another genuinely broad family. Put subgenres in STYLE.
@@ -16,14 +16,13 @@ ${canonicalPrompt}`;
 function compact(value:unknown,key:string):unknown{const limit=key==="lyrics"?3000:800;if(typeof value==="string")return value.slice(0,limit);if(Array.isArray(value))return value.slice(0,12).map(item=>typeof item==="string"?item.slice(0,limit):item);if(value&&typeof value==="object")return Object.fromEntries(Object.entries(value as Record<string,unknown>).slice(0,20).map(([name,item])=>[name,compact(item,name)]));return value}
 export function classificationPayload(track:TrackClassificationInput){const tags=Object.fromEntries(Object.entries(track.file.tags).filter(([key])=>["title","artist","artists","album","albumArtist","date","year","genre","style","mood","scene","language","languages","composer","label","bpm","key","lyrics","comment","trackNumber","discNumber"].includes(key)).slice(0,30).map(([key,value])=>[key,compact(value,key)]));return{fileId:track.file.id,artist:track.file.artist,album:track.file.album,path:track.file.path.replace(/^\/music\//,""),tags,audio:track.audio}}
 
-async function request(model:string,effort:"low"|"medium",tracks:TrackClassificationInput[],albumEvidence:Record<string,unknown>){
-  const response=await aiClient.structured<unknown>({model,effort,instructions:categorizationInstructions,input:JSON.stringify({albumEvidence,tracks:tracks.map(classificationPayload)}),schemaName:"track_semantic_profiles",schema:semanticBatchJsonSchema});recordAiUsage("track_categorization",model,response);return semanticBatchSchema.parse(response.data);
+async function request(tracks:TrackClassificationInput[],albumEvidence:Record<string,unknown>){
+  const response=await aiClient.structured<unknown>({instructions:categorizationInstructions,input:JSON.stringify({albumEvidence,tracks:tracks.map(classificationPayload)}),schemaName:"track_semantic_profiles",schema:semanticBatchJsonSchema});recordAiUsage("track_categorization",aiModel,response);return semanticBatchSchema.parse(response.data);
 }
 
 export async function classifyTracks(tracks:TrackClassificationInput[],albumEvidence:Record<string,unknown>):Promise<Map<number,{profile:TrackSemanticProfile;model:string}>>{
-  if(!aiConfigured)throw new Error("No AI API key is configured");const models=tierModels("luna","terra");let result,model=models[0],usedFallback=false;
-  try{result=await request(model,"low",tracks,albumEvidence)}catch(error){if(!models[1])throw error;model=models[1];usedFallback=true;result=await request(model,"medium",tracks,albumEvidence)}
-  const expected=new Set(tracks.map(track=>track.file.id)),output=new Map<number,{profile:TrackSemanticProfile;model:string}>();for(const item of result.tracks)if(expected.has(item.fileId))output.set(item.fileId,{profile:normalizeProfile(item.profile),model});
-  const retry=tracks.filter(track=>{const decision=output.get(track.file.id);return !decision||profileIsSparse(decision.profile)});if(retry.length&&!usedFallback&&models[1])try{const escalated=await request(models[1],"medium",retry,albumEvidence);for(const item of escalated.tracks)if(expected.has(item.fileId))output.set(item.fileId,{profile:normalizeProfile(item.profile),model:models[1]})}catch{}
+  if(!aiConfigured)throw new Error("Local AI API key is not configured");const result=await request(tracks,albumEvidence);
+  const expected=new Set(tracks.map(track=>track.file.id)),output=new Map<number,{profile:TrackSemanticProfile;model:string}>();for(const item of result.tracks)if(expected.has(item.fileId))output.set(item.fileId,{profile:normalizeProfile(item.profile),model:aiModel});
+  const retry=tracks.filter(track=>{const decision=output.get(track.file.id);return !decision||profileIsSparse(decision.profile)});if(retry.length)try{const repeated=await request(retry,albumEvidence);for(const item of repeated.tracks)if(expected.has(item.fileId))output.set(item.fileId,{profile:normalizeProfile(item.profile),model:aiModel})}catch{}
   return output;
 }

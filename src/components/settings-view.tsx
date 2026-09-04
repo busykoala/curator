@@ -2,7 +2,7 @@
 import { useEffect,useState } from "react";
 import { Check,Database,KeyRound,LoaderCircle,LogOut,Save,ServerCog,Sparkles } from "lucide-react";
 
-type Settings={scanIntervalHours:number;enrichmentBatchAlbums:number;categorizationBatchAlbums:number;libraryPageSize:number;stackRefreshSeconds:number;navidromeUsername:string;navidromePasswordConfigured:boolean;lunaModel:string;terraModel:string;musicRoot:string};
+type Settings={scanIntervalHours:number;enrichmentBatchAlbums:number;categorizationBatchAlbums:number;libraryPageSize:number;stackRefreshSeconds:number;navidromeUsername:string;navidromePasswordConfigured:boolean;aiModel:string;musicRoot:string};
 export function SettingsView(){
   const[data,setData]=useState<Settings|null>(null),[password,setPassword]=useState(""),[saving,setSaving]=useState(false),[notice,setNotice]=useState("");
   useEffect(()=>{fetch("/api/settings",{cache:"no-store"}).then(response=>response.json()).then(setData).catch(reason=>setNotice(String(reason)))},[]);
@@ -26,9 +26,8 @@ export function SettingsView(){
       <label><span>Navidrome username</span><input value={data.navidromeUsername} onChange={event=>setData({...data,navidromeUsername:event.target.value})}/></label>
       <label><span>Navidrome password</span><input type="password" value={password} onChange={event=>setPassword(event.target.value)} placeholder={data.navidromePasswordConfigured?"Configured / enter to replace":"Enter password"}/></label>
     </div></section>
-    <section className="settings-section"><div className="settings-section-title"><Sparkles/><div><h3>AI routing</h3><p>Model identities are environment-managed; a single configured model replaces tiered fallback routing.</p></div></div><div className="settings-grid">
-      <label className="read-only"><span>Primary model</span><input value={data.lunaModel} readOnly/></label>
-      {data.terraModel!==data.lunaModel&&<label className="read-only"><span>Fallback model</span><input value={data.terraModel} readOnly/></label>}
+    <section className="settings-section"><div className="settings-section-title"><Sparkles/><div><h3>Local AI</h3><p>The environment-managed local model handles all enrichment, categorization, and research work.</p></div></div><div className="settings-grid">
+      <label className="read-only"><span>Model</span><input value={data.aiModel} readOnly/></label>
     </div></section>
     <footer className="settings-footer"><button className="danger-link" onClick={()=>fetch("/api/auth/logout",{method:"POST"}).then(()=>location.href="/login")}><LogOut/>Sign out</button><button className="primary-button" onClick={save} disabled={saving}>{saving?<LoaderCircle className="spin"/>:<Save/>}Save settings</button></footer>
   </div>
