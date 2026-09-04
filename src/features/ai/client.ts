@@ -36,7 +36,7 @@ export class CuratorAiClient{
     let lastError:unknown;
     for(let attempt=0;attempt<3;attempt+=1){
       try{
-        const response=await fetch(this.endpoint,{method:"POST",headers:{Authorization:`Bearer ${this.options.apiKey||"missing"}`,"Content-Type":"application/json"},body:JSON.stringify({model:this.options.model,...body}),signal:AbortSignal.timeout(120_000)}),text=await response.text();
+        const response=await fetch(this.endpoint,{method:"POST",headers:{Authorization:`Bearer ${this.options.apiKey||"missing"}`,"Content-Type":"application/json"},body:JSON.stringify({model:this.options.model,...body}),signal:AbortSignal.timeout(600_000)}),text=await response.text();
         if(!response.ok)throw new AiHttpError(response.status,`Local AI request failed (${response.status}): ${text.slice(0,500)}`);
         try{return JSON.parse(text) as ChatResponse}catch{throw new Error("Local AI returned invalid JSON")}
       }catch(error){
