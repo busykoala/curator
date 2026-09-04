@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import OpenAI from "openai";
+import { CuratorAiClient } from "../src/features/ai/client";
 
 type Audit = { report: { composer: { missing: string[]; contexts: Record<string, string[]> } } };
 type Resolution = {
@@ -40,8 +40,8 @@ async function main(): Promise<void> {
   const inputPath = process.argv[2] ?? "/app/data/credit-representatives-2.json";
   const outputPath = process.argv[3] ?? "/app/data/credit-alias-resolutions.json";
   const audit = firstJson(readFileSync(inputPath, "utf8"));
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const model = process.env.OPENAI_LUNA_MODEL ?? "gpt-5.6-luna";
+  const client = new CuratorAiClient({ apiKey: process.env.CURATOR_AI_API_KEY || process.env.OPENAI_API_KEY || "", baseURL: process.env.OPENAI_BASE_URL, style: process.env.OPENAI_API_STYLE === "chat" ? "chat" : "responses" });
+  const model = process.env.OPENAI_MODEL || process.env.OPENAI_LUNA_MODEL || "gpt-5.6-luna";
   const source = audit.report.composer.missing.map((inputName) => ({
     inputName,
     contexts: audit.report.composer.contexts[inputName] ?? [],
@@ -50,20 +50,8 @@ async function main(): Promise<void> {
 
   for (let offset = 0; offset < source.length; offset += 20) {
     const batch = source.slice(offset, offset + 20);
-    const response = await client.responses.create({
-      model,
-      reasoning: { effort: "low" },
-      store: false,
-      input: [
-        {
-          role: "system",
-          content: "Resolve composer-credit identities using the supplied album context. Expand initials, surnames, legal names, and stage names only when evidence is strong. Return the best canonical public name for finding a portrait. Use null when ambiguous. Do not invent people or catalog facts.",
-        },
-        { role: "user", content: JSON.stringify(batch) },
-      ],
-      text: { format: { type: "json_schema", name: "credit_aliases", strict: true, schema } },
-    });
-    const parsed = JSON.parse(response.output_text) as { items: Resolution[] };
+    const response = await client.structured<{items:Resolution[]}>({model,effort:"low",instructions:"Resolve composer-credit identities using the supplied album context. Expand initials, surnames, legal names, and stage names only when evidence is strong. Return the best canonical public name for finding a portrait. Use null when ambiguous. Do not invent people or catalog facts.",input:JSON.stringify(batch),schemaName:"credit_aliases",schema});
+    const parsed = response.data;
     resolved.push(...parsed.items);
     writeFileSync(outputPath, JSON.stringify({ model, resolved }, null, 2));
     console.error(`resolved ${Math.min(offset + batch.length, source.length)}/${source.length}`);

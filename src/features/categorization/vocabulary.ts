@@ -66,7 +66,10 @@ function normalizeField(field:string,value:unknown,max:number):string[]{
 export function normalizeProfile(profile:TrackSemanticProfile):TrackSemanticProfile{
   const output={...profile} as TrackSemanticProfile,record=output as unknown as Record<string,unknown>;
   for(const field of semanticListFields){const max=field==="instrumentation"?10:field==="lyricalThemes"||field==="listeningContexts"?6:5;record[field]=normalizeField(field,record[field],max)}
-  output.musicalKey=profile.musicalKey?String(profile.musicalKey).normalize("NFKC").trim():null;output.summary=sanitizeSummary(profile.summary);output.evidenceNotes=[...new Set(profile.evidenceNotes.map(value=>sanitizeText(value).slice(0,180)).filter(Boolean))].slice(0,6);return output;
+  const instruments=new Set(output.instrumentation),bandSources=["acoustic_drums","electric_guitar","bass_guitar","acoustic_guitar","piano","organ","strings","brass","saxophone","flute"].some((item)=>instruments.has(item)),electronicSources=["synthesizer","drum_machine","sampler","sequencer"].some((item)=>instruments.has(item));
+  if(output.acousticElectronicCharacter==="fully_electronic"&&bandSources&&!electronicSources)output.acousticElectronicCharacter="acoustic_electronic_hybrid";
+  if(output.acousticElectronicCharacter==="fully_acoustic"&&electronicSources)output.acousticElectronicCharacter="acoustic_electronic_hybrid";
+  const key=profile.musicalKey?String(profile.musicalKey).normalize("NFKC").trim():"";output.musicalKey=/^(?:unknown|none|n\/?a)$/i.test(key)?null:key||null;output.summary=sanitizeSummary(profile.summary);output.evidenceNotes=[...new Set(profile.evidenceNotes.map(value=>sanitizeText(value).slice(0,180)).filter(Boolean))].slice(0,6);return output;
 }
 
 export function profileIsSparse(profile:TrackSemanticProfile):boolean{

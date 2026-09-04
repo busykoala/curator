@@ -79,8 +79,8 @@ export function publicRuntimeSettings() {
   return {
     ...runtimeSettings(),
     navidromePasswordConfigured: Boolean(stateGet("navidrome_password")),
-    lunaModel: config.OPENAI_LUNA_MODEL,
-    terraModel: config.OPENAI_TERRA_MODEL,
+    lunaModel: config.OPENAI_MODEL || config.OPENAI_LUNA_MODEL,
+    terraModel: config.OPENAI_MODEL || config.OPENAI_TERRA_MODEL,
     musicRoot: config.MUSIC_ROOT,
   };
 }

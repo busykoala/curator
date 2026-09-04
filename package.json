@@ -11,6 +11,7 @@
     "sample": "tsx src/cli/sample.ts",
     "audit:categorization": "tsx src/cli/audit-categorization.ts"
     ,"audit:acquisition": "tsx scripts/audit-acquisition.ts"
+    ,"evaluate:ai": "tsx scripts/evaluate-ai.ts"
   },
   "dependencies": {
     "argon2": "0.45.1",

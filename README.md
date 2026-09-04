@@ -8,6 +8,8 @@ The container runs the authenticated web application and its isolated background
 
 Copy .env.example to a private runtime environment and supply the required credentials. Never commit .env, SQLite databases, library files, or provider credentials.
 
+Curator supports both OpenAI's Responses API and an OpenAI-compatible Chat Completions endpoint. For one local model, set `CURATOR_AI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_API_STYLE=chat`, and `OPENAI_MODEL`; the single model then replaces tiered Luna/Terra/Sol routing. `CURATOR_AI_API_KEY` takes precedence over `OPENAI_API_KEY`, which can remain available for evaluation or rollback. Local web research runs through Curator's bounded `web_search` and `open_url` tool loop.
+
 ## Build
 
     npm ci
@@ -22,4 +24,4 @@ Published images are available from ghcr.io/busykoala/curator. Deployment config
 - SQLite stores operational state, provider evidence, jobs, and settings.
 - Music files and sidecar artwork remain the durable enriched library.
 - Provider credentials are server-only.
-- OpenAI receives structured metadata evidence, never audio files.
+- The configured AI endpoint receives structured metadata evidence, never audio files.
