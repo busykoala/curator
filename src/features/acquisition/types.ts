@@ -7,6 +7,7 @@ export type AcquisitionTarget = {
   next_retry_at:string|null; first_queued_at:string|null; last_progress_at:string|null;
   last_size_left:number|null; source_name:string|null; imported_at:string|null;
   last_release_guid:string|null;
+  search_count?:number;
   created_at:string;
 };
 export type DownloadObservation = {

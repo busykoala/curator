@@ -9,6 +9,7 @@ import { normalizeProfile,profileIsSparse } from "./vocabulary";
 import { semanticProfileSchema } from "./schema";
 import { acquireAlbumLease,releaseAlbumLease } from "@/features/scheduler/album-lease";
 import type { AudioFeatures,TrackClassificationInput,TrackSemanticProfile } from "./types";
+import { aiCooldownRemaining } from "@/features/ai/client";
 
 type Report=(value:{subject:string;phase:string;currentFile?:string;processedCount:number;totalCount:number})=>void;
 type Prepared=TrackClassificationInput&{audioFingerprint:string;audioError?:string};
@@ -27,13 +28,13 @@ function unchanged(track:Prepared):boolean{const row=db().prepare("SELECT album_
 function persist(track:Prepared,profile:TrackSemanticProfile,model:string,status:"complete"|"partial",error?:string):void{
   const patch=manual(track.file.id),final=applyManual(profile,patch),finalStatus=status==="complete"||(Object.keys(patch).length>0&&!profileIsSparse(final))?"complete":"partial",finalError=finalStatus==="complete"?null:error??track.audioError??"Semantic profile is sparse and scheduled for retry",transient=/(connection|timeout|temporar|fetch failed|no router for requested model|\b429\b|\b503\b)/i.test(finalError??""),next=finalStatus==="complete"?null:transient?"datetime('now','+20 minutes')":"datetime('now','+1 day')";
   db().prepare(`INSERT INTO track_profiles(file_id,album_key,audio_fingerprint,source_fingerprint,profile_json,manual_json,provenance_json,status,schema_version,classifier_version,source_updated_at,attempt_count,next_retry_at,last_error) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,${next??"NULL"},?) ON CONFLICT(file_id) DO UPDATE SET album_key=excluded.album_key,audio_fingerprint=excluded.audio_fingerprint,source_fingerprint=excluded.source_fingerprint,profile_json=excluded.profile_json,manual_json=excluded.manual_json,provenance_json=excluded.provenance_json,status=excluded.status,schema_version=excluded.schema_version,classifier_version=excluded.classifier_version,source_updated_at=excluded.source_updated_at,attempt_count=track_profiles.attempt_count+1,next_retry_at=excluded.next_retry_at,last_error=excluded.last_error,updated_at=CURRENT_TIMESTAMP`).run(track.file.id,track.file.albumKey,track.audioFingerprint,track.sourceFingerprint,JSON.stringify(final),JSON.stringify(patch),JSON.stringify({model,audioAnalyzer:versions.audioAnalysis}),finalStatus,versions.categorizationSchema,versions.categorizationPrompt,track.file.sourceUpdatedAt,finalError);
-  db().prepare("UPDATE issues SET status='resolved',updated_at=CURRENT_TIMESTAMP WHERE file_id=? AND code IN ('categorization_partial','categorization_failed') AND status='open'").run(track.file.id);if(finalStatus!=="complete")db().prepare("INSERT INTO issues(file_id,album_key,code,severity,message) VALUES (?,?,?,?,?)").run(track.file.id,track.file.albumKey,"categorization_partial","warning",finalError);
+  if(finalStatus==="complete")db().prepare("UPDATE issues SET status='resolved',updated_at=CURRENT_TIMESTAMP WHERE file_id=? AND code IN ('categorization_partial','categorization_failed') AND status='open'").run(track.file.id);else{const updated=db().prepare("UPDATE issues SET message=?,updated_at=CURRENT_TIMESTAMP WHERE file_id=? AND code='categorization_partial' AND status='open'").run(finalError,track.file.id);if(!updated.changes)db().prepare("INSERT INTO issues(file_id,album_key,code,severity,message) VALUES (?,?,?,?,?)").run(track.file.id,track.file.albumKey,"categorization_partial","warning",finalError)}
 }
 
 export async function processCategorizationBatch(albumLimit:number,report:Report):Promise<{albums:number;tracks:number;classified:number;reused:number;partial:number;remaining:number}>{
   const keys=pendingAlbumKeys(albumLimit);let albums=0,tracks=0,classified=0,reused=0,partial=0;
   for(const key of keys){
-    if(stateGet("paused")==="true")break;
+    if(stateGet("paused")==="true"||aiCooldownRemaining())break;
     if(!albumNeedsCategorization(key))continue;
     if(!acquireAlbumLease(key,"categorize"))continue;
     try{

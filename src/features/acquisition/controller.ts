@@ -20,12 +20,14 @@ import {
 } from "./qbittorrent";
 import {
   controllerMode,
-  hoursSince,
+  balancedSearchTargets,
   isManagedIncomplete,
+  isStaleOrphan,
   isPriorityTarget,
   orderSearchTargets,
   retryDelay,
   searchBudget,
+  shouldUseFallback,
   stalledDecision,
 } from "./policy";
 import {
@@ -131,7 +133,7 @@ function synchronizeTargets(wanted: Wanted[]) {
     }
   }
 }
-function acquisitionQuota() {
+function acquisitionQuota(recovering: boolean) {
   const row = db()
     .prepare(
       `SELECT sum(created_at>=datetime('now','-15 minutes')) short,
@@ -149,7 +151,7 @@ function acquisitionQuota() {
     short: Number(row.short ?? 0),
     daily: Number(row.daily ?? 0),
     priorityDaily: Number(row.priorityDaily ?? 0),
-  });
+  }, recovering);
 }
 function failedSearchPatch(target: AcquisitionTarget, error: unknown) {
   const searchedAt = iso(),
@@ -212,7 +214,16 @@ async function repairImports(items: QueueItem[], apply: boolean) {
   for (const item of items
     .filter((value) => value.trackedDownloadState === "importFailed")
     .slice(0, 5)) {
-    const target = item.albumId ? targetByAlbum(item.albumId) : undefined;
+    let target = item.albumId ? targetByAlbum(item.albumId) : undefined;
+    if (!target && item.albumId) {
+      upsertTarget({
+        albumId: item.albumId,
+        artistId: item.artistId,
+        origin: "migration",
+        title: item.title,
+      });
+      target = targetByAlbum(item.albumId);
+    }
     if (!target) continue;
     const obvious =
       /box.?set|deluxe|super deluxe|\b\d+\s*(cd|disc)|edition|track.?list|mismatch/i.test(
@@ -237,6 +248,33 @@ async function repairImports(items: QueueItem[], apply: boolean) {
       item.errorMessage ?? "Edition or track-list mismatch",
       apply,
     );
+  }
+}
+async function cleanupOrphans(
+  torrents: Torrent[],
+  queueByHash: Map<string, QueueItem>,
+  apply: boolean,
+) {
+  for (const item of torrents.filter((torrent) =>
+    isStaleOrphan(torrent, queueByHash.has(torrent.hash.toLowerCase())),
+  )) {
+    const evidence = {
+      reason: "Torrent payload is already absent and Lidarr no longer tracks it",
+      state: item.state,
+      ageHours: Math.round((Date.now() - item.added_on * 1_000) / 3_600_000),
+    };
+    if (!apply) {
+      intervene({ hash: item.hash, action: "cleanup", status: "proposed", evidence });
+      continue;
+    }
+    if (!destructiveAllowed()) {
+      intervene({ hash: item.hash, action: "cleanup", status: "deferred", evidence });
+      continue;
+    }
+    // missingFiles means qBittorrent has no payload to delete. Remove only the
+    // stale client record so a later Lidarr search can add a clean download.
+    await removeTorrent(item.hash, false);
+    intervene({ hash: item.hash, action: "cleanup", status: "applied", evidence });
   }
 }
 async function tune(torrents: Torrent[], apply: boolean) {
@@ -329,6 +367,7 @@ async function searchWork(
   mode: "bulk" | "completion",
   queueItems: QueueItem[],
   apply: boolean,
+  incomplete: number,
 ) {
   const settings = runtimeSettings(),
     active = new Set(queueItems.map((item) => item.albumId)),
@@ -336,16 +375,19 @@ async function searchWork(
     rows = (
       db()
         .prepare(
-          `SELECT * FROM acquisition_targets
+          `SELECT acquisition_targets.*,
+            (SELECT count(*) FROM download_interventions
+              WHERE target_id=acquisition_targets.id AND action='search' AND status='applied') search_count
+          FROM acquisition_targets
           WHERE status IN ('pending','staged')
-            AND (next_retry_at IS NULL OR next_retry_at<=CURRENT_TIMESTAMP)
+            AND (next_retry_at IS NULL OR datetime(next_retry_at)<=CURRENT_TIMESTAMP)
             AND (attempts_day IS NULL OR attempts_day<>date('now') OR attempts_today<3)`,
         )
         .all() as AcquisitionTarget[]
     ).filter((target) => !active.has(target.lidarr_album_id)),
     ordered = orderSearchTargets(rows, now),
     quota = apply
-      ? acquisitionQuota()
+      ? acquisitionQuota(mode === "bulk" && incomplete < settings.activeDownloadMin)
       : { short: 10, general: 10, priority: 10 },
     priority = ordered.filter((target) => isPriorityTarget(target, now)),
     priorityCapacity = Math.min(
@@ -358,26 +400,20 @@ async function searchWork(
       quota.short - selected.length,
       Math.max(0, quota.general - selected.length),
     );
-  selected.push(
-    ...ordered
-      .filter(
-        (target) =>
-          !selectedIds.has(target.id) && !isPriorityTarget(target, now),
-      )
-      .slice(0, generalCapacity),
-  );
+  selected.push(...balancedSearchTargets(
+    ordered.filter(
+      (target) => !selectedIds.has(target.id) && !isPriorityTarget(target, now),
+    ),
+    generalCapacity,
+    now,
+  ));
+  stateSet("acquisition_search_status", JSON.stringify({ eligible: rows.length, selected: selected.length, budget: quota, recovering: mode === "bulk" && incomplete < settings.activeDownloadMin }));
   const run = async (target: AcquisitionTarget) => {
     const priorityTarget = isPriorityTarget(target, now),
-      age = hoursSince(target.created_at),
+      searches = Number((db().prepare("SELECT count(*) count FROM download_interventions WHERE target_id=? AND action='search' AND status='applied'").get(target.id) as { count: number }).count),
       fallback =
         settings.qualityFallback &&
-        target.attempts_today >= 2 &&
-        age >=
-          (target.origin === "user"
-            ? 24
-            : target.origin === "playlist"
-              ? 48
-              : 72);
+        shouldUseFallback(target, searches);
     intervene({
       targetId: target.id,
       action: "search",
@@ -389,8 +425,15 @@ async function searchWork(
         updateTarget(target.id, failedSearchPatch(target, error)),
       );
   };
-  for (let index = 0; index < selected.length; index += 2)
-    await Promise.all(selected.slice(index, index + 2).map(run));
+  for (let index = 0; index < selected.length; index += 2) {
+    const batch = selected.slice(index, index + 2);
+    // Fallback temporarily changes the artist's quality profile. Searches for
+    // the same artist must finish restoring it before another one starts.
+    if (batch.length === 2 && batch[0].lidarr_artist_id != null &&
+        batch[0].lidarr_artist_id === batch[1].lidarr_artist_id) {
+      for (const target of batch) await run(target);
+    } else await Promise.all(batch.map(run));
+  }
 }
 async function cleanupImported(torrents: Torrent[], apply: boolean) {
   const settings = runtimeSettings();
@@ -507,13 +550,13 @@ export async function runAcquisitionCycle() {
         ? Math.max(0, (Date.now() - idleSince) / 60_000)
         : 0;
     let sourceHealthy = true;
-    if (incomplete.length >= 5 && idleMinutes >= 30) {
+    if (incomplete.length > 0 && idleMinutes >= 30) {
       stateSet("acquisition_phase", "diagnosing");
       if (
         apply &&
         Date.now() - Number(stateGet("acquisition_probe_at", "0")) > 30 * 60_000
       ) {
-        const probe = await connectivityProbe();
+        const probe = await connectivityProbe().catch((error) => ({ ok: false, error: String(error) }));
         stateSet("acquisition_probe", JSON.stringify(probe));
         stateSet("acquisition_probe_at", String(Date.now()));
         sourceHealthy = probe.ok;
@@ -545,11 +588,12 @@ export async function runAcquisitionCycle() {
       }
     }
     stateSet("acquisition_phase", "repairing");
+    await cleanupOrphans(torrents, queueByHash, apply);
     await repairImports(queueItems, apply);
     await tune(torrents, apply);
     await cleanupImported(torrents, apply);
     stateSet("acquisition_phase", "searching");
-    await searchWork(mode, queueItems, apply);
+    await searchWork(mode, queueItems, apply, incomplete.length);
     if (Date.now() - Number(stateGet("source_test_at", "0")) > 6 * 3_600_000) {
       await maintainSources(apply);
       stateSet("source_test_at", String(Date.now()));

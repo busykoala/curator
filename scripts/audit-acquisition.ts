@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import {
   controllerMode,
+  balancedSearchTargets,
   isManagedIncomplete,
+  isStaleOrphan,
   isPriorityTarget,
   orderSearchTargets,
   releaseScore,
   searchBudget,
+  shouldUseFallback,
   stalledDecision,
 } from "../src/features/acquisition/policy";
 import type {
@@ -147,6 +150,40 @@ assert.equal(
 );
 assert.equal(isManagedIncomplete({ state: "stalledDL", progress: 0.5 }), true);
 assert.equal(isManagedIncomplete({ state: "queuedUP", progress: 1 }), false);
+assert.equal(
+  isStaleOrphan({ state: "missingFiles", added_on: (now - 25 * auditHour) / 1_000 }, false, now),
+  true,
+);
+assert.equal(
+  isStaleOrphan({ state: "missingFiles", added_on: (now - 25 * auditHour) / 1_000 }, true, now),
+  false,
+);
 console.log(
   "Acquisition policy audit passed: mode, stalls, search priority, quotas, managed downloads, throughput scoring, and quality exclusions.",
 );
+
+assert.equal(searchBudget({short: 0, daily: 150, priorityDaily: 0}, true).general, 450);
+assert.equal(searchBudget({short: 10, daily: 600, priorityDaily: 30}, true).short, 0);
+assert.equal(searchBudget({short: 0, daily: 601, priorityDaily: 30}, true).general, 0);
+assert.equal(shouldUseFallback(target, 2), true);
+assert.equal(shouldUseFallback(target, 1), false);
+assert.equal(shouldUseFallback(recent, 3), false);
+assert.equal(stalledDecision(target, {...observation, progress: 0.5758746, availability: 0.576}, observation, 80)?.action, "replace");
+const balanced = balancedSearchTargets([
+  { ...unsearched, id: 10, search_count: 0 },
+  { ...unsearched, id: 11, search_count: 0 },
+  { ...retried, id: 12, search_count: 1 },
+  { ...retried, id: 13, search_count: 2 },
+], 4, now);
+assert.equal(balanced.length, 4);
+assert.deepEqual(balanced.slice(0, 2).map(item => item.id), [13, 12]);
+
+// Retry timestamps are ISO strings, while SQLite CURRENT_TIMESTAMP uses a space.
+import Database from "better-sqlite3";
+const sqlite = new Database(":memory:");
+assert.equal((sqlite.prepare("SELECT datetime(?) <= datetime(?) AS due").get("2026-09-05T02:25:16.707Z", "2026-09-05 08:40:50") as {due: number}).due, 1);
+sqlite.close();
+
+import { ubuntuTorrentFromHtml } from "../src/features/acquisition/qbittorrent";
+assert.equal(ubuntuTorrentFromHtml('<a href="ubuntu-24.04.3-desktop-amd64.iso.torrent"></a><a href="ubuntu-24.04.4-live-server-amd64.iso.torrent"></a><a href="ubuntu-24.04.10-desktop-amd64.iso.torrent"></a>', 'https://releases.ubuntu.com/24.04/'), 'https://releases.ubuntu.com/24.04/ubuntu-24.04.10-desktop-amd64.iso.torrent');
+assert.throws(() => ubuntuTorrentFromHtml('<a href="https://example.org/test.torrent">', 'https://releases.ubuntu.com/24.04/'));

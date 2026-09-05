@@ -24,6 +24,8 @@ const localTools:FunctionTool[]=[
 ];
 
 class AiHttpError extends Error{constructor(readonly status:number,message:string){super(message);this.name="AiHttpError"}}
+let unavailableUntil=0,unavailableReason="";
+export function aiCooldownRemaining():number{return Math.max(0,unavailableUntil-Date.now())}
 function usage(input?:ChatResponse["usage"]):AiUsage{const inputTokens=Number(input?.prompt_tokens??0),outputTokens=Number(input?.completion_tokens??0);return{input_tokens:inputTokens,output_tokens:outputTokens,total_tokens:Number(input?.total_tokens??inputTokens+outputTokens)}}
 function addUsage(left:AiUsage,right:AiUsage):AiUsage{return{input_tokens:left.input_tokens+right.input_tokens,output_tokens:left.output_tokens+right.output_tokens,total_tokens:left.total_tokens+right.total_tokens}}
 function parse<T>(value:string|null|undefined):T{if(!value)throw new Error("AI response contained no structured output");return JSON.parse(value) as T}
@@ -33,11 +35,12 @@ export class CuratorAiClient{
   constructor(private readonly options:AiClientOptions){this.endpoint=`${options.baseURL.replace(/\/+$/g,"")}/chat/completions`}
 
   private async completion(body:Record<string,unknown>):Promise<ChatResponse>{
+    if(aiCooldownRemaining()>0)throw new AiHttpError(503,unavailableReason||"Local AI model route is temporarily unavailable");
     let lastError:unknown;
     for(let attempt=0;attempt<3;attempt+=1){
       try{
         const response=await fetch(this.endpoint,{method:"POST",headers:{Authorization:`Bearer ${this.options.apiKey||"missing"}`,"Content-Type":"application/json"},body:JSON.stringify({model:this.options.model,...body}),signal:AbortSignal.timeout(600_000)}),text=await response.text();
-        if(!response.ok)throw new AiHttpError(response.status,`Local AI request failed (${response.status}): ${text.slice(0,500)}`);
+        if(!response.ok){const message=`Local AI request failed (${response.status}): ${text.slice(0,500)}`;if(response.status===404&&/no router for requested model/i.test(text)){unavailableUntil=Date.now()+15*60_000;unavailableReason=message}throw new AiHttpError(response.status,message)}
         try{return JSON.parse(text) as ChatResponse}catch{throw new Error("Local AI returned invalid JSON")}
       }catch(error){
         lastError=error;const status=Number((error as {status?:number})?.status??0),retryable=!status||status===408||status===409||status===429||status>=500;

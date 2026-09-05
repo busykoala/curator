@@ -17,6 +17,7 @@ import { repairDeezerCensorship } from "@/features/scanner/deezer-censorship";
 import { splitArtistCredits,splitComposerCredits } from "@/features/scanner/credits";
 import { inferGenreFallback } from "@/features/taxonomy/genre-fallback";
 import { semanticTagProperties } from "@/features/categorization/tags";
+import { aiCooldownRemaining } from "@/features/ai/client";
 type Row = { id: number; path: string; album_key: string; artist_name: string; album_name: string; inode: number; size: number; mtime_ms: number; tags_json: string; applied_hash: string | null };
 type Progress = { subject: string; phase: string; currentFile?: string; processedCount: number; totalCount: number };
 function taxonomySnapshot(): Record<string, string[]> { const output: Record<string, string[]> = {}; const rows = db().prepare("SELECT kind,name FROM taxonomy_terms WHERE active=1 ORDER BY name").all() as Array<{ kind: string; name: string }>; for (const row of rows) (output[row.kind] ??= []).push(row.name); return output; }
@@ -30,13 +31,13 @@ export async function processAlbums(limit=12,report:(progress:Progress)=>void=()
   const keys=db().prepare("SELECT album_key FROM files WHERE status='analyzed' GROUP BY album_key ORDER BY MAX(CASE WHEN EXISTS (SELECT 1 FROM issues i WHERE i.album_key=files.album_key AND i.status='open' AND i.code='identity_unresolved') THEN 1 ELSE 0 END) DESC,MIN(CASE WHEN json_type(tags_json,'$.genre') IS NULL OR json_type(tags_json,'$.albumArtist') IS NULL THEN 0 ELSE 1 END),MIN(updated_at) LIMIT ?").all(limit) as Array<{album_key:string}>;
   let albums=0,written=0;const changedFolders=new Set<string>();
   for(let albumIndex=0;albumIndex<keys.length;albumIndex++){
-    if(stateGet("paused")==="true")break;
+    if(stateGet("paused")==="true"||aiCooldownRemaining())break;
     const key=keys[albumIndex].album_key,files=db().prepare("SELECT * FROM files WHERE album_key=? AND status='analyzed'").all(key) as Row[];
     if(!files.length)continue;
     if(!acquireAlbumLease(key,"write"))continue;
     const first=files[0],subject=`${first.artist_name} / ${first.album_name}`;
     report({subject,phase:"resolve",processedCount:albumIndex,totalCount:keys.length});
-    db().prepare("UPDATE files SET status='processing',updated_at=CURRENT_TIMESTAMP WHERE album_key=? AND status='analyzed'").run(key);
+    db().prepare("UPDATE files SET status='processing' WHERE album_key=? AND status='analyzed'").run(key);
     stateSet("processing_progress",JSON.stringify({artist:first.artist_name,album:first.album_name,tracks:files.length,updatedAt:new Date().toISOString()}));
     try{
       const[mb,apple]=await Promise.all([searchReleaseGroupCandidates(first.artist_name,first.album_name,key),searchApple(first.artist_name,first.album_name,key).catch(()=>({results:[]}))]);const identity=resolveIdentity(first.artist_name,first.album_name,mb["release-groups"]??[],apple.results??[]),manual=getManualOverride(key),manuallyConfirmed=Boolean(manual?.confirmed);if(manual?.artist_name)identity.artist=manual.artist_name;if(manual?.album_name)identity.album=manual.album_name;if(manual?.release_date)identity.date=manual.release_date;if(manual?.artist_mbid)identity.artistId=manual.artist_mbid;if(manual?.release_group_mbid)identity.releaseGroupId=manual.release_group_mbid;
@@ -58,7 +59,7 @@ export async function processAlbums(limit=12,report:(progress:Progress)=>void=()
       db().prepare("UPDATE issues SET status='resolved',updated_at=CURRENT_TIMESTAMP WHERE album_key=? AND status='open' AND code!='processing_failed'").run(key);if(!fileFailures)db().prepare("UPDATE issues SET status='resolved',updated_at=CURRENT_TIMESTAMP WHERE album_key=? AND status='open' AND code='processing_failed'").run(key);
       if(!writableIdentity&&!manuallyConfirmed)db().prepare("INSERT INTO issues(album_key,code,severity,message) VALUES (?,'identity_unresolved','warning',?)").run(key,`Best identity confidence ${identity.confidence.toFixed(2)}, margin ${identity.margin.toFixed(2)}; no factual IDs written`);
       report({subject,phase:"complete",processedCount:albumIndex+1,totalCount:keys.length});
-    }catch(error){const deferred=transientFailure(error),code=deferred?"processing_deferred":"processing_failed",severity=deferred?"warning":"error";db().prepare(`UPDATE files SET status='${deferred?"analyzed":"error"}',updated_at=CURRENT_TIMESTAMP WHERE album_key=? AND status='processing'`).run(key);db().prepare("UPDATE issues SET status='resolved',updated_at=CURRENT_TIMESTAMP WHERE album_key=? AND code IN ('processing_failed','processing_deferred') AND status='open'").run(key);db().prepare("INSERT INTO issues(album_key,code,severity,message) VALUES (?,?,?,?)").run(key,code,severity,String(error))}finally{releaseAlbumLease(key,"write");albums++}
+    }catch(error){const deferred=transientFailure(error),code=deferred?"processing_deferred":"processing_failed",severity=deferred?"warning":"error";db().prepare(`UPDATE files SET status='${deferred?"analyzed":"error"}' WHERE album_key=? AND status='processing'`).run(key);db().prepare("UPDATE issues SET status='resolved',updated_at=CURRENT_TIMESTAMP WHERE album_key=? AND code IN ('processing_failed','processing_deferred') AND status='open'").run(key);db().prepare("INSERT INTO issues(album_key,code,severity,message) VALUES (?,?,?,?)").run(key,code,severity,String(error))}finally{releaseAlbumLease(key,"write");albums++}
   }
   await rescanFolders([...changedFolders]);return{albums,written};
 }
