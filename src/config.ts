@@ -11,4 +11,4 @@ const schema = z.object({
   CURATOR_AUTOSTART: z.enum(["true", "false"]).default("true"),
 });
 export const config = schema.parse(process.env);
-export const versions = { taxonomy: 5, prompt: 6, normalization: 11, artwork: 10, identity: 7, providers: 5, categorizationSchema: 2, categorizationPrompt: 7, audioAnalysis: 3 };
+export const versions = { taxonomy: 5, prompt: 6, normalization: 11, artwork: 10, identity: 8, providers: 5, categorizationSchema: 2, categorizationPrompt: 7, audioAnalysis: 3 };
