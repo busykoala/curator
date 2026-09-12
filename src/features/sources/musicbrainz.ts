@@ -5,6 +5,7 @@ type Tag={name:string;count?:number};
 export type MbCandidate={id:string;title:string;disambiguation?:string;"first-release-date"?:string;"primary-type"?:string;"secondary-types"?:string[];"artist-credit"?:Credit[];score?:number;genres?:Tag[];tags?:Tag[]};
 type SearchResult={"release-groups":MbCandidate[]};
 let nextRequest=0,cooldownUntil=0;
+export function musicBrainzCooldownRemaining():number{return Math.max(0,cooldownUntil-Date.now())}
 async function limited<T>(load:()=>Promise<T>):Promise<T>{if(cooldownUntil>Date.now()){const error=new Error(`503 MusicBrainz cooldown active until ${new Date(cooldownUntil).toISOString()}`) as Error&{status:number};error.status=503;throw error}const wait=Math.max(0,nextRequest-Date.now());if(wait)await new Promise(resolve=>setTimeout(resolve,wait));nextRequest=Date.now()+1100;try{return await load()}catch(error){const status=Number((error as{status?:number}).status??0);if(status===429||status===503)cooldownUntil=Date.now()+5*60_000;throw error}}
 const headers={"User-Agent":"MusicCurator/2.0 (self-hosted; contact=local-admin)",Accept:"application/json"};
 async function details(candidate:MbCandidate,entityKey:string):Promise<MbCandidate>{const value=await cachedJson("musicbrainz",`release-group-details:${candidate.id}`,entityKey,90,()=>limited(()=>fetchJson<MbCandidate>(`https://musicbrainz.org/ws/2/release-group/${candidate.id}?inc=genres+tags+artist-credits&fmt=json`,{headers}))).catch(()=>candidate);return{...candidate,...value,score:candidate.score??value.score}}
