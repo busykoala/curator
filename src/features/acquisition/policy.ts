@@ -9,8 +9,8 @@ const priorityWindow = 24 * hour;
 export const searchLimits = {
   short: 10,
   daily: 150,
-  recoveryShort: 20,
-  recoveryDaily: 1_200,
+  recoveryShort: 30,
+  recoveryDaily: 1_500,
   priorityDaily: 30,
 } as const;
 export const hoursSince = (value?: string | null) =>
@@ -24,6 +24,9 @@ export const hoursSince = (value?: string | null) =>
           hour,
       )
     : Infinity;
+export function canConfirmImport(target: Pick<AcquisitionTarget, "status">) {
+  return ["queued", "downloading", "downloaded"].includes(target.status);
+}
 export function controllerMode(
   migration: number,
   incomplete: number,
@@ -156,8 +159,9 @@ export function stalledDecision(
       hash: now.hash,
     };
   const idle = hoursSince(target.last_progress_at ?? target.first_queued_at);
-  const grace =
-    target.origin === "migration" ? (now.progress >= 0.9 ? 48 : 24) : 72;
+  const grace = target.origin === "migration"
+    ? (now.progress >= 0.9 ? 48 : 24)
+    : (now.progress >= 0.9 ? 24 : 12);
   if (idle >= grace && ageHours >= grace && now.availability <= now.progress + 0.001)
     return {
       action: "replace",
@@ -194,6 +198,6 @@ export function retryDelay(attempts: number) {
 }
 
 export function shouldUseFallback(target: Pick<AcquisitionTarget, "origin" | "created_at">, searches: number) {
-  const grace = target.origin === "user" ? 24 : target.origin === "playlist" ? 48 : 72;
-  return searches >= 2 && hoursSince(target.created_at) >= grace;
+  const grace = target.origin === "user" ? 6 : target.origin === "playlist" ? 12 : 24;
+  return searches >= 1 && hoursSince(target.created_at) >= grace;
 }

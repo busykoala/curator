@@ -26,6 +26,40 @@ async function lookupAlbums(term: string) {
   return json<Array<Record<string, unknown>>>(`/album/lookup?term=${encodeURIComponent(term.trim())}`);
 }
 
+type LidarrAlbum = Record<string, unknown> & {
+  id: number;
+  foreignAlbumId?: string;
+  monitored?: boolean;
+  statistics?: { trackCount?: number };
+};
+
+const wait = (milliseconds: number) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+async function ensureAlbumMonitored(album: LidarrAlbum) {
+  let current = album;
+  // A newly-created artist is refreshed asynchronously. Updating an album
+  // before that refresh has populated its tracks can be silently overwritten
+  // by Lidarr's initial monitor-none policy.
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (Number(current.statistics?.trackCount ?? 0) > 0) break;
+    await wait(1_000);
+    current = await json<LidarrAlbum>(`/album/${album.id}`);
+  }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (!current.monitored) {
+      current = await json<LidarrAlbum>(`/album/${album.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ ...current, monitored: true }),
+      });
+    }
+    await wait(1_000);
+    current = await json<LidarrAlbum>(`/album/${album.id}`);
+    if (current.monitored) return current;
+  }
+  throw new Error(`Lidarr did not retain monitoring for album ${album.id}`);
+}
+
 export async function searchMusic(term: string): Promise<unknown> {
   if (term.trim().length < 2) return { artists: [], albums: [] };
   const [artists, albums] = await Promise.all([lookupArtists(term), lookupAlbums(term)]);
@@ -44,7 +78,7 @@ async function defaults() {
 
 export async function addMusic(foreignArtistId: string, albumForeignIds: string[], origin: TargetOrigin = "user") {
   if (!albumForeignIds.length) throw new Error("Choose at least one album");
-  const current = await json<Array<Record<string, unknown> & { id: number; foreignArtistId?: string }>>("/artist");
+  const current = await json<Array<Record<string, unknown> & { id: number; foreignArtistId?: string; monitored?: boolean }>>("/artist");
   const existing = current.find((item) => item.foreignArtistId === foreignArtistId);
   let artistId = existing?.id;
   if (!artistId) {
@@ -52,16 +86,28 @@ export async function addMusic(foreignArtistId: string, albumForeignIds: string[
     const candidate = found.find((item) => item.foreignArtistId === foreignArtistId);
     if (!candidate) throw new Error("Artist was not found in Lidarr lookup");
     const settings = await defaults();
-    const response = await request("/artist", { method: "POST", body: JSON.stringify({ ...candidate, ...settings, monitored: false, addOptions: { monitor: "none", searchForMissingAlbums: false } }) });
+    const response = await request("/artist", { method: "POST", body: JSON.stringify({ ...candidate, ...settings, monitored: true, addOptions: { monitor: "none", searchForMissingAlbums: false } }) });
     if (!response.ok) throw new Error(`Lidarr add failed (${response.status}): ${await response.text()}`);
     artistId = (await response.json() as { id: number }).id;
+  } else if (existing && !existing.monitored) {
+    await json(`/artist/${artistId}`, {
+      method: "PUT",
+      body: JSON.stringify({ ...existing, monitored: true }),
+    });
   }
-  const albums = await json<Array<Record<string, unknown> & { id: number; foreignAlbumId?: string }>>(`/album?artistId=${artistId}`);
+  const albums = await json<LidarrAlbum[]>(`/album?artistId=${artistId}`);
   const selected = albums.filter((album) => albumForeignIds.includes(String(album.foreignAlbumId)));
   if (!selected.length) throw new Error("The selected album was not available after adding the artist");
-  for (const album of selected) await json(`/album/${album.id}`, { method: "PUT", body: JSON.stringify({ ...album, monitored: true }) });
-  for (const album of selected) upsertTarget({ albumId: album.id, artistId, origin, artist: String((album.artist as { artistName?: string } | undefined)?.artistName ?? ""), title: String(album.title ?? "") });
-  return { artistId, albumIds: selected.map((album) => album.id), selectedAlbums: selected.length, alreadyPresent: Boolean(existing), searchQueued: false, controllerQueued: true };
+  const monitored = await Promise.all(selected.map(ensureAlbumMonitored));
+  const artist = await json<Record<string, unknown> & { monitored?: boolean }>(`/artist/${artistId}`);
+  if (!artist.monitored) {
+    await json(`/artist/${artistId}`, {
+      method: "PUT",
+      body: JSON.stringify({ ...artist, monitored: true }),
+    });
+  }
+  for (const album of monitored) upsertTarget({ albumId: album.id, artistId, origin, artist: String((album.artist as { artistName?: string } | undefined)?.artistName ?? ""), title: String(album.title ?? "") });
+  return { artistId, albumIds: monitored.map((album) => album.id), selectedAlbums: monitored.length, alreadyPresent: Boolean(existing), searchQueued: false, controllerQueued: true };
 }
 
 export type LidarrQueueItem = {

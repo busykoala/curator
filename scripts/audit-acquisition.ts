@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  canConfirmImport,
   controllerMode,
   balancedSearchTargets,
   isManagedIncomplete,
@@ -150,6 +151,11 @@ assert.equal(
 );
 assert.equal(isManagedIncomplete({ state: "stalledDL", progress: 0.5 }), true);
 assert.equal(isManagedIncomplete({ state: "queuedUP", progress: 1 }), false);
+assert.equal(canConfirmImport({ status: "pending" }), false);
+assert.equal(canConfirmImport({ status: "staged" }), false);
+assert.equal(canConfirmImport({ status: "queued" }), true);
+assert.equal(canConfirmImport({ status: "downloading" }), true);
+assert.equal(canConfirmImport({ status: "downloaded" }), true);
 assert.equal(
   isStaleOrphan({ state: "missingFiles", added_on: (now - 25 * auditHour) / 1_000 }, false, now),
   true,
@@ -162,12 +168,27 @@ console.log(
   "Acquisition policy audit passed: mode, stalls, search priority, quotas, managed downloads, throughput scoring, and quality exclusions.",
 );
 
-assert.equal(searchBudget({short: 0, daily: 150, priorityDaily: 0}, true).general, 1050);
-assert.equal(searchBudget({short: 10, daily: 600, priorityDaily: 30}, true).short, 10);
-assert.equal(searchBudget({short: 0, daily: 1201, priorityDaily: 30}, true).general, 0);
+assert.equal(searchBudget({short: 0, daily: 150, priorityDaily: 0}, true).general, 1350);
+assert.equal(searchBudget({short: 10, daily: 600, priorityDaily: 30}, true).short, 20);
+assert.equal(searchBudget({short: 0, daily: 1501, priorityDaily: 30}, true).general, 0);
 assert.equal(shouldUseFallback(target, 2), true);
-assert.equal(shouldUseFallback(target, 1), false);
+assert.equal(shouldUseFallback(target, 1), true);
 assert.equal(shouldUseFallback(recent, 3), false);
+assert.equal(shouldUseFallback(user, 1), true);
+assert.equal(
+  stalledDecision(
+    {
+      ...target,
+      origin: "user",
+      first_queued_at: new Date(now - 13 * auditHour).toISOString(),
+      last_progress_at: new Date(now - 13 * auditHour).toISOString(),
+    },
+    { ...observation, progress: 0.5, availability: 0.5 },
+    observation,
+    13,
+  )?.action,
+  "replace",
+);
 assert.equal(stalledDecision(target, {...observation, progress: 0.5758746, availability: 0.576}, observation, 80)?.action, "replace");
 const balanced = balancedSearchTargets([
   { ...unsearched, id: 10, search_count: 0 },
@@ -176,7 +197,7 @@ const balanced = balancedSearchTargets([
   { ...retried, id: 13, search_count: 2 },
 ], 4, now);
 assert.equal(balanced.length, 4);
-assert.deepEqual(balanced.slice(0, 2).map(item => item.id), [13, 12]);
+assert.deepEqual(balanced.slice(0, 2).map(item => item.id), [12, 13]);
 
 // Retry timestamps are ISO strings, while SQLite CURRENT_TIMESTAMP uses a space.
 import Database from "better-sqlite3";

@@ -19,6 +19,7 @@ import {
   type Torrent,
 } from "./qbittorrent";
 import {
+  canConfirmImport,
   controllerMode,
   balancedSearchTargets,
   isManagedIncomplete,
@@ -121,7 +122,11 @@ function synchronizeTargets(wanted: Wanted[]) {
   stateSet("acquisition_bootstrapped", "true");
   const missing = new Set(wanted.map((item) => item.id));
   for (const target of targets()) {
-    if (!missing.has(target.lidarr_album_id) && target.status !== "imported") {
+    if (
+      !missing.has(target.lidarr_album_id) &&
+      target.status !== "imported" &&
+      canConfirmImport(target)
+    ) {
       recordSourceOutcome(target, "import");
       updateTarget(target.id, {
         status: "imported",
@@ -146,6 +151,7 @@ function synchronizeTargets(wanted: Wanted[]) {
     }
   }
 }
+
 function acquisitionQuota(recovering: boolean) {
   const row = db()
     .prepare(
@@ -493,12 +499,14 @@ async function searchWork(
         updateTarget(target.id, failedSearchPatch(target, error)),
       );
   };
-  for (let index = 0; index < selected.length; index += 2) {
-    const batch = selected.slice(index, index + 2);
+  for (let index = 0; index < selected.length; index += 4) {
+    const batch = selected.slice(index, index + 4);
     // Fallback temporarily changes the artist's quality profile. Searches for
     // the same artist must finish restoring it before another one starts.
-    if (batch.length === 2 && batch[0].lidarr_artist_id != null &&
-        batch[0].lidarr_artist_id === batch[1].lidarr_artist_id) {
+    const artistIds = batch
+      .map((target) => target.lidarr_artist_id)
+      .filter((id): id is number => id != null);
+    if (new Set(artistIds).size !== artistIds.length) {
       for (const target of batch) await run(target);
     } else await Promise.all(batch.map(run));
   }
