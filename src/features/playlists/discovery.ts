@@ -4,6 +4,7 @@ import { addMusic, lidarrQueue, searchMusic } from "@/features/integrations/musi
 import { targetByAlbum } from "@/features/acquisition/repository";
 import { recordAiUsage } from "@/features/ai/usage";
 import { aiClient,aiConfigured,aiModel } from "@/features/ai/client";
+import { searchReleaseGroups } from "@/features/sources/musicbrainz";
 
 const candidateSchema = z.object({ lane: z.string(), artist: z.string(), album: z.string(), releaseDate: z.string(), genres: z.array(z.string()).max(4), sources: z.array(z.string().url()).min(1).max(3), rationale: z.string().max(300) });
 export const playlistDiscoveryOutputSchema = z.object({ candidates: z.array(candidateSchema).max(2) });
@@ -36,10 +37,28 @@ function present(artist: string, album: string) {
   return (db().prepare("SELECT artist_name,album_name FROM files").all() as Array<{ artist_name: string; album_name: string }>).some((file) => norm(file.artist_name) === norm(artist) && norm(file.album_name) === norm(album));
 }
 
-async function exactLidarr(artist: string, album: string, date: string) {
-  const result = await searchMusic(`${artist} ${album}`) as { albums?: Array<Record<string, unknown> & { artist?: Record<string, unknown> }> };
+type DiscoveryIdentityDependencies = {
+  searchMusic: typeof searchMusic;
+  searchReleaseGroups: typeof searchReleaseGroups;
+};
+
+export async function resolveDiscoveryIdentity(artist: string, album: string, date: string, dependencies: DiscoveryIdentityDependencies = { searchMusic, searchReleaseGroups }) {
   const year = Number(date.slice(0, 4));
-  const matches = (result.albums ?? []).filter((item) => norm(String(item.title ?? "")) === norm(album) && norm(String(item.artist?.artistName ?? "")) === norm(artist) && (!year || !item.releaseDate || Math.abs(Number(String(item.releaseDate).slice(0, 4)) - year) <= 1));
+  const matchesFor = (result: unknown) => {
+    const albums = (result as { albums?: Array<Record<string, unknown> & { artist?: Record<string, unknown> }> }).albums ?? [];
+    return albums.filter((item) => norm(String(item.title ?? "")) === norm(album) && norm(String(item.artist?.artistName ?? "")) === norm(artist) && (!year || !item.releaseDate || Math.abs(Number(String(item.releaseDate).slice(0, 4)) - year) <= 1));
+  };
+  let matches = matchesFor(await dependencies.searchMusic(`${artist} ${album}`));
+  if (matches.length !== 1) {
+    const result = await dependencies.searchReleaseGroups(artist, album, `discovery:${norm(artist)}|${norm(album)}`);
+    const releaseGroups = result["release-groups"].filter((item) => {
+      const creditedArtist = (item["artist-credit"] ?? []).map((credit) => `${credit.name ?? credit.artist.name}${(credit as typeof credit & { joinphrase?: string }).joinphrase ?? ""}`).join("");
+      const releaseYear = Number(String(item["first-release-date"] ?? "").slice(0, 4));
+      return norm(item.title) === norm(album) && norm(creditedArtist) === norm(artist) && Number(item.score ?? 0) >= 90 && (!year || !releaseYear || Math.abs(releaseYear - year) <= 1);
+    });
+    if (releaseGroups.length !== 1) return null;
+    matches = matchesFor(await dependencies.searchMusic(`lidarr:${releaseGroups[0].id}`));
+  }
   if (matches.length !== 1) return null;
   const item = matches[0], artistId = String(item.artist?.foreignArtistId ?? ""), albumId = String(item.foreignAlbumId ?? "");
   return artistId && albumId ? { artistId, albumId } : null;
@@ -50,7 +69,7 @@ async function queueCandidate(item: Candidate) {
     db().prepare("UPDATE discovery_candidates SET status='rejected',message='Album is already in the library',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(item.id);
     return false;
   }
-  const match = await exactLidarr(item.artist, item.album, item.release_date ?? "");
+  const match = await resolveDiscoveryIdentity(item.artist, item.album, item.release_date ?? "");
   if (!match) {
     db().prepare("UPDATE discovery_candidates SET status='rejected',message='No exact Lidarr album identity',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(item.id);
     return false;
@@ -81,7 +100,7 @@ export async function researchDiscovery() {
   const known = Array.from({ length: Math.min(1, all.length) }, (_, index) => all[(cursor + index) % all.length]);
   if (!aiConfigured) throw new Error("A local AI API key is required for editorial discovery");
   const evidence = known.map(({ name, category, intent, tasteLanes, genres, sourceDomains }) => ({ name, category, intent: intent.slice(0, 240), tasteLanes: tasteLanes.slice(0, 6), genres: genres.slice(0, 6), sourceDomains: sourceDomains.slice(0, 5) })),latest=new Date(),earliest=new Date(latest.getTime()-120*86_400_000),latestDate=latest.toISOString().slice(0,10),earliestDate=earliest.toISOString().slice(0,10),earliestBoundary=Date.parse(earliestDate),latestBoundary=Date.parse(`${latestDate}T23:59:59.999Z`);
-  const response = await aiClient.structured<{candidates?:Array<Record<string,unknown>>}>({web:true,maxOutputTokens:2_000,input:`Find one or two editorially supported music releases released from ${earliestDate} through ${latestDate}, inclusive, for each supplied lane. Use exact lane names and verify every release date. Be concise. Favor reputable criticism and labels; reject charts, sponsorship, and unsupported claims. LANES=${JSON.stringify(evidence)}`,schemaName:"playlist_discovery",schema:playlistDiscoveryJsonSchema});
+  const response = await aiClient.structured<{candidates?:Array<Record<string,unknown>>}>({web:true,maxOutputTokens:2_000,input:`Find one or two editorially supported music releases released from ${earliestDate} through ${latestDate}, inclusive, for each supplied lane. Use exact lane names and verify every release date. Be concise. Favor reputable criticism and labels; reject charts, sponsorship, and unsupported claims. Every factual claim in a rationale must be supported by a URL returned in that candidate's sources; do not mention other outlets unless their opened pages are included. Prefer both an independent editorial review and an official artist or label page when available. Write a complete rationale of at most 220 characters. LANES=${JSON.stringify(evidence)}`,schemaName:"playlist_discovery",schema:playlistDiscoveryJsonSchema});
   recordAiUsage("playlist_discovery",aiModel,response);
   const output = validatedDiscoveryOutput(response.data,response.sourceUrls,earliestBoundary,latestBoundary);
   stateSet("playlist_research_cursor", String((cursor + known.length) % all.length));
