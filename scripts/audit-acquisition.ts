@@ -193,7 +193,12 @@ assert.equal(confirmedGrabConflict(new Error("Lidarr /release failed (500): qBit
 assert.equal(confirmedGrabConflict(new Error("Lidarr /release failed (500): unrelated failure")), false);
 import { cleanArtistName, cleanCatalogText } from "../src/features/sources/musicbrainz";
 import { identityIsWritable, resolveIdentity } from "../src/features/identity/resolve";
+import { outcomeScore } from "../src/features/acquisition/prowlarr";
 assert.equal(cleanArtistName("TheBlack Eyed Peas"), "The Black Eyed Peas");
 assert.equal(cleanCatalogText("Aerosmith's Greatest Hits CD"), "Aerosmith's Greatest Hits");
 const singleIdentity=resolveIdentity("Weezer","Hash Pipe",[{id:"release-group",title:"Hash Pipe","primary-type":"Single","artist-credit":[{artist:{id:"artist",name:"Weezer"}}],score:100}],[]);
 assert.equal(identityIsWritable(singleIdentity),true);
+const baseline={grabs:0,imports:0,failures:0,grabFailures:0,replacements:0,unavailable:0};
+assert.ok(outcomeScore({...baseline,grabs:1,imports:1},0)>outcomeScore({...baseline,grabs:100},0));
+assert.ok(outcomeScore({...baseline,grabs:100,unavailable:1},0)<outcomeScore({...baseline,grabs:10},0));
+assert.equal(outcomeScore({...baseline,grabs:10},0),outcomeScore({...baseline,grabs:100},0));
