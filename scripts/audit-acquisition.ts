@@ -180,8 +180,11 @@ assert.deepEqual(balanced.slice(0, 2).map(item => item.id), [13, 12]);
 
 // Retry timestamps are ISO strings, while SQLite CURRENT_TIMESTAMP uses a space.
 import Database from "better-sqlite3";
+import { dailyArtworkRetrySql } from "../src/features/scheduler/retry-policy";
 const sqlite = new Database(":memory:");
 assert.equal((sqlite.prepare("SELECT datetime(?) <= datetime(?) AS due").get("2026-09-05T02:25:16.707Z", "2026-09-05 08:40:50") as {due: number}).due, 1);
+sqlite.exec("CREATE TABLE files(album_key TEXT,status TEXT,updated_at TEXT);CREATE TABLE issues(album_key TEXT,status TEXT,code TEXT,updated_at TEXT)");
+assert.doesNotThrow(()=>sqlite.prepare(dailyArtworkRetrySql).run());
 sqlite.close();
 
 import { ubuntuTorrentFromHtml } from "../src/features/acquisition/qbittorrent";

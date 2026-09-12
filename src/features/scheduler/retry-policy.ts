@@ -1,0 +1,1 @@
+export const dailyArtworkRetrySql = "UPDATE files SET status='analyzed',updated_at=CURRENT_TIMESTAMP WHERE status='written' AND album_key IN (SELECT album_key FROM issues WHERE status='open' AND code IN ('missing_album_artwork','missing_artist_artwork') AND updated_at<=datetime('now','-1 day') GROUP BY album_key ORDER BY min(updated_at) LIMIT 4)";
