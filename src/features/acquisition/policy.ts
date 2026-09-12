@@ -9,7 +9,8 @@ const priorityWindow = 24 * hour;
 export const searchLimits = {
   short: 10,
   daily: 150,
-  recoveryDaily: 600,
+  recoveryShort: 20,
+  recoveryDaily: 1_200,
   priorityDaily: 30,
 } as const;
 export const hoursSince = (value?: string | null) =>
@@ -41,8 +42,9 @@ export function searchBudget(counts: {
   daily: number;
   priorityDaily: number;
 }, recovering = false) {
+  const short = recovering ? searchLimits.recoveryShort : searchLimits.short;
   return {
-    short: Math.max(0, searchLimits.short - counts.short),
+    short: Math.max(0, short - counts.short),
     general: Math.max(0, (recovering ? searchLimits.recoveryDaily : searchLimits.daily) - counts.daily),
     priority: Math.max(0, searchLimits.priorityDaily - counts.priorityDaily),
   };

@@ -49,6 +49,18 @@ let running = false,
   timer: NodeJS.Timeout | undefined,
   actionTimer: NodeJS.Timeout | undefined;
 const iso = () => new Date().toISOString();
+function recordSourceOutcome(target: AcquisitionTarget, event: string, detail: Record<string, unknown> = {}) {
+  if (!target.source_name) return;
+  db().prepare("INSERT INTO source_outcomes(indexer_name,event,detail_json) VALUES(?,?,?)").run(
+    target.source_name,
+    event,
+    JSON.stringify({ albumId: target.lidarr_album_id, ...detail }),
+  );
+}
+function recordSourceOutcomeOnce(target: AcquisitionTarget, event: string, hash: string, detail: Record<string, unknown> = {}) {
+  const exists = db().prepare("SELECT 1 FROM source_outcomes WHERE event=? AND json_extract(detail_json,'$.hash')=? LIMIT 1").get(event, hash);
+  if (!exists) recordSourceOutcome(target, event, { hash, ...detail });
+}
 function observationUntil() {
   let value = Number(stateGet("acquisition_observation_until", "0"));
   if (!value) {
@@ -110,6 +122,7 @@ function synchronizeTargets(wanted: Wanted[]) {
   const missing = new Set(wanted.map((item) => item.id));
   for (const target of targets()) {
     if (!missing.has(target.lidarr_album_id) && target.status !== "imported") {
+      recordSourceOutcome(target, "import");
       updateTarget(target.id, {
         status: "imported",
         imported_at: iso(),
@@ -196,6 +209,7 @@ async function replace(
     return;
   }
   await blocklistQueue(item);
+  recordSourceOutcome(target, "replacement", { reason });
   updateTarget(target.id, {
     status: "pending",
     download_hash: null,
@@ -212,7 +226,11 @@ async function replace(
 }
 async function repairImports(items: QueueItem[], apply: boolean) {
   for (const item of items
-    .filter((value) => value.trackedDownloadState === "importFailed")
+    .filter((value) =>
+      value.trackedDownloadState === "importFailed" ||
+      (value.status === "completed" && value.trackedDownloadStatus === "warning" && Number(value.sizeleft ?? 0) === 0 &&
+        value.statusMessages?.some((status) => status.messages?.some((message) => /unable to import automatically/i.test(message))))
+    )
     .slice(0, 5)) {
     let target = item.albumId ? targetByAlbum(item.albumId) : undefined;
     if (!target && item.albumId) {
@@ -224,21 +242,46 @@ async function repairImports(items: QueueItem[], apply: boolean) {
       });
       target = targetByAlbum(item.albumId);
     }
-    if (!target) continue;
     const obvious =
       /box.?set|deluxe|super deluxe|\b\d+\s*(cd|disc)|edition|track.?list|mismatch/i.test(
         `${item.title ?? ""} ${item.errorMessage ?? ""}`,
       );
-    let exact = false;
+    let exact: Awaited<ReturnType<typeof exactManualImport>> = false;
     if (apply && !obvious)
       exact = await exactManualImport(item).catch(() => false);
     if (exact) {
+      if (!target) {
+        upsertTarget({
+          albumId: exact.albumId,
+          artistId: exact.artistId,
+          origin: "migration",
+          artist: exact.artist,
+          title: exact.album || item.title,
+        });
+        target = targetByAlbum(exact.albumId);
+      }
+      if (!target) continue;
+      updateTarget(target.id, {
+        status: "downloaded",
+        download_hash: item.downloadId ?? null,
+        next_retry_at: null,
+        detail_json: JSON.stringify({ reason: "Exact manual import completed" }),
+      });
       intervene({
         targetId: target.id,
         hash: item.downloadId,
         action: "manual-import",
         status: "applied",
         evidence: { title: item.title },
+      });
+      continue;
+    }
+    if (!target) {
+      intervene({
+        hash: item.downloadId,
+        action: "manual-import",
+        status: "deferred",
+        evidence: { title: item.title, reason: "No unique album identity" },
       });
       continue;
     }
@@ -275,6 +318,31 @@ async function cleanupOrphans(
     // stale client record so a later Lidarr search can add a clean download.
     await removeTorrent(item.hash, false);
     intervene({ hash: item.hash, action: "cleanup", status: "applied", evidence });
+  }
+}
+async function cleanupUnmonitoredQueue(
+  items: QueueItem[],
+  wanted: Set<number>,
+  torrents: Torrent[],
+  apply: boolean,
+) {
+  for (const item of items) {
+    if (!item.albumId || wanted.has(item.albumId) || !item.downloadId) continue;
+    const torrent = torrents.find((value) => value.hash.toLowerCase() === item.downloadId?.toLowerCase());
+    if (!torrent || torrent.progress >= 1 || torrent.dlspeed > 0 || torrent.num_seeds > 0) continue;
+    const ageHours = (Date.now() - torrent.added_on * 1_000) / 3_600_000;
+    if (ageHours < 24 || torrent.availability > torrent.progress + 0.001) continue;
+    const evidence = { reason: "Stalled download belongs to an album Lidarr no longer monitors", title: item.title, ageHours: Math.round(ageHours) };
+    if (!apply) {
+      intervene({ hash: torrent.hash, action: "cleanup", status: "proposed", evidence });
+      continue;
+    }
+    if (!destructiveAllowed()) {
+      intervene({ hash: torrent.hash, action: "cleanup", status: "deferred", evidence });
+      continue;
+    }
+    await blocklistQueue(item);
+    intervene({ hash: torrent.hash, action: "cleanup", status: "applied", evidence });
   }
 }
 async function tune(torrents: Torrent[], apply: boolean) {
@@ -568,6 +636,8 @@ export async function runAcquisitionCycle() {
     for (const row of managed) {
       const target = row.target!;
       const age = (Date.now() - row.item.added_on * 1000) / 3_600_000;
+      if (age >= 1 && row.item.dlspeed === 0 && row.item.num_seeds === 0 && row.item.availability <= row.item.progress + 0.001)
+        recordSourceOutcomeOnce(target, "unavailable", row.item.hash, { ageHours: Math.round(age) });
       if ((age >= 0.25 && age < 0.5) || (age >= 1 && age < 1.25)) {
         intervene({
           targetId: target.id,
@@ -589,6 +659,7 @@ export async function runAcquisitionCycle() {
     }
     stateSet("acquisition_phase", "repairing");
     await cleanupOrphans(torrents, queueByHash, apply);
+    await cleanupUnmonitoredQueue(queueItems, new Set(wanted.map((item) => item.id)), torrents, apply);
     await repairImports(queueItems, apply);
     await tune(torrents, apply);
     await cleanupImported(torrents, apply);

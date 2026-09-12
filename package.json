@@ -10,7 +10,7 @@
     "worker": "tsx src/worker.ts",
     "sample": "tsx src/cli/sample.ts",
     "audit:categorization": "tsx src/cli/audit-categorization.ts"
-    ,"audit:acquisition": "tsx scripts/audit-acquisition.ts && tsx scripts/audit-acquisition-search.ts"
+    ,"audit:acquisition": "tsx scripts/audit-acquisition.ts && tsx scripts/audit-acquisition-search.ts && tsx scripts/audit-manual-import.ts"
     ,"evaluate:ai": "tsx scripts/evaluate-ai.ts"
   },
   "dependencies": {

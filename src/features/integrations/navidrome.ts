@@ -72,10 +72,10 @@ export async function navidromeListeningProfile() {
 const norm = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const pathKey = (value: string) => decodeURIComponent(value).replace(/\\/g, "/").replace(/^\/?music\//, "").replace(/^\/+/, "").toLowerCase();
 
-async function songId(item: PlaylistCandidate): Promise<string | null> {
+async function songId(item: PlaylistCandidate, refresh = false): Promise<string | null> {
   const identity = createHash("sha256").update(`${item.title}|${item.artist}|${item.album}`).digest("hex");
   const cached = db().prepare("SELECT song_id FROM navidrome_track_map WHERE file_id=? AND identity_hash=?").get(item.fileId, identity) as { song_id: string } | undefined;
-  if (cached) return cached.song_id;
+  if (cached && !refresh) return cached.song_id;
   const root = await call("search3", [["query", item.title], ["artistCount", "0"], ["albumCount", "0"], ["songCount", "50"]]);
   const songs = ((root.searchResult3 as { song?: Track[] } | undefined)?.song ?? []);
   const matches = songs.filter((song) => norm(song.title) === norm(item.title) && norm(song.artist ?? "") === norm(item.artist) && norm(song.album ?? "") === norm(item.album));
@@ -99,9 +99,23 @@ export async function unresolvedNavidromeCandidates(items: PlaylistCandidate[]) 
 
 const marker = (id: number) => `Managed by Music Curator [${id}]`;
 
+async function playlistSongIds(id: string) {
+  return (await navidromePlaylist(id)).tracks.map((track) => String(track.navidromeId ?? ""));
+}
+
+async function verifiedPlaylistIds(id: string, expected: string[]) {
+  let actual: string[] = [];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    actual = await playlistSongIds(id);
+    if (actual.length === expected.length && actual.every((value, index) => value === expected[index])) return actual;
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  return actual;
+}
+
 export async function replaceManagedPlaylist(definition: PlaylistDefinition, items: PlaylistCandidate[]) {
   if (!navidromeConfigured()) throw new Error("Navidrome admin credentials are not configured");
-  const mapped: Array<{ fileId: number; songId: string }> = [];
+  let mapped: Array<{ fileId: number; songId: string }> = [];
   for (const item of items) {
     const id = await songId(item);
     if (!id) throw new Error(`Navidrome song identity remains unresolved: ${item.artist} / ${item.album} / ${item.title}`);
@@ -125,8 +139,27 @@ export async function replaceManagedPlaylist(definition: PlaylistDefinition, ite
   }
   try {
     await call("updatePlaylist", [["playlistId", playlistId], ["name", definition.name], ["comment", marker(definition.id)], ["public", "false"]]);
-    const actual = (await navidromePlaylist(playlistId)).tracks.map((track) => String(track.navidromeId ?? ""));
-    if (actual.join("|") !== ids.join("|")) throw new Error("Navidrome playlist verification failed");
+    let expected = ids;
+    let actual = await verifiedPlaylistIds(playlistId, expected);
+    if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
+      const present = new Set(actual);
+      const stale = new Set(mapped.filter((item) => !present.has(item.songId)).map((item) => item.fileId));
+      if (stale.size) {
+        const remapped: Array<{ fileId: number; songId: string }> = [];
+        for (const item of items) {
+          const existing = mapped.find((value) => value.fileId === item.fileId);
+          const id = stale.has(item.fileId) ? await songId(item, true) : existing?.songId;
+          if (!id) throw new Error(`Navidrome song identity became stale and could not be refreshed: ${item.artist} / ${item.album} / ${item.title}`);
+          remapped.push({ fileId: item.fileId, songId: id });
+        }
+        mapped = remapped;
+        expected = mapped.map((item) => item.songId);
+        if (new Set(expected).size !== expected.length) throw new Error("Navidrome identity refresh produced duplicate tracks");
+        await call("createPlaylist", [["playlistId", playlistId], ...expected.map((id) => ["songId", id] as [string, string])]);
+        actual = await verifiedPlaylistIds(playlistId, expected);
+      }
+    }
+    if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) throw new Error(`Navidrome playlist verification failed: expected ${expected.length} tracks, received ${actual.length}`);
   } catch (error) {
     if (existing && previous.length) await call("createPlaylist", [["playlistId", playlistId], ...previous.map((id) => ["songId", id] as [string, string])]).catch(() => undefined);
     throw error;

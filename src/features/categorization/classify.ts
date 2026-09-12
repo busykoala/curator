@@ -17,12 +17,24 @@ function compact(value:unknown,key:string):unknown{const limit=key==="lyrics"?30
 export function classificationPayload(track:TrackClassificationInput){const tags=Object.fromEntries(Object.entries(track.file.tags).filter(([key])=>["title","artist","artists","album","albumArtist","date","year","genre","style","mood","scene","language","languages","composer","label","bpm","key","lyrics","comment","trackNumber","discNumber"].includes(key)).slice(0,30).map(([key,value])=>[key,compact(value,key)]));return{fileId:track.file.id,artist:track.file.artist,album:track.file.album,path:track.file.path.replace(/^\/music\//,""),tags,audio:track.audio}}
 
 async function request(tracks:TrackClassificationInput[],albumEvidence:Record<string,unknown>){
-  const response=await aiClient.structured<unknown>({instructions:categorizationInstructions,input:JSON.stringify({albumEvidence,tracks:tracks.map(classificationPayload)}),schemaName:"track_semantic_profiles",schema:semanticBatchJsonSchema});recordAiUsage("track_categorization",aiModel,response);return semanticBatchSchema.parse(response.data);
+  const response=await aiClient.structured<unknown>({instructions:categorizationInstructions,input:JSON.stringify({albumEvidence,tracks:tracks.map(classificationPayload)}),schemaName:"track_semantic_profiles",schema:semanticBatchJsonSchema,maxOutputTokens:Math.max(4_096,Math.min(12_000,tracks.length*1_500))});recordAiUsage("track_categorization",aiModel,response);return semanticBatchSchema.parse(response.data);
+}
+
+async function requestAdaptive(tracks:TrackClassificationInput[],albumEvidence:Record<string,unknown>):Promise<Map<number,{profile:TrackSemanticProfile;model:string}>>{
+  try{
+    const result=await request(tracks,albumEvidence);
+    return new Map(result.tracks.map(item=>[item.fileId,{profile:normalizeProfile(item.profile),model:aiModel}]));
+  }catch(error){
+    if(!/output-token limit/i.test(String(error))||tracks.length===1)throw error;
+    const middle=Math.ceil(tracks.length/2),output=new Map<number,{profile:TrackSemanticProfile;model:string}>();
+    for(const part of [tracks.slice(0,middle),tracks.slice(middle)])for(const[item,value]of await requestAdaptive(part,albumEvidence))output.set(item,value);
+    return output;
+  }
 }
 
 export async function classifyTracks(tracks:TrackClassificationInput[],albumEvidence:Record<string,unknown>):Promise<Map<number,{profile:TrackSemanticProfile;model:string}>>{
-  if(!aiConfigured)throw new Error("Local AI API key is not configured");const result=await request(tracks,albumEvidence);
-  const expected=new Set(tracks.map(track=>track.file.id)),output=new Map<number,{profile:TrackSemanticProfile;model:string}>();for(const item of result.tracks)if(expected.has(item.fileId))output.set(item.fileId,{profile:normalizeProfile(item.profile),model:aiModel});
-  const retry=tracks.filter(track=>{const decision=output.get(track.file.id);return !decision||profileIsSparse(decision.profile)});if(retry.length)try{const repeated=await request(retry,albumEvidence);for(const item of repeated.tracks)if(expected.has(item.fileId))output.set(item.fileId,{profile:normalizeProfile(item.profile),model:aiModel})}catch{}
+  if(!aiConfigured)throw new Error("Local AI API key is not configured");const expected=new Set(tracks.map(track=>track.file.id)),output=await requestAdaptive(tracks,albumEvidence);
+  for(const id of output.keys())if(!expected.has(id))output.delete(id);
+  const retry=tracks.filter(track=>{const decision=output.get(track.file.id);return !decision||profileIsSparse(decision.profile)});if(retry.length)try{const repeated=await requestAdaptive(retry,albumEvidence);for(const[itemId,value]of repeated)if(expected.has(itemId))output.set(itemId,value)}catch{}
   return output;
 }

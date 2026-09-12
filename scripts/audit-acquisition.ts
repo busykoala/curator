@@ -162,9 +162,9 @@ console.log(
   "Acquisition policy audit passed: mode, stalls, search priority, quotas, managed downloads, throughput scoring, and quality exclusions.",
 );
 
-assert.equal(searchBudget({short: 0, daily: 150, priorityDaily: 0}, true).general, 450);
-assert.equal(searchBudget({short: 10, daily: 600, priorityDaily: 30}, true).short, 0);
-assert.equal(searchBudget({short: 0, daily: 601, priorityDaily: 30}, true).general, 0);
+assert.equal(searchBudget({short: 0, daily: 150, priorityDaily: 0}, true).general, 1050);
+assert.equal(searchBudget({short: 10, daily: 600, priorityDaily: 30}, true).short, 10);
+assert.equal(searchBudget({short: 0, daily: 1201, priorityDaily: 30}, true).general, 0);
 assert.equal(shouldUseFallback(target, 2), true);
 assert.equal(shouldUseFallback(target, 1), false);
 assert.equal(shouldUseFallback(recent, 3), false);
@@ -187,3 +187,13 @@ sqlite.close();
 import { ubuntuTorrentFromHtml } from "../src/features/acquisition/qbittorrent";
 assert.equal(ubuntuTorrentFromHtml('<a href="ubuntu-24.04.3-desktop-amd64.iso.torrent"></a><a href="ubuntu-24.04.4-live-server-amd64.iso.torrent"></a><a href="ubuntu-24.04.10-desktop-amd64.iso.torrent"></a>', 'https://releases.ubuntu.com/24.04/'), 'https://releases.ubuntu.com/24.04/ubuntu-24.04.10-desktop-amd64.iso.torrent');
 assert.throws(() => ubuntuTorrentFromHtml('<a href="https://example.org/test.torrent">', 'https://releases.ubuntu.com/24.04/'));
+import { confirmedGrabConflict } from "../src/features/acquisition/search";
+assert.equal(confirmedGrabConflict(new Error("Lidarr /release failed (409): Conflict")), true);
+assert.equal(confirmedGrabConflict(new Error("Lidarr /release failed (500): qBittorrent HTTP request failed: [409:Conflict] POST /api/v2/torrents/add")), true);
+assert.equal(confirmedGrabConflict(new Error("Lidarr /release failed (500): unrelated failure")), false);
+import { cleanArtistName, cleanCatalogText } from "../src/features/sources/musicbrainz";
+import { identityIsWritable, resolveIdentity } from "../src/features/identity/resolve";
+assert.equal(cleanArtistName("TheBlack Eyed Peas"), "The Black Eyed Peas");
+assert.equal(cleanCatalogText("Aerosmith's Greatest Hits CD"), "Aerosmith's Greatest Hits");
+const singleIdentity=resolveIdentity("Weezer","Hash Pipe",[{id:"release-group",title:"Hash Pipe","primary-type":"Single","artist-credit":[{artist:{id:"artist",name:"Weezer"}}],score:100}],[]);
+assert.equal(identityIsWritable(singleIdentity),true);
