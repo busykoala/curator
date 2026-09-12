@@ -194,6 +194,8 @@ assert.equal(confirmedGrabConflict(new Error("Lidarr /release failed (500): unre
 import { cleanArtistName, cleanCatalogText } from "../src/features/sources/musicbrainz";
 import { identityIsWritable, resolveIdentity } from "../src/features/identity/resolve";
 import { outcomeScore } from "../src/features/acquisition/prowlarr";
+import { profileIsSparse } from "../src/features/categorization/vocabulary";
+import type { TrackSemanticProfile } from "../src/features/categorization/types";
 assert.equal(cleanArtistName("TheBlack Eyed Peas"), "The Black Eyed Peas");
 assert.equal(cleanCatalogText("Aerosmith's Greatest Hits CD"), "Aerosmith's Greatest Hits");
 const singleIdentity=resolveIdentity("Weezer","Hash Pipe",[{id:"release-group",title:"Hash Pipe","primary-type":"Single","artist-credit":[{artist:{id:"artist",name:"Weezer"}}],score:100}],[]);
@@ -202,3 +204,6 @@ const baseline={grabs:0,imports:0,failures:0,grabFailures:0,replacements:0,unava
 assert.ok(outcomeScore({...baseline,grabs:1,imports:1},0)>outcomeScore({...baseline,grabs:100},0));
 assert.ok(outcomeScore({...baseline,grabs:100,unavailable:1},0)<outcomeScore({...baseline,grabs:10},0));
 assert.equal(outcomeScore({...baseline,grabs:10},0),outcomeScore({...baseline,grabs:100},0));
+const intentionalSkit={genre:["spoken_word_comedy"],style:["comedy_skit"],mood:[],texture:[],timbre:[],production:[],groove:[],recordingTypes:["skit"],vocalProfile:["spoken"]} as unknown as TrackSemanticProfile;
+assert.equal(profileIsSparse(intentionalSkit),false);
+assert.equal(profileIsSparse({...intentionalSkit,genre:["rock"],recordingTypes:["studio_recording"]}),true);

@@ -73,7 +73,9 @@ export function normalizeProfile(profile:TrackSemanticProfile):TrackSemanticProf
 }
 
 export function profileIsSparse(profile:TrackSemanticProfile):boolean{
+  const nonMusical=profile.genre.includes("spoken_word_comedy")||profile.recordingTypes.some(value=>["spoken_piece","skit"].includes(value));
+  if(nonMusical)return !profile.genre.length||!profile.style.length||!profile.recordingTypes.length||!profile.vocalProfile.length;
   if(!profile.genre.length||!profile.style.length||!profile.mood.length||!profile.texture.length||!profile.timbre.length||!profile.production.length)return true;
-  const rhythmOptional=profile.genre.includes("spoken_word_comedy")||profile.recordingTypes.some(value=>["spoken_piece","skit"].includes(value))||profile.style.some(value=>/studio_chatter|spoken_announcement|ambient|drone|field_recording|free_form/.test(value));
+  const rhythmOptional=profile.style.some(value=>/studio_chatter|spoken_announcement|ambient|drone|field_recording|free_form/.test(value));
   return !rhythmOptional&&!profile.groove.length;
 }
