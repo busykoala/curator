@@ -1,22 +1,12 @@
-import argon2 from "argon2";
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { config } from "@/config";
-import { db, stateGet, stateSet } from "@/features/db/client";
+import { db } from "@/features/db/client";
 import { mapUser, type CuratorUser, type UserRow } from "./users";
 export { listCuratorUsers, type CuratorUser } from "./users";
 
 const COOKIE = "curator_session";
 const SESSION_SECONDS = 7 * 86_400;
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
-
-async function passwordHash(): Promise<string> {
-  const existing = stateGet("admin_password_hash");
-  if (existing && await argon2.verify(existing, config.CURATOR_ADMIN_PASSWORD).catch(() => false)) return existing;
-  const hash = await argon2.hash(config.CURATOR_ADMIN_PASSWORD, { type: argon2.argon2id });
-  stateSet("admin_password_hash", hash);
-  return hash;
-}
 
 export function loginAllowed(ip: string) {
   const cutoff = Date.now() - 20 * 60_000;
@@ -25,7 +15,6 @@ export function loginAllowed(ip: string) {
   return recent.count < 5;
 }
 export function recordLogin(ip: string, success: boolean) { db().prepare("INSERT INTO auth_attempts(ip,attempted_at,success) VALUES (?,?,?)").run(ip, Date.now(), success ? 1 : 0); }
-export async function verifyLegacyPassword(value: string): Promise<boolean> { return argon2.verify(await passwordHash(), value).catch(() => false); }
 
 export async function createSession(userId: number): Promise<void> {
   const token = randomBytes(32).toString("base64url");

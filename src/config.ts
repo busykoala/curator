@@ -6,7 +6,6 @@ const schema = z.object({
   PROWLARR_URL: z.string().url().default("http://prowlarr:9696"), PROWLARR_API_KEY: z.string().default(""),
   QBITTORRENT_URL: z.string().url().default("http://qbittorrent:8080"), QBITTORRENT_USERNAME: z.string().default(""), QBITTORRENT_PASSWORD: z.string().default(""), QBITTORRENT_CATEGORY: z.string().default("music"),
   NAVIDROME_URL: z.string().url().default("http://navidrome:4533"), NAVIDROME_PUBLIC_URL: z.string().url().default("http://localhost:4533"), NAVIDROME_USERNAME: z.string().default(""), NAVIDROME_PASSWORD: z.string().default(""),
-  CURATOR_ADMIN_PASSWORD: z.string().min(12).default("build-only-change-me"),
   CURATOR_SESSION_SECRET: z.string().min(32).default("build-only-session-secret-change-me-0000000000000000"),
   CURATOR_CREDENTIAL_KEY: z.string().min(32).default("build-only-credential-key-change-me-0000000000000000"),
   CURATOR_AUTOSTART: z.enum(["true", "false"]).default("true"),
