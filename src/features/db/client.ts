@@ -33,6 +33,12 @@ function migrate(instance: Database.Database) {
     instance.exec("DROP INDEX IF EXISTS smart_playlists_name");
     instance.exec("CREATE UNIQUE INDEX IF NOT EXISTS smart_playlists_owner_name ON smart_playlists(coalesce(owner_user_id,0),lower(name))");
   });
+  migration(6, () => {
+    // Listening clusters are derived data. Rebuild them with per-user signals
+    // after removing the old library-wide fallback scoring.
+    instance.exec("DELETE FROM listening_clusters");
+    instance.exec("DELETE FROM state WHERE key LIKE 'listening_clusters_refreshed:%'");
+  });
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

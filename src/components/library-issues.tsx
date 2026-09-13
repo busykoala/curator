@@ -4,6 +4,7 @@ import { FormEvent,useCallback,useEffect,useMemo,useState } from "react";
 import { CheckCircle2,ExternalLink,ImageIcon,LoaderCircle,Search,Upload,X } from "lucide-react";
 import { issueCopy } from "./dashboard-types";
 import { DuplicateReview } from "./duplicate-review";
+import { readJson } from "./http";
 
 type Issue={id:number;code:string;severity:string;message:string;album_key:string|null;artist:string|null;album:string|null;tracks:number;updated_at:string};
 type Duplicate={group_key:string;artist:string;album:string;kind:string;confidence:number;status:string;detail_json:string;updated_at:string};
@@ -20,9 +21,9 @@ async function responseBody(response:Response):Promise<{error?:string;suggestion
 
 export function LibraryIssues(){
   const[filter,setFilter]=useState("review"),[query,setQuery]=useState(""),[data,setData]=useState<ResponseData>({issues:[],issueCounts:{},total:0,duplicates:[]});
-  const[summary,setSummary]=useState<Summary|null>(null);
+  const[summary,setSummary]=useState<Summary|null>(null),[loadError,setLoadError]=useState("");
   const[editing,setEditing]=useState<Issue|null>(null),[suggestions,setSuggestions]=useState<Suggestion[]>([]),[original,setOriginal]=useState<Original|null>(null),[loading,setLoading]=useState(false),[applying,setApplying]=useState<string|null>(null),[notice,setNotice]=useState("");
-  const load=useCallback(async()=>{const apiFilter=filter==="review"?"all":filter,[issuesResponse,summaryResponse]=await Promise.all([fetch(`/api/library/issues?filter=${apiFilter}&limit=5000`,{cache:"no-store"}),fetch("/api/summary",{cache:"no-store"})]);if(issuesResponse.ok)setData(await issuesResponse.json());if(summaryResponse.ok)setSummary(await summaryResponse.json())},[filter]);
+  const load=useCallback(async()=>{setLoadError("");try{const apiFilter=filter==="review"?"all":filter,[issuesResponse,summaryResponse]=await Promise.all([fetch(`/api/library/issues?filter=${apiFilter}&limit=5000`,{cache:"no-store"}),fetch("/api/summary",{cache:"no-store"})]);const[issuesBody,summaryBody]=await Promise.all([readJson<ResponseData>(issuesResponse,"Review queue unavailable"),readJson<Summary>(summaryResponse,"Coverage summary unavailable")]);setData(issuesBody);setSummary(summaryBody)}catch(error){setLoadError(error instanceof Error?error.message:"Review queue unavailable")}},[filter]);
   useEffect(()=>{void load()},[load]);
   useEffect(()=>{if(!editing?.album_key)return;setLoading(true);setSuggestions([]);setOriginal(null);setNotice("");const params=new URLSearchParams({albumKey:editing.album_key,kind:suggestionKind(editing)});fetch(`/api/library/suggestions?${params}`,{cache:"no-store"}).then(async response=>{const body=await responseBody(response);if(!response.ok)throw new Error(body.error||"Suggestion lookup failed");setSuggestions(body.suggestions||[]);setOriginal(body.original||null)}).catch(error=>setNotice(error instanceof Error?error.message:"Suggestion lookup failed")).finally(()=>setLoading(false))},[editing]);
   const needle=query.trim().toLocaleLowerCase(),issues=useMemo(()=>data.issues.filter(item=>(filter!=="review"||canReview(item))&&(!needle||`${item.artist} ${item.album} ${item.code} ${item.message}`.toLocaleLowerCase().includes(needle))),[data.issues,filter,needle]),duplicates=useMemo(()=>data.duplicates.filter(item=>!needle||`${item.artist} ${item.album}`.toLocaleLowerCase().includes(needle)),[data.duplicates,needle]);
@@ -30,6 +31,7 @@ export function LibraryIssues(){
   async function applyManual(event:FormEvent<HTMLFormElement>){event.preventDefault();if(!editing?.album_key)return;setApplying("manual");setNotice("");try{const form=new FormData(event.currentTarget);form.set("albumKey",editing.album_key);const response=await fetch("/api/library/manual",{method:"POST",body:form}),body=await responseBody(response);if(!response.ok)return setNotice(body.error||"Manual update failed");setEditing(null);await load()}catch{setNotice("Could not reach Curator. Please retry.")}finally{setApplying(null)}}
   return <>
     <section className="paper library-workbench"><div className="section-heading"><div><p className="eyebrow">Review queue</p><h2>Items that need a decision</h2><p className="library-intro">Automatic work stays out of this list. Anything shown here benefits from your review.</p></div><label className="library-search"><Search size={17}/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search reviews" aria-label="Search library issues"/></label></div>
+      {loadError&&<div className="error-banner" role="alert"><X/><div><strong>Review queue could not be refreshed</strong><p>{loadError}</p><button className="btn-secondary compact" onClick={()=>void load()}>Retry</button></div></div>}
       <div className="filter-bar" aria-label="Library filters">{filters.map(([value,label])=><button key={value} className={filter===value?"filter-active":""} onClick={()=>setFilter(value)}>{label}</button>)}</div>
       <CoverageContext filter={filter} summary={summary}/>
       {filter==="duplicates"?<DuplicateReview/>:

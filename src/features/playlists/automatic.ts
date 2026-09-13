@@ -1,8 +1,8 @@
 import { playlistSuggestions } from "./clusters";
-import { ensurePlaylist, listPlaylists } from "./repository";
+import { ensurePlaylist, listPlaylists, removeUnusedAutomaticPlaylists } from "./repository";
 
 export async function ensureAutomaticPlaylists(ownerUserId?: number) {
-  if (!ownerUserId) return { created: 0, total: 0, names: [] };
+  if (!ownerUserId) return { created: 0, removed: 0, total: 0, names: [] as string[] };
   const { suggestions } = await playlistSuggestions(ownerUserId);
   const depth = suggestions
     .filter((item) => item.category === "depth")
@@ -17,7 +17,8 @@ export async function ensureAutomaticPlaylists(ownerUserId?: number) {
     if (ensurePlaylist({ ...item, enabled: true, ownerUserId })) created += 1;
   }
 
-  const names = new Set(defaults.map((item) => item.name));
+  const names = new Set(defaults.map((item) => String(item.name)));
+  const removed = removeUnusedAutomaticPlaylists(ownerUserId, names);
   const active = listPlaylists(ownerUserId).filter((item) => names.has(item.name));
-  return { created, total: active.length, names: [...names] };
+  return { created, removed, total: active.length, names: [...names] };
 }

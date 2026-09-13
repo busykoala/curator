@@ -26,6 +26,9 @@ export type PlaylistSuggestion = PlaylistDefinition;
 export type PlaylistData = {
   definitions: PlaylistDefinition[];
   acquisitions: Array<Record<string, unknown>>;
+  selectedUser: { id: number; displayName: string; tokenStatus: string };
+  users: Array<{ id: number; displayName: string; tokenStatus: string }>;
+  automaticWarning?: string;
   connection: { configured: boolean };
   schedule: { phase?: string; lastRun?: string; nextRun?: string };
 };
