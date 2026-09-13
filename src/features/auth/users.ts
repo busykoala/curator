@@ -6,7 +6,6 @@ export type CuratorUser = {
   username: string;
   displayName: string;
   tokenStatus: "active" | "revoked" | "missing";
-  legacy: boolean;
 };
 
 export type UserRow = {
@@ -15,7 +14,6 @@ export type UserRow = {
   username: string;
   display_name: string;
   token_status: CuratorUser["tokenStatus"];
-  legacy: number;
 };
 
 export const mapUser = (row: UserRow): CuratorUser => ({
@@ -24,9 +22,8 @@ export const mapUser = (row: UserRow): CuratorUser => ({
   username: row.username,
   displayName: row.display_name,
   tokenStatus: row.token_status,
-  legacy: Boolean(row.legacy),
 });
 
 export function listCuratorUsers(): CuratorUser[] {
-  return (db().prepare("SELECT id,navidrome_user_id,username,display_name,token_status,legacy FROM curator_users ORDER BY display_name COLLATE NOCASE").all() as UserRow[]).map(mapUser);
+  return (db().prepare("SELECT id,navidrome_user_id,username,display_name,token_status FROM curator_users ORDER BY display_name COLLATE NOCASE").all() as UserRow[]).map(mapUser);
 }

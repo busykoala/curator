@@ -24,13 +24,13 @@ export async function authenticateNavidrome(username: string, password: string) 
   return { token: result.AccessToken, navidromeUserId: result.User.Id, username: result.User.Name, displayName: result.User.Name };
 }
 
-export function provisionUser(value: { token?: string; navidromeUserId: string; username: string; displayName: string; legacy?: boolean }): CuratorUser {
+export function provisionUser(value: { token: string; navidromeUserId: string; username: string; displayName: string }): CuratorUser {
   const encrypted = value.token ? seal(value.token) : null;
   const row = db().prepare(`INSERT INTO curator_users(navidrome_user_id,username,display_name,token_ciphertext,token_iv,token_tag,token_status,legacy)
-    VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(username) DO UPDATE SET navidrome_user_id=excluded.navidrome_user_id,display_name=excluded.display_name,token_ciphertext=coalesce(excluded.token_ciphertext,curator_users.token_ciphertext),token_iv=coalesce(excluded.token_iv,curator_users.token_iv),token_tag=coalesce(excluded.token_tag,curator_users.token_tag),token_status=excluded.token_status,legacy=excluded.legacy,last_seen_at=CURRENT_TIMESTAMP RETURNING id,navidrome_user_id,username,display_name,token_status,legacy`).get(value.navidromeUserId, value.username, value.displayName, encrypted?.ciphertext ?? null, encrypted?.iv ?? null, encrypted?.tag ?? null, value.token ? "active" : "missing", value.legacy ? 1 : 0) as { id: number; navidrome_user_id: string; username: string; display_name: string; token_status: CuratorUser["tokenStatus"]; legacy: number };
+    VALUES (?,?,?,?,?,?,?,0) ON CONFLICT(username) DO UPDATE SET navidrome_user_id=excluded.navidrome_user_id,display_name=excluded.display_name,token_ciphertext=excluded.token_ciphertext,token_iv=excluded.token_iv,token_tag=excluded.token_tag,token_status='active',legacy=0,last_seen_at=CURRENT_TIMESTAMP RETURNING id,navidrome_user_id,username,display_name,token_status`).get(value.navidromeUserId, value.username, value.displayName, encrypted?.ciphertext ?? null, encrypted?.iv ?? null, encrypted?.tag ?? null, "active") as { id: number; navidrome_user_id: string; username: string; display_name: string; token_status: CuratorUser["tokenStatus"] };
   db().prepare("UPDATE smart_playlists SET owner_user_id=? WHERE owner_user_id IS NULL").run(row.id);
   db().prepare("UPDATE playlist_runs SET owner_user_id=? WHERE owner_user_id IS NULL AND playlist_id IN (SELECT id FROM smart_playlists WHERE owner_user_id=?)").run(row.id, row.id);
-  return { id: row.id, navidromeUserId: row.navidrome_user_id, username: row.username, displayName: row.display_name, tokenStatus: row.token_status, legacy: Boolean(row.legacy) };
+  return { id: row.id, navidromeUserId: row.navidrome_user_id, username: row.username, displayName: row.display_name, tokenStatus: row.token_status };
 }
 
 export async function jellyfinCall<T>(userId: number, path: string, init: RequestInit = {}): Promise<T> {
