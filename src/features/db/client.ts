@@ -29,6 +29,10 @@ function migrate(instance: Database.Database) {
     instance.exec("CREATE TRIGGER IF NOT EXISTS files_search_delete AFTER DELETE ON files BEGIN DELETE FROM files_search WHERE file_id=old.id; END");
     instance.exec("CREATE TRIGGER IF NOT EXISTS files_search_update AFTER UPDATE OF tags_json,artist_name,album_name ON files BEGIN DELETE FROM files_search WHERE file_id=old.id; INSERT INTO files_search(file_id,title,artist,album,tags) VALUES(new.id,CASE WHEN json_valid(new.tags_json) THEN coalesce(json_extract(new.tags_json,'$.title'),'') ELSE '' END,new.artist_name,new.album_name,new.tags_json); END");
   });
+  migration(5, () => {
+    instance.exec("DROP INDEX IF EXISTS smart_playlists_name");
+    instance.exec("CREATE UNIQUE INDEX IF NOT EXISTS smart_playlists_owner_name ON smart_playlists(coalesce(owner_user_id,0),lower(name))");
+  });
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;
