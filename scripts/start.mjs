@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 
 const children = new Set();
 let stopping = false;
-function launch(name, command, args, restart = false) {
-  const child = spawn(command, args, { stdio: "inherit", env: process.env });
+function launch(name, command, args, restart = false, env = process.env) {
+  const child = spawn(command, args, { stdio: "inherit", env });
   children.add(child);
   child.on("exit", (code, signal) => {
     children.delete(child);
@@ -24,6 +24,6 @@ function stop(code = 0) {
 }
 process.on("SIGTERM", () => stop(0));
 process.on("SIGINT", () => stop(0));
-launch("web", "node", ["server.js"]);
+launch("web", "node", ["server.js"], false, { ...process.env, HOSTNAME: "0.0.0.0", PORT: process.env.PORT ?? "3000" });
 launch("worker", "node", [".workers/worker.mjs"], true);
 launch("acquisition", "node", [".workers/acquisition-worker.mjs"], true);
