@@ -28,12 +28,12 @@ export async function refreshListeningClusters(ownerUserId?: number){
   for(const row of rows){const listen=signals.get(`${norm(row.artist)}|${norm(row.album)}`)??0;if(!listen)continue;let profile:Record<string,unknown>;try{profile=JSON.parse(row.profile_json) as Record<string,unknown>}catch{continue}for(const term of [...values(profile,"genre"),...values(profile,"style"),...values(profile,"scenes")].slice(0,10)){const key=norm(term);if(!key)continue;const current=scores.get(key)??{weight:0,evidence:[]};current.weight+=listen;current.evidence.push(`${row.artist} / ${row.album}`);scores.set(key,current)}}
   const selected=[...scores.entries()].sort((a,b)=>b[1].weight-a[1].weight).slice(0,10);
   db().transaction(()=>{db().prepare("DELETE FROM listening_clusters WHERE user_id=?").run(ownerUserId);const insert=db().prepare("INSERT INTO listening_clusters(id,label,terms_json,evidence_json,weight,user_id) VALUES (?,?,?,?,?,?)");for(const[key,value]of selected)insert.run(createHash("sha1").update(`${ownerUserId}:${key}`).digest("hex").slice(0,12),key.replace(/\b\w/g,char=>char.toUpperCase()),JSON.stringify([key]),JSON.stringify({albums:[...new Set(value.evidence)].slice(0,12)}),value.weight,ownerUserId)})();
-  stateSet(`listening_clusters_refreshed:${ownerUserId}`,new Date().toISOString());
+  stateSet(`listening_clusters_refreshed_v2:${ownerUserId}`,new Date().toISOString());
   return selected.length;
 }
 
 export async function playlistSuggestions(ownerUserId?:number){
-  if(ownerUserId){const refreshed=Date.parse(stateGet(`listening_clusters_refreshed:${ownerUserId}`));if(!Number.isFinite(refreshed)||Date.now()-refreshed>6*60*60*1000)await refreshListeningClusters(ownerUserId)}
+  if(ownerUserId){const refreshed=Date.parse(stateGet(`listening_clusters_refreshed_v2:${ownerUserId}`));if(!Number.isFinite(refreshed)||Date.now()-refreshed>6*60*60*1000)await refreshListeningClusters(ownerUserId)}
   const clusters=ownerUserId?db().prepare("SELECT id,label,terms_json,weight FROM listening_clusters WHERE user_id=? ORDER BY weight DESC LIMIT 8").all(ownerUserId) as Array<{id:string;label:string;terms_json:string;weight:number}>:[];
   const suggestions:Array<Record<string,unknown>>=[];
   for(const cluster of clusters.slice(0,5)){const lane=JSON.parse(cluster.terms_json) as string[];suggestions.push(suggestion("discovery",`New in ${cluster.label}`,lane,cluster.id),suggestion("depth",`${cluster.label} Deep Dive`,lane,cluster.id))}
