@@ -1,5 +1,5 @@
 import { stateGet, stateSet } from "@/features/db/client";
-import { listCuratorUsers } from "@/features/auth/session";
+import { listCuratorUsers } from "@/features/auth/users";
 import { ensureAutomaticPlaylists } from "./automatic";
 import { refreshListeningClusters } from "./clusters";
 import { researchDiscovery, refreshDiscoveryStates } from "./discovery";

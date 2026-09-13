@@ -3,12 +3,11 @@ import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { config } from "@/config";
 import { db, stateGet, stateSet } from "@/features/db/client";
+import { mapUser, type CuratorUser, type UserRow } from "./users";
+export { listCuratorUsers, type CuratorUser } from "./users";
 
 const COOKIE = "curator_session";
 const SESSION_SECONDS = 7 * 86_400;
-export type CuratorUser = { id: number; navidromeUserId: string; username: string; displayName: string; tokenStatus: "active" | "revoked" | "missing"; legacy: boolean };
-type UserRow = { id: number; navidrome_user_id: string; username: string; display_name: string; token_status: CuratorUser["tokenStatus"]; legacy: number };
-const mapUser = (row: UserRow): CuratorUser => ({ id: row.id, navidromeUserId: row.navidrome_user_id, username: row.username, displayName: row.display_name, tokenStatus: row.token_status, legacy: Boolean(row.legacy) });
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 
 async function passwordHash(): Promise<string> {
@@ -44,5 +43,4 @@ export async function currentUser(): Promise<CuratorUser | null> {
   return mapUser(row);
 }
 export async function authenticated(): Promise<boolean> { return Boolean(await currentUser()); }
-export function listCuratorUsers(): CuratorUser[] { return (db().prepare("SELECT id,navidrome_user_id,username,display_name,token_status,legacy FROM curator_users ORDER BY display_name COLLATE NOCASE").all() as UserRow[]).map(mapUser); }
 export function sameOrigin(request: Request): boolean { const origin = request.headers.get("origin"); if (!origin) return false; try { return new URL(origin).host === request.headers.get("host"); } catch { return false; } }

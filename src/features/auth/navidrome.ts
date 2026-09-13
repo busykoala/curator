@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { config } from "@/config";
 import { db } from "@/features/db/client";
-import type { CuratorUser } from "./session";
+import type { CuratorUser } from "./users";
 
 type AuthResult = { AccessToken?: string; User?: { Id?: string; Name?: string } };
 const base = () => `${config.NAVIDROME_URL.replace(/\/$/, "")}/jellyfin`;
