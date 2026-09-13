@@ -15,6 +15,7 @@ import {
 
 type Props = {
   initial: PlaylistDefinition;
+  users: Array<{id:number;displayName:string;tokenStatus:string}>;
   close: () => void;
   save: (value: PlaylistDefinition) => Promise<void>;
 };
@@ -52,7 +53,7 @@ function copy(
   };
 }
 
-export function PlaylistEditor({ initial, close, save }: Props) {
+export function PlaylistEditor({ initial, users, close, save }: Props) {
   const [busy, setBusy] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [options, setOptions] = useState<Options>(emptyOptions);
@@ -81,6 +82,7 @@ export function PlaylistEditor({ initial, close, save }: Props) {
       active = false;
     };
   }, []);
+  useEffect(()=>{const escape=(event:KeyboardEvent)=>{if(event.key==="Escape"&&window.confirm("Close without saving these playlist changes?"))close()};window.addEventListener("keydown",escape);return()=>window.removeEventListener("keydown",escape)},[close]);
 
   const directionOptions = useMemo(
     () => [
@@ -108,14 +110,14 @@ export function PlaylistEditor({ initial, close, save }: Props) {
       className="drawer-backdrop"
       onMouseDown={(event) => event.target === event.currentTarget && close()}
     >
-      <form className="playlist-editor playlist-editor-v2 intent-editor" onSubmit={submit}>
+      <form className="playlist-editor playlist-editor-v2 intent-editor" role="dialog" aria-modal="true" aria-labelledby="playlist-editor-title" onSubmit={submit}>
         <header>
           <div>
             <span className="intent-category">{meta.label}</span>
-            <h2>{title}</h2>
+            <h2 id="playlist-editor-title">{title}</h2>
             <p>{meta.description}</p>
           </div>
-          <button type="button" className="icon-button" onClick={close}>
+          <button type="button" className="icon-button" aria-label="Close playlist editor" onClick={close}>
             <X />
           </button>
         </header>
@@ -129,6 +131,7 @@ export function PlaylistEditor({ initial, close, save }: Props) {
           )}
 
           <div className="playlist-essentials">
+            <label><span>Playlist owner</span><select value={value.ownerUserId} onChange={event=>setValue({...value,ownerUserId:Number(event.target.value)})}>{users.map(user=><option key={user.id} value={user.id}>{user.displayName}{user.tokenStatus!=="active"?" · sign-in required":""}</option>)}</select><small>Any Curator user may assign this playlist to any provisioned listener.</small></label>
             <label>
               <span>Playlist name</span>
               <input
@@ -256,6 +259,11 @@ export function PlaylistEditor({ initial, close, save }: Props) {
                 }
               />
               <small>30% balances familiarity and variety.</small>
+            </label>
+            <label>
+              <span>Adventure <strong>{Number(config.explorationPercent ?? 35)}%</strong></span>
+              <input type="range" min="0" max="100" step="5" value={Number(config.explorationPercent ?? 35)} onChange={event=>setValue(copy(value,"explorationPercent",Number(event.target.value)))}/>
+              <small>Higher values favor less familiar parts of the library.</small>
             </label>
           </section>
 

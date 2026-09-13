@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays, ChevronLeft, ChevronRight, Disc3, ImageOff, ListMusic,
   Mic2, MoreHorizontal, Music2, Search, Tags, UsersRound, X,
@@ -25,21 +25,23 @@ export function LibraryBrowser() {
   const [page,setPage] = useState(1), [result,setResult] = useState<Result|null>(null);
   const [global,setGlobal] = useState<Record<string,Result>|null>(null), [loading,setLoading] = useState(true);
   const [error,setError] = useState(""), [selected,setSelected] = useState<Selection|null>(null);
+  const requestVersion=useRef(0);
   const request = useCallback(async(nextView:string,nextSearch:string,nextPage=1) => {
-    const params = new URLSearchParams({view:nextView,q:nextSearch,page:String(nextPage),limit:"30"});
+    const params = new URLSearchParams({view:nextView,q:nextSearch,page:String(nextPage)});
     const response = await fetch(`/api/library/browse?${params}`,{cache:"no-store"});
     const body = await response.json();
     if(!response.ok) throw new Error(body.error || "Library unavailable");
     return body as Result;
   },[]);
   const load = useCallback(async() => {
+    const version=++requestVersion.current;
     setLoading(true); setError("");
     try {
       if(search) {
         const values = await Promise.all(globalViews.map(item => request(item,search,1)));
-        setGlobal(Object.fromEntries(globalViews.map((item,index) => [item,values[index]]))); setResult(null);
-      } else { setResult(await request(view,"",page)); setGlobal(null); }
-    } catch(reason) { setError(String(reason)); } finally { setLoading(false); }
+        if(version!==requestVersion.current)return;setGlobal(Object.fromEntries(globalViews.map((item,index) => [item,values[index]]))); setResult(null);
+      } else { const next=await request(view,"",page);if(version!==requestVersion.current)return;setResult(next); setGlobal(null); }
+    } catch(reason) { if(version===requestVersion.current)setError(String(reason)); } finally { if(version===requestVersion.current)setLoading(false); }
   },[page,request,search,view]);
   useEffect(() => { void load(); },[load]);
   useEffect(() => { const timer=setTimeout(() => { setPage(1); setSearch(query.trim()); },280); return () => clearTimeout(timer); },[query]);

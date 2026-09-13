@@ -1,13 +1,13 @@
 "use client";
 import { useEffect,useState } from "react";
-import { Check,Database,KeyRound,LoaderCircle,LogOut,Save,ServerCog,Sparkles } from "lucide-react";
+import { Check,Database,LoaderCircle,LogOut,Save,ServerCog,Sparkles } from "lucide-react";
 
-type Settings={scanIntervalHours:number;enrichmentBatchAlbums:number;categorizationBatchAlbums:number;libraryPageSize:number;stackRefreshSeconds:number;navidromeUsername:string;navidromePasswordConfigured:boolean;aiModel:string;musicRoot:string};
+type Settings={scanIntervalHours:number;enrichmentBatchAlbums:number;categorizationBatchAlbums:number;libraryPageSize:number;stackRefreshSeconds:number;aiModel:string;musicRoot:string};
 export function SettingsView(){
-  const[data,setData]=useState<Settings|null>(null),[password,setPassword]=useState(""),[saving,setSaving]=useState(false),[notice,setNotice]=useState("");
+  const[data,setData]=useState<Settings|null>(null),[saving,setSaving]=useState(false),[notice,setNotice]=useState("");
   useEffect(()=>{fetch("/api/settings",{cache:"no-store"}).then(response=>response.json()).then(setData).catch(reason=>setNotice(String(reason)))},[]);
   function number(key:keyof Settings,value:string){setData(current=>current?{...current,[key]:Number(value)}:current)}
-  async function save(){if(!data)return;setSaving(true);setNotice("");try{const response=await fetch("/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({...data,navidromePassword:password})}),body=await response.json();if(!response.ok)throw new Error(body.error||"Could not save settings");setData({...data,...body.settings,navidromePasswordConfigured:Boolean(password)||data.navidromePasswordConfigured});setPassword("");setNotice("Settings saved. New batch sizes apply at the next task boundary.")}catch(reason){setNotice(String(reason))}finally{setSaving(false)}}
+  async function save(){if(!data)return;setSaving(true);setNotice("");try{const response=await fetch("/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)}),body=await response.json();if(!response.ok)throw new Error(body.error||"Could not save settings");setData({...data,...body.settings});setNotice("Settings saved. New batch sizes apply at the next task boundary.")}catch(reason){setNotice(String(reason))}finally{setSaving(false)}}
   if(!data)return <div className="settings-loading"><LoaderCircle className="spin"/><span>Loading configuration</span>{notice&&<p>{notice}</p>}</div>;
   return <div className="settings-workspace">
     <header className="settings-intro"><span className="kicker">Curator configuration</span><h2>Settings</h2><p>Adjust normal operating behavior here. Risk-sensitive identity and file-safety thresholds remain protected by Curator.</p></header>
@@ -21,10 +21,6 @@ export function SettingsView(){
       <label><span>Items per library page</span><input type="number" min="12" max="120" value={data.libraryPageSize} onChange={event=>number("libraryPageSize",event.target.value)}/><small>More items use more screen space</small></label>
       <label><span>Service refresh</span><input type="number" min="5" max="120" value={data.stackRefreshSeconds} onChange={event=>number("stackRefreshSeconds",event.target.value)}/><small>Seconds between stack checks</small></label>
       <label className="read-only"><span>Music library</span><input value={data.musicRoot} readOnly/><small>Configured by the container mount</small></label>
-    </div></section>
-    <section className="settings-section"><div className="settings-section-title"><KeyRound/><div><h3>Navidrome connection</h3><p>Optional credentials unlock playlist browsing. They stay server-side and are never returned to the browser.</p></div></div><div className="settings-grid">
-      <label><span>Navidrome username</span><input value={data.navidromeUsername} onChange={event=>setData({...data,navidromeUsername:event.target.value})}/></label>
-      <label><span>Navidrome password</span><input type="password" value={password} onChange={event=>setPassword(event.target.value)} placeholder={data.navidromePasswordConfigured?"Configured / enter to replace":"Enter password"}/></label>
     </div></section>
     <section className="settings-section"><div className="settings-section-title"><Sparkles/><div><h3>Local AI</h3><p>The environment-managed local model handles all enrichment, categorization, and research work.</p></div></div><div className="settings-grid">
       <label className="read-only"><span>Model</span><input value={data.aiModel} readOnly/></label>

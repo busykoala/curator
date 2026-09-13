@@ -5,7 +5,7 @@ import type {
 
 export type ListeningProfile = {
   frequent?: Array<Record<string, unknown>>;
-  starred?: Record<string, unknown>;
+  starred?: Array<Record<string, unknown>>;
 };
 
 const semanticKeys = [
@@ -86,20 +86,21 @@ function listeningSignal(
         norm(String(entry.name ?? entry.album ?? "")) ===
       key,
   );
-  if (!item) return { score: 0, reason: "" };
-  const plays = Number(item.playCount ?? 0);
-  const played = Date.parse(String(item.played ?? ""));
+  const starred = (listening?.starred ?? []).some((entry) => norm(String(entry.artist ?? (entry.Artists as string[] | undefined)?.[0] ?? "")) === norm(artist) && (!entry.album || norm(String(entry.album)) === norm(album)));
+  if (!item && !starred) return { score: 0, reason: "" };
+  const plays = Number(item?.playCount ?? 0);
+  const played = Date.parse(String(item?.played ?? ""));
   const ageDays = Number.isFinite(played)
     ? Math.max(0, (Date.now() - played) / 86_400_000)
     : 60;
   const score =
-    Math.log1p(plays) * 8 +
+    Math.log1p(plays) * 8 + (starred ? 24 : 0) +
     Math.min(18, ageDays * 0.35) -
     (ageDays < 14 ? 18 : 0);
   return {
     score,
     reason:
-      ageDays >= 30
+      starred && !item ? "Starred in Navidrome" : ageDays >= 30
         ? "A former favorite not played recently"
         : "Previously played " + plays + " times",
   };
@@ -150,6 +151,7 @@ export function scoreCandidate(input: {
   const ratingValue = rating(tags);
   const listeningValue = listeningSignal(artist, album, listening);
   let score = 20 + direction.score + moods.score + contexts.score;
+  if (definition.category !== "rediscovery") score += listeningValue.score * .3 * (1-definition.config.explorationPercent/100);
   let eligible = !blocked;
 
   if (definition.category === "discovery") {
@@ -173,7 +175,7 @@ export function scoreCandidate(input: {
       ? listeningValue.reason ||
         (ratingValue ? "Highly rated in your library" : "Rediscovery candidate")
       : found.length
-        ? "Matches " + found.slice(0, 4).join(", ")
+        ? "Matches " + found.slice(0, 4).join(", ") + (listeningValue.reason && definition.config.explorationPercent < 50 ? ` · ${listeningValue.reason}` : "")
         : "Fits " + definition.category.replaceAll("_", " ") + " intent";
 
   return { score, reason, eligible };

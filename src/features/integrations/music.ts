@@ -107,7 +107,7 @@ export async function addMusic(foreignArtistId: string, albumForeignIds: string[
     });
   }
   for (const album of monitored) upsertTarget({ albumId: album.id, artistId, origin, artist: String((album.artist as { artistName?: string } | undefined)?.artistName ?? ""), title: String(album.title ?? "") });
-  return { artistId, albumIds: monitored.map((album) => album.id), selectedAlbums: monitored.length, alreadyPresent: Boolean(existing), searchQueued: false, controllerQueued: true };
+  return { artistId, albumIds: monitored.map((album) => album.id), albums: monitored.map((album)=>({id:album.id,foreignAlbumId:String(album.foreignAlbumId??""),artist:String((album.artist as {artistName?:string}|undefined)?.artistName??""),title:String(album.title??"")})), selectedAlbums: monitored.length, alreadyPresent: Boolean(existing), searchQueued: false, controllerQueued: true };
 }
 
 export type LidarrQueueItem = {

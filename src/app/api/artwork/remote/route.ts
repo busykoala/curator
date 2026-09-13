@@ -1,0 +1,3 @@
+import { authenticated } from "@/features/auth/session";
+import { remoteImage } from "@/features/security/remote-image";
+export async function GET(request:Request){if(!await authenticated())return new Response("Unauthorized",{status:401});try{const value=new URL(request.url).searchParams.get("url");if(!value)return new Response("URL required",{status:400});const image=await remoteImage(value);return new Response(image.bytes,{headers:{"Content-Type":image.type,"Cache-Control":"private, max-age=86400","X-Content-Type-Options":"nosniff"}})}catch(error){return Response.json({error:String(error)},{status:400})}}

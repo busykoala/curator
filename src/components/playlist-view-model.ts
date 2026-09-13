@@ -14,6 +14,9 @@ export type PlaylistDefinition = {
   enabled: boolean;
   intent: string;
   config: Record<string, unknown>;
+  ownerUserId?: number;
+  ownerDisplayName?: string;
+  ownerTokenStatus?: string;
   navidromePlaylistId?: string | null;
   runs?: Array<{ status: string; createdAt?: string; finishedAt?: string }>;
 };

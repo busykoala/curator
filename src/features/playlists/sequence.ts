@@ -73,10 +73,7 @@ function transitionCost(
   const previousBpm = Number(previous?.profile.bpm ?? 0);
   const bpmCost =
     previousBpm && bpm ? Math.min(1, Math.abs(bpm - previousBpm) / 55) : 0.2;
-  const currentKey = String(item.profile.musicalKey ?? "");
-  const previousKey = String(previous?.profile.musicalKey ?? "");
-  const keyCost =
-    currentKey && previousKey && currentKey !== previousKey ? 0.16 : 0;
+  const keyCost = harmonicCost(String(previous?.profile.musicalKey ?? ""),String(item.profile.musicalKey ?? ""));
   return (
     Math.abs(energyValue(item) - desired) * 2.4 +
     bpmCost * 0.42 +
@@ -84,3 +81,6 @@ function transitionCost(
     item.score * 0.006
   );
 }
+
+const camelot:Record<string,string>={"ab minor":"1A","g# minor":"1A","eb minor":"2A","d# minor":"2A","bb minor":"3A","a# minor":"3A","f minor":"4A","c minor":"5A","g minor":"6A","d minor":"7A","a minor":"8A","e minor":"9A","b minor":"10A","f# minor":"11A","gb minor":"11A","c# minor":"12A","db minor":"12A","b major":"1B","f# major":"2B","gb major":"2B","c# major":"3B","db major":"3B","g# major":"4B","ab major":"4B","d# major":"5B","eb major":"5B","a# major":"6B","bb major":"6B","f major":"7B","c major":"8B","g major":"9B","d major":"10B","a major":"11B","e major":"12B"};
+function harmonicCost(previous:string,current:string){const clean=(value:string)=>value.toLowerCase().replace("♯","#").replace("♭","b").trim(),left=camelot[clean(previous)],right=camelot[clean(current)];if(!left||!right)return .12;if(left===right)return 0;const leftNumber=Number(left.slice(0,-1)),rightNumber=Number(right.slice(0,-1)),leftMode=left.at(-1),rightMode=right.at(-1);if(leftNumber===rightNumber&&leftMode!==rightMode)return .04;const distance=Math.min(Math.abs(leftNumber-rightNumber),12-Math.abs(leftNumber-rightNumber));if(distance===1&&leftMode===rightMode)return .08;return .2}

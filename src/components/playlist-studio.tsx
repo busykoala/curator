@@ -35,12 +35,13 @@ async function json(response: Response) {
   return body;
 }
 
-function template(category: "mood" | "discovery" | "journey") {
+function template(category: "mood" | "discovery" | "journey", ownerUserId: number) {
   return {
     name: "",
     category,
     enabled: true,
     intent: "",
+    ownerUserId,
     config: {
       tasteLanes: [],
       genres: [],
@@ -54,6 +55,7 @@ function template(category: "mood" | "discovery" | "journey") {
       maxTracksPerArtist: 2,
       maxTracksPerAlbum: 1,
       energyCurve: category === "journey" ? "slow_burn" : "steady",
+      explorationPercent: 35,
       externalDiscovery: category === "discovery",
       noveltyDays: 30,
     },
@@ -66,10 +68,14 @@ export function PlaylistStudio() {
   const [preview, setPreview] = useState<PlaylistPreview>();
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
+  const [users,setUsers]=useState<Array<{id:number;displayName:string;tokenStatus:string}>>([]);
+  const [currentUserId,setCurrentUserId]=useState(0);
+  const [undo,setUndo]=useState<{playlistId:number;fileId:number;artist:string;action:string}|null>(null);
 
   const load = useCallback(async () => {
     try {
-      setData((await json(await fetch("/api/playlists"))) as PlaylistData);
+      const [playlists,session]=await Promise.all([json(await fetch("/api/playlists")),json(await fetch("/api/session"))]);
+      setData(playlists as PlaylistData);setUsers(session.users);setCurrentUserId(value=>value||session.user.id);
     } catch (error) {
       setNotice(String(error));
     }
@@ -80,6 +86,7 @@ export function PlaylistStudio() {
     const timer = window.setInterval(() => void load(), 30_000);
     return () => window.clearInterval(timer);
   }, [load]);
+  useEffect(()=>{if(!preview)return;const escape=(event:KeyboardEvent)=>event.key==="Escape"&&setPreview(undefined);window.addEventListener("keydown",escape);return()=>window.removeEventListener("keydown",escape)},[preview]);
 
   async function save(value: PlaylistDefinition) {
     setBusy("save");
@@ -161,17 +168,17 @@ export function PlaylistStudio() {
     action: string,
   ) {
     if (!playlistId) return;
-    await json(
-      await fetch("/api/playlists/" + playlistId + "/feedback", {
+    try { await json(await fetch("/api/playlists/" + playlistId + "/feedback", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ fileId, artist, action }),
-      }),
-    );
-    setNotice("Preference saved for the next refresh.");
+      })); setUndo({playlistId,fileId,artist,action}); setNotice("Preference saved for the next refresh."); }
+    catch(error){setNotice(String(error))}
   }
+  async function undoFeedback(){if(!undo)return;try{await json(await fetch(`/api/playlists/${undo.playlistId}/feedback`,{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify(undo)}));setNotice("Preference undone.");setUndo(null)}catch(error){setNotice(String(error))}}
 
   if (!data) {
+    if(notice)return <div className="empty-state"><Ban/><h3>Playlists could not be loaded</h3><p>{notice}</p><button className="primary-button" onClick={()=>void load()}>Retry</button></div>;
     return (
       <div className="playlist-loading">
         <LoaderCircle className="spin" />
@@ -215,6 +222,7 @@ export function PlaylistStudio() {
           </p>
         </div>
         <div className="playlist-row-facts">
+          <span><strong>{item.ownerDisplayName||"Unassigned"}</strong>owner</span>
           <span>
             <strong>{Number(item.config.targetTracks ?? 30)}</strong>
             tracks
@@ -252,7 +260,7 @@ export function PlaylistStudio() {
           <button
             aria-label={`Synchronize ${item.name}`}
             title="Synchronize now"
-            disabled={Boolean(busy) || !connectionConfigured}
+            disabled={Boolean(busy) || item.ownerTokenStatus !== "active"}
             onClick={() => void run(item, false)}
           >
             <RefreshCw />
@@ -285,7 +293,7 @@ export function PlaylistStudio() {
         </div>
         <a
           className="secondary-button"
-          href="http://localhost:4533/app/#/playlist"
+          href="/api/navidrome/open"
           target="_blank"
         >
           <ExternalLink />
@@ -298,7 +306,7 @@ export function PlaylistStudio() {
           <Ban />
           <div>
             <strong>Navidrome is not connected</strong>
-            <span>Add the admin credentials before synchronizing playlists.</span>
+            <span>The playlist owner must sign into Curator with Navidrome before synchronization.</span>
           </div>
         </div>
       )}
@@ -306,6 +314,7 @@ export function PlaylistStudio() {
       {notice && (
         <div className="playlist-notice">
           <span>{notice}</span>
+          {undo&&<button className="notice-undo" onClick={()=>void undoFeedback()}>Undo</button>}
           <button aria-label="Dismiss message" onClick={() => setNotice("")}>
             <X />
           </button>
@@ -340,17 +349,17 @@ export function PlaylistStudio() {
           </p>
         </header>
         <div>
-          <button onClick={() => setEditor(template("mood"))}>
+          <button onClick={() => setEditor(template("mood",currentUserId))}>
             <span><Plus /></span>
             <strong>Mood or occasion</strong>
             <small>Choose feelings, context, and sound.</small>
           </button>
-          <button onClick={() => setEditor(template("discovery"))}>
+          <button onClick={() => setEditor(template("discovery",currentUserId))}>
             <span><Compass /></span>
             <strong>Discovery lane</strong>
             <small>Give Curator a genre, subgenre, or theme.</small>
           </button>
-          <button onClick={() => setEditor(template("journey"))}>
+          <button onClick={() => setEditor(template("journey",currentUserId))}>
             <span><Route /></span>
             <strong>Progressive journey</strong>
             <small>Choose a direction and energy arc.</small>
@@ -394,14 +403,14 @@ export function PlaylistStudio() {
             if (event.target === event.currentTarget) setPreview(undefined);
           }}
         >
-          <section className="playlist-preview-drawer">
+          <section className="playlist-preview-drawer" role="dialog" aria-modal="true" aria-labelledby="playlist-preview-title">
             <header>
               <div>
                 <span className="kicker">Preview</span>
-                <h2>{preview.definition.name}</h2>
+                <h2 id="playlist-preview-title">{preview.definition.name}</h2>
                 <p>{preview.items.length} tracks in proposed order</p>
               </div>
-              <button className="icon-button" onClick={() => setPreview(undefined)}>
+              <button className="icon-button" aria-label="Close playlist preview" onClick={() => setPreview(undefined)}>
                 <X />
               </button>
             </header>
@@ -475,6 +484,7 @@ export function PlaylistStudio() {
       {editor && (
         <PlaylistEditor
           initial={editor}
+          users={users}
           close={() => setEditor(undefined)}
           save={save}
         />

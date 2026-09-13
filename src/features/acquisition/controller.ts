@@ -699,9 +699,11 @@ export async function runAcquisitionCycle() {
         updatedAt: iso(),
       }),
     );
+    console.log(JSON.stringify({event:"acquisition_cycle_complete",mode,apply,wanted:wanted.length,incomplete:incomplete.length,orphaned,sourceHealthy,at:iso()}));
     stateSet("acquisition_last_error", "");
   } catch (error) {
     stateSet("acquisition_last_error", String(error));
+    console.error(JSON.stringify({event:"acquisition_cycle_error",error:String(error),at:iso()}));
   } finally {
     stateSet("acquisition_phase", "idle");
     stateSet("acquisition_running", "false");

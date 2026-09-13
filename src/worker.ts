@@ -1,6 +1,6 @@
 import { startScheduler } from "@/features/scheduler/run";
 
-console.log("Curator worker starting");
+console.log(JSON.stringify({event:"worker_start",component:"curator",at:new Date().toISOString()}));
 startScheduler();
-process.on("unhandledRejection", (error) => console.error("Worker rejection", error));
-process.on("uncaughtException", (error) => { console.error("Worker exception", error); process.exit(1); });
+process.on("unhandledRejection", (error) => console.error(JSON.stringify({event:"worker_rejection",error:String(error)})));
+process.on("uncaughtException", (error) => { console.error(JSON.stringify({event:"worker_exception",error:String(error)})); process.exit(1); });

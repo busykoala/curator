@@ -1,13 +1,48 @@
 import argon2 from "argon2";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { config } from "@/config";
 import { db, stateGet, stateSet } from "@/features/db/client";
+
 const COOKIE = "curator_session";
-async function passwordHash(): Promise<string> { const existing = stateGet("admin_password_hash"); if (existing) return existing; const hash = await argon2.hash(config.CURATOR_ADMIN_PASSWORD, { type: argon2.argon2id }); stateSet("admin_password_hash", hash); return hash; }
-export async function verifyPassword(value: string, ip: string): Promise<boolean> { const cutoff = Date.now() - 20 * 60_000; db().prepare("DELETE FROM auth_attempts WHERE attempted_at<?").run(cutoff); const recent = db().prepare("SELECT count(*) count FROM auth_attempts WHERE ip=? AND attempted_at>? AND success=0").get(ip, cutoff) as { count: number }; if (recent.count >= 5) return false; const valid = await argon2.verify(await passwordHash(), value); db().prepare("INSERT INTO auth_attempts(ip,attempted_at,success) VALUES (?,?,?)").run(ip, Date.now(), valid ? 1 : 0); return valid; }
-function sign(payload: string): string { return createHmac("sha256", config.CURATOR_SESSION_SECRET).update(payload).digest("base64url"); }
-export async function createSession(): Promise<void> { const payload = `${Date.now() + 7 * 86400_000}.${randomBytes(16).toString("base64url")}`; (await cookies()).set(COOKIE, `${payload}.${sign(payload)}`, { httpOnly: true, sameSite: "strict", secure: false, maxAge: 7 * 86400, path: "/" }); }
-export async function clearSession(): Promise<void> { (await cookies()).delete(COOKIE); }
-export async function authenticated(): Promise<boolean> { const token = (await cookies()).get(COOKIE)?.value; if (!token) return false; const parts = token.split("."); if (parts.length !== 3 || Number(parts[0]) < Date.now()) return false; const payload = `${parts[0]}.${parts[1]}`; const expected = Buffer.from(sign(payload)), actual = Buffer.from(parts[2]); return expected.length === actual.length && timingSafeEqual(expected, actual); }
+const SESSION_SECONDS = 7 * 86_400;
+export type CuratorUser = { id: number; navidromeUserId: string; username: string; displayName: string; tokenStatus: "active" | "revoked" | "missing"; legacy: boolean };
+type UserRow = { id: number; navidrome_user_id: string; username: string; display_name: string; token_status: CuratorUser["tokenStatus"]; legacy: number };
+const mapUser = (row: UserRow): CuratorUser => ({ id: row.id, navidromeUserId: row.navidrome_user_id, username: row.username, displayName: row.display_name, tokenStatus: row.token_status, legacy: Boolean(row.legacy) });
+const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+
+async function passwordHash(): Promise<string> {
+  const existing = stateGet("admin_password_hash");
+  if (existing && await argon2.verify(existing, config.CURATOR_ADMIN_PASSWORD).catch(() => false)) return existing;
+  const hash = await argon2.hash(config.CURATOR_ADMIN_PASSWORD, { type: argon2.argon2id });
+  stateSet("admin_password_hash", hash);
+  return hash;
+}
+
+export function loginAllowed(ip: string) {
+  const cutoff = Date.now() - 20 * 60_000;
+  db().prepare("DELETE FROM auth_attempts WHERE attempted_at<?").run(cutoff);
+  const recent = db().prepare("SELECT count(*) count FROM auth_attempts WHERE ip=? AND attempted_at>? AND success=0").get(ip, cutoff) as { count: number };
+  return recent.count < 5;
+}
+export function recordLogin(ip: string, success: boolean) { db().prepare("INSERT INTO auth_attempts(ip,attempted_at,success) VALUES (?,?,?)").run(ip, Date.now(), success ? 1 : 0); }
+export async function verifyLegacyPassword(value: string): Promise<boolean> { return argon2.verify(await passwordHash(), value).catch(() => false); }
+
+export async function createSession(userId: number): Promise<void> {
+  const token = randomBytes(32).toString("base64url");
+  db().prepare("DELETE FROM sessions WHERE expires_at<=CURRENT_TIMESTAMP").run();
+  db().prepare("INSERT INTO sessions(id_hash,user_id,expires_at) VALUES (?,?,datetime('now','+7 days'))").run(digest(token), userId);
+  (await cookies()).set(COOKIE, token, { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production", maxAge: SESSION_SECONDS, path: "/" });
+}
+export async function clearSession(): Promise<void> { const token = (await cookies()).get(COOKIE)?.value; if (token) db().prepare("DELETE FROM sessions WHERE id_hash=?").run(digest(token)); (await cookies()).delete(COOKIE); }
+export async function currentUser(): Promise<CuratorUser | null> {
+  const token = (await cookies()).get(COOKIE)?.value;
+  if (!token) return null;
+  const row = db().prepare("SELECT u.* FROM sessions s JOIN curator_users u ON u.id=s.user_id WHERE s.id_hash=? AND s.expires_at>CURRENT_TIMESTAMP").get(digest(token)) as UserRow | undefined;
+  if (!row) return null;
+  db().prepare("UPDATE sessions SET last_seen_at=CURRENT_TIMESTAMP WHERE id_hash=?").run(digest(token));
+  return mapUser(row);
+}
+export async function authenticated(): Promise<boolean> { return Boolean(await currentUser()); }
+export function listCuratorUsers(): CuratorUser[] { return (db().prepare("SELECT id,navidrome_user_id,username,display_name,token_status,legacy FROM curator_users ORDER BY display_name COLLATE NOCASE").all() as UserRow[]).map(mapUser); }
 export function sameOrigin(request: Request): boolean { const origin = request.headers.get("origin"); if (!origin) return false; try { return new URL(origin).host === request.headers.get("host"); } catch { return false; } }

@@ -24,6 +24,6 @@ function stop(code = 0) {
 }
 process.on("SIGTERM", () => stop(0));
 process.on("SIGINT", () => stop(0));
-launch("web", "./node_modules/.bin/next", ["start", "-H", "0.0.0.0", "-p", "3000"]);
-launch("worker", "./node_modules/.bin/tsx", ["src/worker.ts"], true);
-launch("acquisition", "./node_modules/.bin/tsx", ["src/acquisition-worker.ts"], true);
+launch("web", "node", ["server.js"]);
+launch("worker", "node", [".workers/worker.mjs"], true);
+launch("acquisition", "node", [".workers/acquisition-worker.mjs"], true);

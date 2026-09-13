@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack && npm run build:workers",
+    "build:workers": "esbuild src/worker.ts src/acquisition-worker.ts --bundle --platform=node --format=esm --packages=external --outdir=.workers --out-extension:.js=.mjs",
     "start": "node scripts/start.mjs",
     "web": "next start -H 0.0.0.0 -p 3000",
     "worker": "tsx src/worker.ts",
@@ -17,22 +18,20 @@
     "argon2": "0.45.1",
     "better-sqlite3": "13.0.3",
     "lucide-react": "1.33.0",
-    "next": "16.3.2",
+    "next": "16.3.5",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "sharp": "0.35.3",
+    "sharp": "0.35.4",
     "taglib-wasm": "2.2.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "4.3.3",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "daisyui": "5.7.21",
+    "esbuild": "^0.25.10",
     "playwright": "^1.62.1",
-    "tailwindcss": "4.3.3",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   }

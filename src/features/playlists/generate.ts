@@ -215,18 +215,12 @@ export async function generatePlaylist(id: number, preview = false) {
     .digest("hex");
   const run = db()
     .prepare(
-      "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash) VALUES (?,'running',?,?) RETURNING id",
+      "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,owner_user_id) VALUES (?,'running',?,?,?) RETURNING id",
     )
-    .get(id, preview ? 1 : 0, configHash) as { id: number };
+    .get(id, preview ? 1 : 0, configHash, definition.ownerUserId) as { id: number };
 
   try {
-    const listening =
-      definition.category === "rediscovery"
-        ? ((await navidromeListeningProfile().catch(() => ({
-            frequent: [],
-            starred: {},
-          }))) as ListeningProfile)
-        : undefined;
+    const listening = (await navidromeListeningProfile(definition.ownerUserId).catch(() => ({ frequent: [], starred: [] }))) as ListeningProfile;
     let items = select(definition, listening);
     let navidromeId = definition.navidromePlaylistId;
     let songIds = new Map<number, string>();
@@ -237,7 +231,7 @@ export async function generatePlaylist(id: number, preview = false) {
         attempt < Math.max(12, definition.config.targetTracks);
         attempt += 1
       ) {
-        const unresolved = await unresolvedNavidromeCandidates(items);
+        const unresolved = await unresolvedNavidromeCandidates(items, definition.ownerUserId);
         if (!unresolved.length) break;
         const ignoredBefore = ignored.size;
         unresolved.forEach((item) => ignored.add(item.fileId));
@@ -247,7 +241,7 @@ export async function generatePlaylist(id: number, preview = false) {
           items.length < definition.config.targetTracks
         ) break;
       }
-      const unresolved = await unresolvedNavidromeCandidates(items);
+      const unresolved = await unresolvedNavidromeCandidates(items, definition.ownerUserId);
       if (unresolved.length || items.length < definition.config.targetTracks) {
         throw new Error(`Only ${items.length - unresolved.length} of ${definition.config.targetTracks} tracks have unambiguous Navidrome identity`);
       }
@@ -286,6 +280,7 @@ export async function generatePlaylist(id: number, preview = false) {
         "UPDATE playlist_runs SET status='complete',detail_json=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
       )
       .run(JSON.stringify(detail), run.id);
+    console.log(JSON.stringify({event:"playlist_run_complete",playlistId:id,ownerUserId:definition.ownerUserId,preview,tracks:items.length,at:new Date().toISOString()}));
     return { runId: run.id, definition, items, detail };
   } catch (error) {
     db()
@@ -293,6 +288,7 @@ export async function generatePlaylist(id: number, preview = false) {
         "UPDATE playlist_runs SET status='failed',error=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
       )
       .run(String(error), run.id);
+    console.error(JSON.stringify({event:"playlist_run_failed",playlistId:id,ownerUserId:definition.ownerUserId,preview,error:String(error),at:new Date().toISOString()}));
     throw error;
   }
 }

@@ -9,10 +9,10 @@ export const playlistConfigSchema=z.object({
   exclusions:z.array(z.string().trim().min(1).max(120)).max(30).default([]), sourceDomains:z.array(z.string().trim().min(1).max(160)).max(20).default([]),
   targetTracks:z.number().int().min(8).max(100).default(30), rotationPercent:z.number().int().min(0).max(100).default(30),
   maxTracksPerArtist:z.number().int().min(1).max(8).default(2), maxTracksPerAlbum:z.number().int().min(1).max(5).default(1),
-  energyCurve:z.enum(["steady","ascent","slow_burn","wave","descent"]).default("steady"), externalDiscovery:z.boolean().default(false), noveltyDays:z.number().int().min(7).max(365).default(30),
+  energyCurve:z.enum(["steady","ascent","slow_burn","wave","descent"]).default("steady"), explorationPercent:z.number().int().min(0).max(100).default(35), externalDiscovery:z.boolean().default(false), noveltyDays:z.number().int().min(7).max(365).default(30),
 });
 export type PlaylistConfig=z.infer<typeof playlistConfigSchema>;
-export type PlaylistDefinition={id:number;name:string;category:PlaylistCategory;enabled:boolean;intent:string;config:PlaylistConfig;navidromePlaylistId:string|null;lastRunAt:string|null;nextRunAt:string|null;createdAt:string;updatedAt:string};
+export type PlaylistDefinition={id:number;name:string;category:PlaylistCategory;enabled:boolean;intent:string;config:PlaylistConfig;ownerUserId:number;ownerDisplayName:string;ownerTokenStatus:string;navidromePlaylistId:string|null;lastRunAt:string|null;nextRunAt:string|null;createdAt:string;updatedAt:string};
 export type PlaylistCandidate={fileId:number;title:string;artist:string;album:string;year:number;profile:Record<string,unknown>;score:number;reason:string;origin:"catalog"|"discovery";retained?:boolean};
 export function defaultConfig(category:PlaylistCategory):PlaylistConfig{return playlistConfigSchema.parse({targetTracks:category==="journey"?12:category==="mood"?40:category==="discovery"?24:30,energyCurve:category==="journey"?"slow_burn":"steady",externalDiscovery:category==="discovery"})}
-export const definitionInputSchema=z.object({name:z.string().trim().min(2).max(100),category:playlistCategorySchema,enabled:z.boolean().default(false),intent:z.string().trim().max(1000).default(""),config:playlistConfigSchema});
+export const definitionInputSchema=z.object({name:z.string().trim().min(2).max(100),category:playlistCategorySchema,enabled:z.boolean().default(false),intent:z.string().trim().max(1000).default(""),ownerUserId:z.number().int().positive(),config:playlistConfigSchema});
