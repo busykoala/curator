@@ -6,7 +6,7 @@ export type AcquisitionTarget = {
   attempts_today:number; attempts_day:string|null; last_search_at:string|null;
   next_retry_at:string|null; first_queued_at:string|null; last_progress_at:string|null;
   last_size_left:number|null; source_name:string|null; imported_at:string|null;
-  last_release_guid:string|null;
+  last_release_guid:string|null; detail_json?:string;
   search_count?:number;
   created_at:string;
 };

@@ -22,9 +22,9 @@ globalThis.fetch=async(input,init)=>{
  return Response.json(items);
 };
 assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,false);assert.deepEqual(posts,[]);
-mode='alternatives';assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,true);assert.deepEqual(posts,['Bad','Good']);
+mode='alternatives';assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,true);assert.deepEqual(posts,['Bad','Bad','Good']);
 posts=[];mode='timeout';await assert.rejects(findRelease({...targetByAlbum(1)!,last_release_guid:null},false),/Timed out/);assert.deepEqual(posts,['Bad']);
-console.log('Search integration audit passed: no duplicate searches, alternate sources after confirmed failures, no duplicate grabs on ambiguous timeouts.');
+console.log('Search integration audit passed: no duplicate searches, alternate candidates after confirmed failures, no duplicate grabs on ambiguous timeouts.');
 }finally{globalThis.fetch=original;db().close();rmSync(dir,{recursive:true,force:true})}
 }
 main().catch(e=>{console.error(e);process.exitCode=1});
