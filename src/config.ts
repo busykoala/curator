@@ -12,4 +12,4 @@ const schema = z.object({
 });
 const parsed = schema.parse(process.env);
 export const config = { ...parsed, DATABASE_PATH: parsed.CURATOR_DB_PATH ?? parsed.DATABASE_PATH ?? "/app/data/curator.sqlite" };
-export const versions = { taxonomy: 5, prompt: 6, normalization: 11, artwork: 11, identity: 8, providers: 5, categorizationSchema: 2, categorizationPrompt: 7, audioAnalysis: 3 };
+export const versions = { taxonomy: 5, prompt: 6, normalization: 11, artwork: 11, identity: 9, providers: 5, categorizationSchema: 2, categorizationPrompt: 7, audioAnalysis: 3 };
