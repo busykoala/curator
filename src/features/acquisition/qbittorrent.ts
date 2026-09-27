@@ -4,6 +4,7 @@ async function cookie(){if(session&&session.expires>Date.now())return session.co
 async function call(path:string,values?:Record<string,string>){const response=await fetch(`${config.QBITTORRENT_URL}/api/v2${path}`,{method:values?"POST":"GET",headers:{Cookie:await cookie(),...(values?{"Content-Type":"application/x-www-form-urlencoded"}:{})},body:values?new URLSearchParams(values):undefined,signal:AbortSignal.timeout(30_000)});if(!response.ok)throw new Error(`qBittorrent ${path} failed (${response.status})`);const text=await response.text();return text?JSON.parse(text):undefined}
 export type Torrent={hash:string;name:string;state:string;category:string;downloaded:number;amount_left:number;progress:number;dlspeed:number;num_seeds:number;num_complete:number;availability:number;added_on:number;ratio:number;tracker:string;completion_on:number;size:number};
 export const qbitTorrents=()=>call(`/torrents/info?category=${encodeURIComponent(config.QBITTORRENT_CATEGORY)}`) as Promise<Torrent[]>;
+export const qbitTorrent=(hash:string)=>call(`/torrents/info?hashes=${encodeURIComponent(hash)}`).then(value=>(value as Torrent[])[0]);
 export const qbitTransfer=()=>call("/transfer/info") as Promise<{dl_info_speed:number;dl_info_data:number;connection_status:string}>;
 export const qbitPreferences=()=>call("/app/preferences") as Promise<Record<string,unknown>>;
 export const setPreferences=(values:Record<string,unknown>)=>call("/app/setPreferences",{json:JSON.stringify(values)});
@@ -12,6 +13,11 @@ export const topPriority=(hashes:string[])=>hashes.length?call("/torrents/topPri
 export const forceStart=(hash:string,value:boolean)=>call("/torrents/setForceStart",{hashes:hash,value:String(value)});
 export const stopTorrent=(hash:string)=>call("/torrents/stop",{hashes:hash});
 export const removeTorrent=(hash:string,files:boolean)=>call("/torrents/delete",{hashes:hash,deleteFiles:String(files)});
+export function releaseInfoHash(item:Record<string,unknown>){
+  for(const value of [item.infoHash,item.releaseHash])if(/^[a-f\d]{40}$/i.test(String(value??"")))return String(value).toLowerCase();
+  for(const value of [item.magnetUrl,item.guid]){const match=/btih:([a-f\d]{40})(?:[^a-f\d]|$)/i.exec(String(value??""));if(match)return match[1].toLowerCase()}
+  return "";
+}
 export function ubuntuTorrentFromHtml(html: string, base: string) {
   const names = [...html.matchAll(/href="(ubuntu-[\d.]+-(?:desktop|live-server)-amd64\.iso\.torrent)"/g)].map(match => match[1]);
   names.sort((a, b) => b.localeCompare(a, "en", { numeric: true }));
