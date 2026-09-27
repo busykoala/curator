@@ -111,45 +111,47 @@ function synchronizeTargets(wanted: Wanted[]) {
     known = new Set(existing.map((target) => target.lidarr_album_id)),
     bootstrapped =
       stateGet("acquisition_bootstrapped") === "true" || existing.length > 0;
-  for (const album of wanted)
-    upsertTarget({
-      albumId: album.id,
-      artistId: album.artistId,
-      origin: bootstrapped && !known.has(album.id) ? "user" : "migration",
-      artist: album.artist?.artistName,
-      title: album.title,
-    });
-  stateSet("acquisition_bootstrapped", "true");
-  const missing = new Set(wanted.map((item) => item.id));
-  for (const target of targets()) {
-    if (
-      !missing.has(target.lidarr_album_id) &&
-      target.status !== "imported" &&
-      canConfirmImport(target)
-    ) {
-      recordSourceOutcome(target, "import");
-      updateTarget(target.id, {
-        status: "imported",
-        imported_at: iso(),
-        next_retry_at: null,
+  db().transaction(() => {
+    for (const album of wanted)
+      upsertTarget({
+        albumId: album.id,
+        artistId: album.artistId,
+        origin: bootstrapped && !known.has(album.id) ? "user" : "migration",
+        artist: album.artist?.artistName,
+        title: album.title,
       });
-    } else if (
-      missing.has(target.lidarr_album_id) &&
-      target.status === "imported"
-    ) {
-      updateTarget(target.id, {
-        status: "pending",
-        imported_at: null,
-        download_hash: null,
-        first_queued_at: null,
-        last_progress_at: null,
-        last_size_left: null,
-        attempts_today: 0,
-        attempts_day: null,
-        next_retry_at: null,
-      });
+    stateSet("acquisition_bootstrapped", "true");
+    const missing = new Set(wanted.map((item) => item.id));
+    for (const target of targets()) {
+      if (
+        !missing.has(target.lidarr_album_id) &&
+        target.status !== "imported" &&
+        canConfirmImport(target)
+      ) {
+        recordSourceOutcome(target, "import");
+        updateTarget(target.id, {
+          status: "imported",
+          imported_at: iso(),
+          next_retry_at: null,
+        });
+      } else if (
+        missing.has(target.lidarr_album_id) &&
+        target.status === "imported"
+      ) {
+        updateTarget(target.id, {
+          status: "pending",
+          imported_at: null,
+          download_hash: null,
+          first_queued_at: null,
+          last_progress_at: null,
+          last_size_left: null,
+          attempts_today: 0,
+          attempts_day: null,
+          next_retry_at: null,
+        });
+      }
     }
-  }
+  })();
 }
 
 function acquisitionQuota(recovering: boolean) {
