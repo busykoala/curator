@@ -318,10 +318,42 @@ async function cleanupOrphans(
     }
     if (!destructiveAllowed()) {
       intervene({ hash: item.hash, action: "cleanup", status: "deferred", evidence });
-      continue;
+      break;
     }
     // missingFiles means qBittorrent has no payload to delete. Remove only the
     // stale client record so a later Lidarr search can add a clean download.
+    await removeTorrent(item.hash, false);
+    intervene({ hash: item.hash, action: "cleanup", status: "applied", evidence });
+  }
+  const settings = runtimeSettings(),
+    targetHashes = new Set(
+      targets()
+        .map((target) => target.download_hash?.toLowerCase())
+        .filter((hash): hash is string => Boolean(hash)),
+    );
+  for (const item of torrents) {
+    const hash = item.hash.toLowerCase();
+    if (
+      item.progress < 1 ||
+      !item.completion_on ||
+      queueByHash.has(hash) ||
+      targetHashes.has(hash)
+    ) continue;
+    const ageDays = (Date.now() - item.completion_on * 1_000) / 86_400_000;
+    if (item.ratio < settings.seedRatio && ageDays < settings.seedDays) continue;
+    const evidence = {
+      reason: "Completed torrent is no longer tracked by Lidarr; payload preserved",
+      ratio: item.ratio,
+      ageDays: Math.round(ageDays),
+    };
+    if (!apply) {
+      intervene({ hash: item.hash, action: "cleanup", status: "proposed", evidence });
+      continue;
+    }
+    if (!destructiveAllowed()) {
+      intervene({ hash: item.hash, action: "cleanup", status: "deferred", evidence });
+      break;
+    }
     await removeTorrent(item.hash, false);
     intervene({ hash: item.hash, action: "cleanup", status: "applied", evidence });
   }
