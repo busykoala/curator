@@ -22,6 +22,7 @@ import {
   canConfirmImport,
   controllerMode,
   balancedSearchTargets,
+  diversifySearchTargets,
   isManagedIncomplete,
   isStaleOrphan,
   isPriorityTarget,
@@ -504,7 +505,7 @@ async function searchWork(
       quota.short,
       Math.max(quota.general, quota.priority),
     ),
-    selected = priority.slice(0, priorityCapacity),
+    selected = diversifySearchTargets(priority, priorityCapacity),
     selectedIds = new Set(selected.map((target) => target.id)),
     generalCapacity = Math.min(
       quota.short - selected.length,

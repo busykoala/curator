@@ -98,6 +98,27 @@ export function orderSearchTargets(
     );
   });
 }
+export function diversifySearchTargets<T extends Pick<AcquisitionTarget, "id" | "lidarr_artist_id">>(
+  values: T[],
+  capacity: number,
+): T[] {
+  if (capacity <= 0) return [];
+  const selected: T[] = [],
+    deferred: T[] = [],
+    artists = new Set<string>();
+  for (const target of values) {
+    const artist = target.lidarr_artist_id == null
+      ? `target:${target.id}`
+      : `artist:${target.lidarr_artist_id}`;
+    if (artists.has(artist)) deferred.push(target);
+    else {
+      artists.add(artist);
+      selected.push(target);
+      if (selected.length === capacity) return selected;
+    }
+  }
+  return selected.concat(deferred.slice(0, capacity - selected.length));
+}
 export function balancedSearchTargets<T extends AcquisitionTarget & { search_count?: number }>(
   values: T[],
   capacity: number,
@@ -118,10 +139,17 @@ export function balancedSearchTargets<T extends AcquisitionTarget & { search_cou
         ? Math.max(1, Math.ceil(capacity * 0.4))
         : capacity
       : 0,
-    selected = retries.slice(0, retrySlots);
-  selected.push(...fresh.slice(0, capacity - selected.length));
-  if (selected.length < capacity)
-    selected.push(...retries.slice(retrySlots, capacity - selected.length + retrySlots));
+    selected = diversifySearchTargets(retries, retrySlots),
+    selectedIds = new Set(selected.map((target) => target.id));
+  selected.push(...diversifySearchTargets(
+    fresh.filter((target) => !selectedIds.has(target.id)),
+    capacity - selected.length,
+  ));
+  for (const target of selected) selectedIds.add(target.id);
+  if (selected.length < capacity) selected.push(...diversifySearchTargets(
+    retries.filter((target) => !selectedIds.has(target.id)),
+    capacity - selected.length,
+  ));
   return selected;
 }
 export function isManagedIncomplete(item: { state: string; progress: number }) {
