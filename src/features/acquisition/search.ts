@@ -8,7 +8,8 @@ import { qbitTorrent,releaseInfoHash,removeTorrent } from "./qbittorrent";
 import { destructiveAllowed,intervene,updateTarget } from "./repository";
 
 function quality(item:Record<string,unknown>){const value=item.quality as{quality?:{name?:string}}|undefined;return String(value?.quality?.name??item.quality??"")}
-function viable(item:Record<string,unknown>,fallback:boolean){const name=quality(item),lossless=/flac|alac|ape|wavpack/i.test(name),mp3=/mp3.*(v0|320)/i.test(name);return(lossless||(fallback&&mp3))&&String(item.protocol??"torrent")==="torrent"&&Number(item.seeders??0)>0&&!Boolean(item.rejected)&&!(item.rejections as unknown[]|undefined)?.length}
+function blockingRejections(item:Record<string,unknown>){const rejections=Array.isArray(item.rejections)?item.rejections.map(String):[];return rejections.filter(reason=>!/^(?:Existing files meets cutoff:|Existing files on disk is of equal or higher preference:)/i.test(reason))}
+export function viable(item:Record<string,unknown>,fallback:boolean){const name=quality(item),lossless=/flac|alac|ape|wavpack/i.test(name),mp3=/mp3.*(v0|320)/i.test(name),rejections=Array.isArray(item.rejections)?item.rejections:[];return(lossless||(fallback&&mp3))&&String(item.protocol??"torrent")==="torrent"&&Number(item.seeders??0)>0&&blockingRejections(item).length===0&&(!Boolean(item.rejected)||rejections.length>0)}
 export function confirmedGrabConflict(error:unknown){const message=String(error);return/Lidarr \/release failed \(409\)/.test(message)||(/Lidarr \/release failed \(500\)/.test(message)&&/409:Conflict/.test(message)&&/qbittorrent|torrents\/add/i.test(message))}
 export function confirmedCandidateFailure(error:unknown){
   const message=String(error);
