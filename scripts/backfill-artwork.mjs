@@ -89,7 +89,7 @@ function albumFolder(path) {
   return parts.length >= 3 ? resolve(music, parts[0], parts[1]) : dirname(path);
 }
 
-async function albumCandidate(row) {
+async function albumCandidates(row) {
   const album = cleanAlbum(row.album_name);
   const year = Number(String(row.date || row.year || "").slice(0, 4));
   const term = encodeURIComponent(`${row.artist_name} ${album}`);
@@ -114,7 +114,7 @@ async function albumCandidate(row) {
   return candidates.map(item => ({ ...item,
     score: similarity(row.artist_name, item.artist) * 0.48 + similarity(album, cleanAlbum(item.album)) * 0.47 + (year && item.year && year === item.year ? 0.05 : 0),
   })).filter(item => item.url && similarity(row.artist_name, item.artist) >= 0.72 && similarity(album, cleanAlbum(item.album)) >= 0.58)
-    .sort((a, b) => b.score - a.score)[0];
+    .sort((a, b) => b.score - a.score);
 }
 
 async function backfillAlbums() {
@@ -129,8 +129,15 @@ async function backfillAlbums() {
       continue;
     }
     try {
-      const candidate = await albumCandidate(row);
-      if (candidate?.score >= 0.72 && await persist(candidate.url, destination, row.album_key, "cover", candidate.provider, candidate.score) === "written") written++;
+      const candidates = await albumCandidates(row);
+      for (const candidate of candidates) {
+        if (candidate.score < 0.72) break;
+        try {
+          const result = await persist(candidate.url, destination, row.album_key, "cover", candidate.provider, candidate.score);
+          if (result === "written") written++;
+          if (result === "written" || result === "existing") break;
+        } catch (error) { console.error(`album source ${candidate.provider} ${row.artist_name} / ${row.album_name}: ${error}`); }
+      }
     } catch (error) { console.error(`album ${row.artist_name} / ${row.album_name}: ${error}`); }
     await pause(150);
   }
