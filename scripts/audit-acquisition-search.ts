@@ -16,15 +16,17 @@ globalThis.fetch=async(input,init)=>{
  if(init?.method==='POST'){
   const release=JSON.parse(String(init.body));posts.push(release.indexer);
   if(mode==='timeout')throw new DOMException('Timed out','TimeoutError');
-  return new Response(release.indexer==='Bad'?'Unavailable':'{}',{status:release.indexer==='Bad'?409:200});
+  if(release.indexer==='Bad')return new Response(mode==='download-failure'?'Downloading torrent failed via Prowlarr /download':'Unavailable',{status:mode==='download-failure'?500:409});
+  return new Response('{}',{status:200});
  }
  const items=mode==='empty'?[]:['Bad','Bad','Good'].map((source,i)=>({guid:String(i),indexer:source,quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10-i,size:300000000,rejected:false,rejections:[]}));
  return Response.json(items);
 };
 assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,false);assert.deepEqual(posts,[]);
-mode='alternatives';assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,true);assert.deepEqual(posts,['Bad','Bad','Good']);
+mode='alternatives';assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,true);assert.deepEqual(posts,['Bad','Good']);
+posts=[];mode='download-failure';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,true);assert.deepEqual(posts,['Bad','Good']);
 posts=[];mode='timeout';await assert.rejects(findRelease({...targetByAlbum(1)!,last_release_guid:null},false),/Timed out/);assert.deepEqual(posts,['Bad']);
-console.log('Search integration audit passed: no duplicate searches, alternate candidates after confirmed failures, no duplicate grabs on ambiguous timeouts.');
+console.log('Search integration audit passed: no duplicate searches, failing sources are skipped after confirmed conflicts/download errors, and ambiguous timeouts are not retried.');
 }finally{globalThis.fetch=original;db().close();rmSync(dir,{recursive:true,force:true})}
 }
 main().catch(e=>{console.error(e);process.exitCode=1});
