@@ -480,6 +480,7 @@ async function searchWork(
   const settings = runtimeSettings(),
     active = new Set(queueItems.map((item) => item.albumId)),
     now = Date.now(),
+    recovering = mode === "bulk" && incomplete < settings.activeDownloadMin,
     rows = (
       db()
         .prepare(
@@ -488,14 +489,15 @@ async function searchWork(
               WHERE target_id=acquisition_targets.id AND action='search' AND status='applied') search_count
           FROM acquisition_targets
           WHERE status IN ('pending','staged')
-            AND (next_retry_at IS NULL OR datetime(next_retry_at)<=CURRENT_TIMESTAMP)
+            AND (next_retry_at IS NULL OR datetime(next_retry_at)<=CURRENT_TIMESTAMP
+              OR (?=1 AND last_search_at IS NOT NULL AND datetime(last_search_at)<=datetime('now','-2 hours')))
             AND (attempts_day IS NULL OR attempts_day<>date('now') OR attempts_today<3)`,
         )
-        .all() as AcquisitionTarget[]
+        .all(recovering ? 1 : 0) as AcquisitionTarget[]
     ).filter((target) => !active.has(target.lidarr_album_id)),
     ordered = orderSearchTargets(rows, now),
     quota = apply
-      ? acquisitionQuota(mode === "bulk" && incomplete < settings.activeDownloadMin)
+      ? acquisitionQuota(recovering)
       : { short: 10, general: 10, priority: 10 },
     priority = ordered.filter((target) => isPriorityTarget(target, now)),
     priorityCapacity = Math.min(
@@ -515,7 +517,7 @@ async function searchWork(
     generalCapacity,
     now,
   ));
-  stateSet("acquisition_search_status", JSON.stringify({ eligible: rows.length, selected: selected.length, budget: quota, recovering: mode === "bulk" && incomplete < settings.activeDownloadMin }));
+  stateSet("acquisition_search_status", JSON.stringify({ eligible: rows.length, selected: selected.length, budget: quota, recovering }));
   const run = async (target: AcquisitionTarget) => {
     const priorityTarget = isPriorityTarget(target, now),
       searches = Number((db().prepare("SELECT count(*) count FROM download_interventions WHERE target_id=? AND action='search' AND status='applied'").get(target.id) as { count: number }).count),

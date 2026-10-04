@@ -10,7 +10,7 @@ export const searchLimits = {
   short: 10,
   daily: 150,
   recoveryShort: 30,
-  recoveryDaily: 1_500,
+  recoveryDaily: 2_400,
   priorityDaily: 30,
 } as const;
 export const hoursSince = (value?: string | null) =>
@@ -158,10 +158,18 @@ export function stalledDecision(
       targetId: target.id,
       hash: now.hash,
     };
+  if (now.progress === 0 && now.availability === 0 && ageHours >= 2)
+    return {
+      action: "replace",
+      reason: "No bytes or reachable pieces after two hours",
+      destructive: true,
+      targetId: target.id,
+      hash: now.hash,
+    };
   const idle = hoursSince(target.last_progress_at ?? target.first_queued_at);
   const grace = target.origin === "migration"
-    ? (now.progress >= 0.9 ? 48 : 24)
-    : (now.progress >= 0.9 ? 24 : 12);
+    ? (now.progress >= 0.9 ? 48 : 8)
+    : (now.progress >= 0.9 ? 24 : 4);
   if (idle >= grace && ageHours >= grace && now.availability <= now.progress + 0.001)
     return {
       action: "replace",
