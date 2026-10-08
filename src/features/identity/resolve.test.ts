@@ -14,3 +14,5 @@ for(const [artist,album,group] of [
 ] as const)test(`writes an unambiguous catalog identity for ${album}`,()=>{const identity=resolveIdentity(artist,album,[group],[]);assert.equal(identityIsWritable(identity),true);assert.ok(identity.confidence>=.9)});
 
 test("recognizes a maxi-single as a single",()=>{const identity=resolveIdentity("Christina Aguilera","Genie In A Bottle (Maxi-Single)",[candidate("Genie in a Bottle",["Christina Aguilera"],"Single")],[]);assert.equal(identityIsWritable(identity),true);assert.ok(identity.confidence>=.95)});
+
+test("preserves a meaningful MusicBrainz disambiguation",()=>{const group={...candidate("Weezer",["Weezer"]),disambiguation:"Red Album"};const identity=resolveIdentity("Weezer","Weezer (Red Album)",[group],[]);assert.equal(identity.album,"Weezer (Red Album)");assert.equal(identityIsWritable(identity),true)});

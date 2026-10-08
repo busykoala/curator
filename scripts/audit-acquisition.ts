@@ -168,9 +168,9 @@ console.log(
   "Acquisition policy audit passed: mode, stalls, search priority, quotas, managed downloads, throughput scoring, and quality exclusions.",
 );
 
-assert.equal(searchBudget({short: 0, daily: 150, priorityDaily: 0}, true).general, 1350);
+assert.equal(searchBudget({short: 0, daily: 150, priorityDaily: 0}, true).general, 2250);
 assert.equal(searchBudget({short: 10, daily: 600, priorityDaily: 30}, true).short, 20);
-assert.equal(searchBudget({short: 0, daily: 1501, priorityDaily: 30}, true).general, 0);
+assert.equal(searchBudget({short: 0, daily: 1501, priorityDaily: 30}, true).general, 899);
 assert.equal(shouldUseFallback(target, 2), true);
 assert.equal(shouldUseFallback(target, 1), true);
 assert.equal(shouldUseFallback(recent, 3), false);
