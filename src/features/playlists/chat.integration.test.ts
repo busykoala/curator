@@ -18,7 +18,7 @@ test("published chat corrections replace the exact playlist; failed sync retains
   const originalFetch=globalThis.fetch,originalStructured=aiClient.structured;
   const database=db(),user=provisionUser({token:"test-listener-token",navidromeUserId:"listener",username:"listener",displayName:"Listener"});
   for(const id of [1,2]){
-    database.prepare("INSERT INTO files(id,path,album_key,artist_name,album_name,format,inode,link_count,size,mtime_ms,tags_json,properties_json,artwork_json,status) VALUES (?,?,'test','Artist','Album','flac',?,1,1,1,?,'{}','{}','written')").run(id,`/music/song-${id}.flac`,id,JSON.stringify({title:[`Song ${id}`]}));
+    database.prepare("INSERT INTO files(id,path,album_key,artist_name,album_name,format,inode,link_count,size,mtime_ms,tags_json,properties_json,artwork_json,status) VALUES (?,?,'test','Artist','Album','flac',?,1,1,1,?,'{}','{}','written')").run(id,`/music/song-${id}.flac`,id,JSON.stringify({title:[`Song ${id}`],artist:id===2?"Artist,Collaborator":"Artist"}));
   }
   let aiRequests=0,published=false,failWrites=false,publishedIds:string[]=[];
   aiClient.structured=async <T>(request:StructuredRequest)=>{
@@ -30,7 +30,7 @@ test("published chat corrections replace the exact playlist; failed sync retains
     const parsed=new URL(String(url)),path=parsed.pathname;
     if(path.endsWith("/Items")&&parsed.searchParams.get("IncludeItemTypes")==="Audio"){
       const id=parsed.searchParams.get("SearchTerm")==="Song 2"?2:1;
-      return Response.json({Items:[{Id:`song-${id}`,Name:`Song ${id}`,Album:"Album",Artists:["Artist"],Path:`/music/song-${id}.flac`}]});
+      return Response.json({Items:id===2?[{Id:"wrong-collaboration",Name:"Song 2",Album:"Album",Artists:["Artist,Someone Else"]},{Id:"song-2",Name:"Song 2",Album:"Album",Artists:["Artist,Collaborator"]}]:[{Id:"song-1",Name:"Song 1",Album:"Album",Artists:["Artist"],Path:"/music/song-1.flac"}]});
     }
     if(path.endsWith("/Items")&&parsed.searchParams.get("IncludeItemTypes")==="Playlist")return Response.json({Items:published?[{Id:"playlist-id",Name:"Test Mix"}]:[]});
     if(path.endsWith("/Playlists/playlist-id/Items"))return Response.json({Items:publishedIds.map(Id=>({Id}))});
