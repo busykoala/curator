@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, LoaderCircle, Save, Sparkles, X } from "lucide-react";
 import { EnergyShape } from "./energy-shape";
 import { TagCombobox, type ComboOption } from "./tag-combobox";
+import { useListener } from "./app-shell";
 import { readJson } from "./http";
 import {
   getMeta,
@@ -15,6 +16,7 @@ import {
 type Props = {
   initial: PlaylistDefinition;
   close: () => void;
+  page?: boolean;
   save: (value: PlaylistDefinition) => Promise<void>;
 };
 
@@ -70,7 +72,10 @@ const directionCopy: Record<
   },
 };
 
-export function PlaylistEditor({ initial, close, save }: Props) {
+export function PlaylistEditor({ initial, close, save, page = false }: Props) {
+  const { user } = useListener();
+  const draftKey = `curator-playlist-draft:${user.id}:${initial.id ?? initial.category}`;
+  const [draftReady, setDraftReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [optionsError, setOptionsError] = useState("");
@@ -109,6 +114,28 @@ export function PlaylistEditor({ initial, close, save }: Props) {
   }, []);
 
   useEffect(() => {
+    try {
+      const draft = JSON.parse(localStorage.getItem(draftKey) ?? "null");
+      if (
+        draft &&
+        draft.category === initial.category &&
+        draft.ownerUserId === user.id &&
+        draft.id === initial.id
+      )
+        setValue(draft);
+    } catch {}
+    setDraftReady(true);
+  }, [draftKey, initial.category, initial.id, user.id]);
+  useEffect(() => {
+    if (draftReady) {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(value));
+      } catch {}
+    }
+  }, [value, draftReady, draftKey]);
+
+  useEffect(() => {
+    if (page && window.matchMedia("(max-width: 700px)").matches) return;
     const previous = document.activeElement as HTMLElement | null;
     form.current
       ?.querySelector<HTMLInputElement>("input[name=playlistName]")
@@ -118,7 +145,7 @@ export function PlaylistEditor({ initial, close, save }: Props) {
 
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
-      if (event.key === "Tab") {
+      if (!page && event.key === "Tab") {
         const controls = [
           ...(form.current?.querySelectorAll<HTMLElement>(
             'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]',
@@ -145,7 +172,7 @@ export function PlaylistEditor({ initial, close, save }: Props) {
     };
     window.addEventListener("keydown", keyboard);
     return () => window.removeEventListener("keydown", keyboard);
-  }, [close, busy]);
+  }, [close, busy, page]);
 
   const directionOptions = useMemo(
     () => [
@@ -201,6 +228,9 @@ export function PlaylistEditor({ initial, close, save }: Props) {
     setError("");
     try {
       await save(value);
+      try {
+        localStorage.removeItem(draftKey);
+      } catch {}
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -214,39 +244,41 @@ export function PlaylistEditor({ initial, close, save }: Props) {
 
   return (
     <div
-      className="drawer-backdrop"
+      className={page ? "playlist-form-page" : "drawer-backdrop"}
       onMouseDown={(event) =>
         event.target === event.currentTarget && !busy && close()
       }
     >
       <form
         ref={form}
-        className="playlist-editor playlist-editor-v2 intent-editor"
-        role="dialog"
-        aria-modal="true"
+        className={"playlist-editor intent-editor" + (page ? " is-page" : "")}
+        role={page ? undefined : "dialog"}
+        aria-modal={page ? undefined : true}
         aria-labelledby="playlist-editor-title"
         onSubmit={submit}
       >
-        <header>
-          <div>
-            <span className="intent-category">{meta.label}</span>
-            <h2 id="playlist-editor-title">
-              {value.id
-                ? "Edit playlist"
-                : "Create " + meta.label.toLowerCase()}
-            </h2>
-            <p>{meta.description}</p>
-          </div>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Close playlist editor"
-            disabled={busy}
-            onClick={close}
-          >
-            <X />
-          </button>
-        </header>
+        {!page && (
+          <header>
+            <div>
+              <span className="intent-category">{meta.label}</span>
+              <h2 id="playlist-editor-title">
+                {value.id
+                  ? "Edit playlist"
+                  : "Create " + meta.label.toLowerCase()}
+              </h2>
+              <p>{meta.description}</p>
+            </div>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Close playlist editor"
+              disabled={busy}
+              onClick={close}
+            >
+              <X />
+            </button>
+          </header>
+        )}
 
         <div className="playlist-editor-body">
           {!initial.id && (
@@ -449,27 +481,6 @@ export function PlaylistEditor({ initial, close, save }: Props) {
               />
               <small>Curator uses songs available in your library.</small>
             </label>
-            <label>
-              <span>
-                Refresh variation{" "}
-                <strong>{Number(config.rotationPercent ?? 30)}%</strong>
-              </span>
-              <input
-                aria-label="Refresh variation"
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={Number(config.rotationPercent ?? 30)}
-                onChange={(event) =>
-                  setting("rotationPercent", Number(event.target.value))
-                }
-              />
-              <small>
-                Aim to replace this share of songs whenever you refresh,
-                manually or nightly.
-              </small>
-            </label>
           </section>
 
           <label className="enable-row">
@@ -496,6 +507,27 @@ export function PlaylistEditor({ initial, close, save }: Props) {
               Fine-tune the mix
             </summary>
             <div>
+              <label>
+                <span>
+                  Refresh variation{" "}
+                  <strong>{Number(config.rotationPercent ?? 30)}%</strong>
+                </span>
+                <input
+                  aria-label="Refresh variation"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={Number(config.rotationPercent ?? 30)}
+                  onChange={(event) =>
+                    setting("rotationPercent", Number(event.target.value))
+                  }
+                />
+                <small>
+                  Aim to replace this share of songs whenever you refresh,
+                  manually or nightly.
+                </small>
+              </label>
               {value.category !== "rediscovery" && (
                 <label className="playlist-wide-field">
                   <span>

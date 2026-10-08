@@ -4,6 +4,11 @@ export async function readJson<T>(
   response: Response,
   fallback = "Request failed",
 ): Promise<T> {
+  if (response.status === 401 && typeof window !== "undefined") {
+    const destination = window.location.pathname + window.location.search;
+    window.location.assign("/login?next=" + encodeURIComponent(destination));
+    throw new Error("Your session expired. Sign in again to continue.");
+  }
   const text = await response.text();
   if (!text.trim()) {
     throw new Error(
@@ -26,7 +31,9 @@ export async function readJson<T>(
 
   if (!response.ok) {
     const detail = body.error ?? body.message;
-    throw new Error(typeof detail === "string" ? detail : `${fallback} (${response.status})`);
+    throw new Error(
+      typeof detail === "string" ? detail : `${fallback} (${response.status})`,
+    );
   }
   return body;
 }

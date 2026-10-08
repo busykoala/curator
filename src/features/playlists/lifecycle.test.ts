@@ -28,7 +28,7 @@ old.exec(`ALTER TABLE smart_playlists ADD COLUMN owner_user_id INTEGER;
   ALTER TABLE smart_playlists ADD COLUMN automatic INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE listening_clusters ADD COLUMN user_id INTEGER;
   ALTER TABLE playlist_feedback ADD COLUMN owner_user_id INTEGER;
-  CREATE TABLE music_requests(id INTEGER PRIMARY KEY,requester_user_id INTEGER,artist TEXT,album TEXT,status TEXT,updated_at TEXT);
+  CREATE TABLE music_requests(id INTEGER PRIMARY KEY,requester_user_id INTEGER,foreign_album_id TEXT,lidarr_album_id INTEGER,artist TEXT,album TEXT,status TEXT,updated_at TEXT);
   INSERT INTO schema_migrations(version) VALUES (2),(3),(4),(5),(6),(7),(8),(9);
   INSERT INTO curator_users(id,navidrome_user_id,username,display_name) VALUES (1,'one','one','One'),(2,'two','two','Two');
   INSERT INTO listening_clusters(id,label,terms_json,user_id) VALUES ('jazz-cluster','Jazz','["jazz"]',1),('rock-cluster','Rock','["rock"]',2);

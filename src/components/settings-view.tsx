@@ -1,30 +1,244 @@
 "use client";
-import { useEffect,useState } from "react";
-import { Check,Database,LoaderCircle,LogOut,Save,ServerCog,Sparkles } from "lucide-react";
-
-type Settings={scanIntervalHours:number;enrichmentBatchAlbums:number;categorizationBatchAlbums:number;libraryPageSize:number;stackRefreshSeconds:number;aiModel:string;musicRoot:string};
-export function SettingsView(){
-  const[data,setData]=useState<Settings|null>(null),[saving,setSaving]=useState(false),[notice,setNotice]=useState("");
-  useEffect(()=>{fetch("/api/settings",{cache:"no-store"}).then(response=>response.json()).then(setData).catch(reason=>setNotice(String(reason)))},[]);
-  function number(key:keyof Settings,value:string){setData(current=>current?{...current,[key]:Number(value)}:current)}
-  async function save(){if(!data)return;setSaving(true);setNotice("");try{const response=await fetch("/api/settings",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)}),body=await response.json();if(!response.ok)throw new Error(body.error||"Could not save settings");setData({...data,...body.settings});setNotice("Settings saved. New batch sizes apply at the next task boundary.")}catch(reason){setNotice(String(reason))}finally{setSaving(false)}}
-  if(!data)return <div className="settings-loading"><LoaderCircle className="spin"/><span>Loading configuration</span>{notice&&<p>{notice}</p>}</div>;
-  return <div className="settings-workspace">
-    <header className="settings-intro"><span className="kicker">Curator configuration</span><h2>Settings</h2><p>Adjust normal operating behavior here. Risk-sensitive identity and file-safety thresholds remain protected by Curator.</p></header>
-    {notice&&<div className="settings-notice"><Check/>{notice}</div>}
-    <section className="settings-section"><div className="settings-section-title"><ServerCog/><div><h3>Processing cadence</h3><p>Control how often Curator checks the library and how much work it takes per cycle.</p></div></div><div className="settings-grid">
-      <label><span>Full scan interval</span><input type="number" min="1" max="168" value={data.scanIntervalHours} onChange={event=>number("scanIntervalHours",event.target.value)}/><small>Hours between full reconciliations</small></label>
-      <label><span>Enrichment batch</span><input type="number" min="1" max="24" value={data.enrichmentBatchAlbums} onChange={event=>number("enrichmentBatchAlbums",event.target.value)}/><small>Albums written before yielding</small></label>
-      <label><span>Semantic batch</span><input type="number" min="1" max="64" value={data.categorizationBatchAlbums} onChange={event=>number("categorizationBatchAlbums",event.target.value)}/><small>Albums classified per request cycle</small></label>
-    </div></section>
-    <section className="settings-section"><div className="settings-section-title"><Database/><div><h3>Library experience</h3><p>Tune browser density and operational refresh without changing metadata.</p></div></div><div className="settings-grid">
-      <label><span>Items per library page</span><input type="number" min="12" max="120" value={data.libraryPageSize} onChange={event=>number("libraryPageSize",event.target.value)}/><small>More items use more screen space</small></label>
-      <label><span>Service refresh</span><input type="number" min="5" max="120" value={data.stackRefreshSeconds} onChange={event=>number("stackRefreshSeconds",event.target.value)}/><small>Seconds between stack checks</small></label>
-      <label className="read-only"><span>Music library</span><input value={data.musicRoot} readOnly/><small>Configured by the container mount</small></label>
-    </div></section>
-    <section className="settings-section"><div className="settings-section-title"><Sparkles/><div><h3>Local AI</h3><p>The environment-managed local model handles all enrichment, categorization, and research work.</p></div></div><div className="settings-grid">
-      <label className="read-only"><span>Model</span><input value={data.aiModel} readOnly/></label>
-    </div></section>
-    <footer className="settings-footer"><button className="danger-link" onClick={()=>fetch("/api/auth/logout",{method:"POST"}).then(()=>location.href="/login")}><LogOut/>Sign out</button><button className="primary-button" onClick={save} disabled={saving}>{saving?<LoaderCircle className="spin"/>:<Save/>}Save settings</button></footer>
-  </div>
+import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { ArrowRight, LogOut } from "lucide-react";
+import { useListener } from "./app-shell";
+import { BackLink, Loading, Notice, PageHeader } from "./ui";
+import { readJson } from "./http";
+type Settings = {
+  scanIntervalHours: number;
+  enrichmentBatchAlbums: number;
+  categorizationBatchAlbums: number;
+  libraryPageSize: number;
+  stackRefreshSeconds: number;
+};
+const fields = [
+  [
+    "scanIntervalHours",
+    "Full scan interval",
+    1,
+    168,
+    "Hours between full reconciliations",
+  ],
+  [
+    "enrichmentBatchAlbums",
+    "Enrichment batch",
+    1,
+    24,
+    "Albums written before yielding",
+  ],
+  [
+    "categorizationBatchAlbums",
+    "Classification batch",
+    1,
+    64,
+    "Albums classified per cycle",
+  ],
+  [
+    "libraryPageSize",
+    "Items per library page",
+    12,
+    120,
+    "Shared browsing default",
+  ],
+  [
+    "stackRefreshSeconds",
+    "Service refresh",
+    5,
+    120,
+    "Seconds between service checks",
+  ],
+] as const;
+export function SettingsView({ processing = false }: { processing?: boolean }) {
+  const { user, appearance, setAppearance } = useListener(),
+    [data, setData] = useState<Settings>(),
+    [saved, setSaved] = useState(""),
+    [saving, setSaving] = useState(false),
+    [notice, setNotice] = useState(""),
+    [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try {
+      const next = await readJson<Settings>(
+        await fetch("/api/settings", { cache: "no-store" }),
+      );
+      setData(next);
+      setSaved(JSON.stringify(next));
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Settings unavailable");
+    }
+  }, []);
+  useEffect(() => {
+    if (processing) void load();
+  }, [processing, load]);
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await readJson<{ settings: Settings }>(
+        await fetch("/api/settings", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(data),
+        }),
+      );
+      setData(result.settings);
+      setSaved(JSON.stringify(result.settings));
+      setNotice(
+        "Settings saved. Batch changes apply at the next task boundary.",
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Settings could not be saved");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function logout() {
+    try {
+      await readJson(await fetch("/api/auth/logout", { method: "POST" }));
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (
+          key?.startsWith(`curator-chat-draft:${user.id}:`) ||
+          key?.startsWith(`curator-playlist-draft:${user.id}:`) ||
+          key?.startsWith(`curator-metadata-draft:${user.id}:`)
+        )
+          localStorage.removeItem(key);
+      }
+      location.href = "/login";
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sign out failed");
+    }
+  }
+  return (
+    <>
+      {processing && <BackLink href="/settings">Account and settings</BackLink>}
+      <PageHeader
+        title={processing ? "Processing settings" : "Account and settings"}
+        description={
+          processing
+            ? "Applies to the shared library, including other listeners."
+            : undefined
+        }
+      />
+      {error && (
+        <Notice error>
+          {error}
+          {processing && !data && (
+            <button className="text-button" onClick={() => void load()}>
+              Retry
+            </button>
+          )}
+        </Notice>
+      )}
+      {notice && <Notice>{notice}</Notice>}
+      {processing ? (
+        !data ? (
+          <Loading>Loading processing settings…</Loading>
+        ) : (
+          <form className="form-stack form-column" onSubmit={save}>
+            {fields.map(([key, label, min, max, hint]) => (
+              <label key={key}>
+                <span>{label}</span>
+                <input
+                  type="number"
+                  min={min}
+                  max={max}
+                  required
+                  value={data[key]}
+                  onChange={(e) =>
+                    setData({ ...data, [key]: Number(e.target.value) })
+                  }
+                />
+                <small>{hint}</small>
+              </label>
+            ))}
+            <button
+              className="primary-button"
+              disabled={saving || JSON.stringify(data) === saved}
+            >
+              {saving ? "Saving…" : "Save processing settings"}
+            </button>
+          </form>
+        )
+      ) : (
+        <>
+          <div className="account-identity">
+            <span className="avatar">
+              {user.displayName.slice(0, 1).toUpperCase()}
+            </span>
+            <div>
+              <strong>{user.displayName}</strong>
+              <span>
+                {user.tokenStatus === "active"
+                  ? "Navidrome account connected"
+                  : "Sign in again to reconnect Navidrome"}
+              </span>
+            </div>
+          </div>
+          <section className="section form-column">
+            <h2>Your preferences</h2>
+            <label className="appearance-field">
+              <span>Appearance</span>
+              <select
+                aria-label="Appearance"
+                value={appearance}
+                disabled={saving}
+                onChange={async (e) => {
+                  setSaving(true);
+                  setError("");
+                  try {
+                    await setAppearance(
+                      e.target.value as "system" | "light" | "dark",
+                    );
+                    setNotice("Appearance saved.");
+                  } catch (e) {
+                    setError(
+                      e instanceof Error
+                        ? e.message
+                        : "Appearance could not be saved",
+                    );
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                <option value="system">Device setting</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+          </section>
+          <section className="section">
+            <h2>Shared library</h2>
+            <div className="creation-options">
+              <Link className="creation-option" href="/curator">
+                <span>
+                  <strong>Library care</strong>
+                  <small>Review, activity, and service health</small>
+                </span>
+                <ArrowRight />
+              </Link>
+              <Link className="creation-option" href="/settings/processing">
+                <span>
+                  <strong>Processing settings</strong>
+                  <small>Scan schedule and library enrichment</small>
+                </span>
+                <ArrowRight />
+              </Link>
+            </div>
+          </section>
+          <button
+            className="secondary-button section"
+            onClick={() => void logout()}
+          >
+            <LogOut />
+            Sign out
+          </button>
+        </>
+      )}
+    </>
+  );
 }

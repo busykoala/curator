@@ -1,19 +1,23 @@
 import { currentUser, sameOrigin } from "@/features/auth/session";
-import { ownerInputMatches, requestedUserMatches } from "@/features/playlists/access";
+import {
+  ownerInputMatches,
+  requestedUserMatches,
+  playlistError,
+} from "@/features/playlists/access";
 import { stateGet } from "@/features/db/client";
 import { navidromeConfigured } from "@/features/integrations/navidrome";
-import {
-  createPlaylist,
-  dashboardData,
-} from "@/features/playlists/repository";
+import { createPlaylist, dashboardData } from "@/features/playlists/repository";
 
 export async function GET(request: Request) {
   try {
     const current = await currentUser();
-    if (!current) return Response.json({ error: "Unauthorized" }, { status: 401 });
+    if (!current)
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-    if (!requestedUserMatches(request, current.id)) return Response.json({ error: "Forbidden" }, { status: 403 });
-    const target = current, users = [current];
+    if (!requestedUserMatches(request, current.id))
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    const target = current,
+      users = [current];
 
     return Response.json({
       ...dashboardData(target.id),
@@ -47,13 +51,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
-    const body = await request.json() as Record<string, unknown>;
-    if (!ownerInputMatches(body, user.id)) return Response.json({ error: "Forbidden" }, { status: 403 });
+    const body = (await request.json()) as Record<string, unknown>;
+    if (!ownerInputMatches(body, user.id))
+      return Response.json({ error: "Forbidden" }, { status: 403 });
     return Response.json(
       { playlist: createPlaylist({ ...body, ownerUserId: user.id }) },
       { status: 201 },
     );
   } catch (error) {
-    return Response.json({ error: String(error) }, { status: 400 });
+    return playlistError(error);
   }
 }

@@ -1,85 +1,233 @@
 "use client";
-
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowRight, ExternalLink, Plus } from "lucide-react";
 import {
-  ArrowRight,
-  Clock3,
-  Compass,
-  Disc3,
-  ExternalLink,
-  History,
-  Library,
-  LoaderCircle,
-  Music2,
-  PlusCircle,
-  Route,
-  Sparkles,
-} from "lucide-react";
+  Artwork,
+  Loading,
+  Notice,
+  PageHeader,
+  entityHref,
+  nativePlaylistHref,
+} from "./ui";
 import { readJson } from "./http";
-
-type User = { id: number; displayName: string; tokenStatus: string };
-type Track = { file_id: number; title: string; artist: string; album: string; reason: string; retained: number };
-type Mix = { id: number; name: string; navidrome_playlist_id: string | null; tracks: Track[] } | null;
+import { getMeta, type PlaylistDefinition } from "./playlist-view-model";
+import { requestLabels, type MusicRequest } from "./music-requests";
+import { playlistStatus } from "./playlist-status";
 type Data = {
-  user: User;
-  users: User[];
-  playlistCount: number;
-  tonight: Mix;
-  rediscover: Mix;
-  discovery: Mix;
-  depth: Mix;
-  fresh: Array<{ fileId: number; artist: string; album: string; updatedAt: string }>;
-  requests: Array<{ id: number; artist: string; album: string; status: string; updatedAt: string }>;
-  libraryTracks: number;
-  navidromePublicUrl: string;
+  continueMixes: Array<PlaylistDefinition & { artworkFileId: number | null }>;
+  fresh: Array<{
+    fileId: number;
+    albumKey: string;
+    artist: string;
+    album: string;
+  }>;
+  requests: MusicRequest[];
 };
-
-const playlistLink = (userId: number) => `/playlists?userId=${userId}`;
-
-function TrackList({ tracks }: { tracks: Track[] }) {
-  return <div className="home-track-list">{tracks.slice(0, 5).map((track, index) => <article key={track.file_id}><span>{index + 1}</span><div><strong>{track.title}</strong><small>{track.artist} · {track.album}</small></div><em>{track.retained ? "Kept in rotation" : track.reason}</em></article>)}</div>;
-}
-
-function MixCard({ title, eyebrow, mix, icon: Icon, userId }: { title: string; eyebrow: string; mix: Mix; icon: typeof History; userId: number }) {
-  if (!mix?.tracks.length) return null;
-  return <article className="home-module"><header><div className="home-module-icon"><Icon /></div><div><span className="kicker">{eyebrow}</span><h3>{title}</h3><p>{mix.name}</p></div></header><TrackList tracks={mix.tracks} /><Link href={playlistLink(userId)}>Tune this mix <ArrowRight /></Link></article>;
-}
-
 export function PersonalizedHome() {
-  const [data, setData] = useState<Data | null>(null);
-  const [target, setTarget] = useState<number>();
-  const [error, setError] = useState("");
-  const request = useRef(0);
-
-  const load = useCallback(async (id?: number) => {
-    const requestId = ++request.current;
-    setError("");
+  const [data, setData] = useState<Data>(),
+    [error, setError] = useState("");
+  const load = useCallback(async () => {
     try {
-      const response = await fetch(`/api/home${id ? `?userId=${id}` : ""}`, { cache: "no-store" });
-      const body = await readJson<Data>(response, "Home is unavailable");
-      if (requestId !== request.current) return;
-      setData(body);
-      setTarget(body.user.id);
-    } catch (reason) {
-      if (requestId !== request.current) return;
-      setError(reason instanceof Error ? reason.message : "Home is unavailable");
+      setData(
+        await readJson<Data>(await fetch("/api/home", { cache: "no-store" })),
+      );
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Home unavailable");
     }
   }, []);
-
-  useEffect(() => { void load(); }, [load]);
-
-  if (error && !data) return <div className="empty-state"><Disc3 /><h3>Home could not be prepared</h3><p>{error}</p><button className="primary-button" onClick={() => void load(target)}>Retry</button></div>;
-  if (!data) return <div className="playlist-loading"><LoaderCircle className="spin" />Preparing your music…</div>;
-
-  const open = `${data.navidromePublicUrl.replace(/\/$/, "")}/app/#/playlist`;
-  const playlists = playlistLink(data.user.id);
-  return <div className="personal-home">
-    <header className="home-heading"><div><span className="kicker">Personalized listening</span><h2>Good evening, {data.user.displayName}</h2><p>Familiar favorites, fresh arrivals, and a little room for surprise.</p></div></header>
-    {error && <div className="playlist-notice" role="status"><span>{error}</span><button onClick={() => void load(data.user.id)}>Retry</button></div>}
-    {data.tonight?.tracks.length ? <section className="tonight-card"><div><span className="kicker"><Sparkles />Tonight for {data.user.displayName}</span><h2>{data.tonight.name}</h2><p>{data.tonight.tracks.length} considered tracks, shaped by this listener’s library signals.</p><div className="home-actions"><a className="primary-button" href={open} target="_blank" rel="noreferrer"><ExternalLink />Open in Navidrome</a><Link className="secondary-button" href={playlists}>Adjust mix</Link></div></div><TrackList tracks={data.tonight.tracks} /></section> : <section className="home-empty-hero"><Sparkles /><div><h2>{data.playlistCount ? "Your playlists are ready to shape" : "What would you like to hear?"}</h2><p>{data.playlistCount ? "Preview and publish a mix, or return to a playlist chat. You choose which playlists refresh nightly." : "Describe a mix in chat, choose a playlist type, or start from a suggestion based on your listening."}</p><Link className="primary-button" href={playlists}>Your playlists <ArrowRight /></Link></div></section>}
-    <section className="home-module-grid"><MixCard title="Bring an old favorite back" eyebrow="Rediscover" mix={data.rediscover} icon={History} userId={data.user.id} /><MixCard title="Something beyond the usual" eyebrow="New for you" mix={data.discovery} icon={Compass} userId={data.user.id} /><MixCard title="Go deeper in your collection" eyebrow="Because you listened" mix={data.depth} icon={Library} userId={data.user.id} /></section>
-    {data.fresh.length > 0 && <section className="fresh-section"><header><div><span className="kicker">Freshly curated</span><h2>New in the archive</h2></div><Link href="/library">Browse library <ArrowRight /></Link></header><div className="fresh-grid">{data.fresh.map((item) => <button key={item.fileId} onClick={() => { location.href = "/library"; }}><span><Disc3 /></span><strong>{item.album}</strong><small>{item.artist}</small></button>)}</div></section>}
-    <section className="home-bottom-grid"><article className="request-card"><header><div><span className="kicker">Your requests</span><h3>On the way</h3></div><Link href="/add"><PlusCircle />Add music</Link></header>{data.requests.length ? <div>{data.requests.map((item) => <p key={item.id}><span><strong>{item.album}</strong><small>{item.artist}</small></span><em><Clock3 />{item.status}</em></p>)}</div> : <div className="compact-empty"><Music2 /><span>This listener’s album requests and status will appear here.</span></div>}</article><article className="shortcut-card"><span className="kicker">Shape the next session</span><h3>Choose a direction</h3><div><Link href={playlists}><Sparkles />Mood or occasion</Link><Link href={playlists}><Compass />Discovery lane</Link><Link href={playlists}><Route />Progressive journey</Link></div></article></section>
-  </div>;
+  useEffect(() => {
+    void load();
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    const timer = setInterval(refresh, 10000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [load]);
+  return (
+    <>
+      <PageHeader title="Home" />
+      {error && (
+        <Notice error>
+          {error}
+          <button className="text-button" onClick={() => void load()}>
+            Retry
+          </button>
+        </Notice>
+      )}
+      {!data ? (
+        <Loading>Loading your music…</Loading>
+      ) : (
+        <>
+          <section>
+            <div className="section-heading">
+              <h2>
+                {data.continueMixes.length
+                  ? "Pick up where you left off"
+                  : "What would you like to hear?"}
+              </h2>
+              <Link className="text-link" href="/playlists/new">
+                New playlist
+                <Plus />
+              </Link>
+            </div>
+            {data.continueMixes.length ? (
+              <div className="home-continue-list">
+                {data.continueMixes.map((item) => {
+                  const active =
+                      item.chatJob?.status === "running" ||
+                      item.chatJob?.status === "queued",
+                    ready =
+                      !!item.navidromePlaylistId &&
+                      !active &&
+                      !item.unreadReply &&
+                      !item.chatJob?.syncError;
+                  return (
+                    <article className="continue-card" key={item.id}>
+                      <Artwork
+                        src={
+                          item.artworkFileId
+                            ? `/api/library/artwork?fileId=${item.artworkFileId}&kind=album`
+                            : undefined
+                        }
+                      />
+                      <div>
+                        <span
+                          className={
+                            "playlist-state " +
+                            (item.unreadReply ? "reply-ready" : "")
+                          }
+                        >
+                          {playlistStatus(item)}
+                        </span>
+                        <h3>
+                          <Link href={"/playlists/" + item.id}>
+                            {item.category === "chat" &&
+                            item.name.startsWith("Chat playlist ")
+                              ? "New playlist"
+                              : item.name}
+                          </Link>
+                        </h3>
+                        <p>
+                          {getMeta(item.category).label} ·{" "}
+                          {Number(item.config.targetTracks)} songs
+                        </p>
+                        <div className="button-row">
+                          {ready ? (
+                            <a
+                              className="primary-button"
+                              href={nativePlaylistHref(item.id!)}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open in Navidrome
+                              <ExternalLink />
+                            </a>
+                          ) : (
+                            <Link
+                              className="primary-button"
+                              href={"/playlists/" + item.id}
+                            >
+                              {item.unreadReply
+                                ? "Read reply"
+                                : active
+                                  ? "Open chat"
+                                  : "Review mix"}
+                            </Link>
+                          )}
+                          {ready && (
+                            <Link
+                              className="text-link"
+                              href={"/playlists/" + item.id}
+                            >
+                              {item.category === "chat"
+                                ? "Continue chat"
+                                : "View mix"}
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="empty-state home-empty">
+                <p>
+                  Describe a mix in chat or choose a playlist type to explore
+                  your collection.
+                </p>
+                <Link className="primary-button" href="/playlists/new/chat">
+                  Create a playlist in chat
+                  <ArrowRight />
+                </Link>
+              </div>
+            )}
+          </section>
+          {data.fresh.length > 0 && (
+            <section className="section">
+              <div className="section-heading">
+                <h2>Recently updated</h2>
+                <Link className="text-link" href="/library?sort=recent">
+                  View all
+                  <ArrowRight />
+                </Link>
+              </div>
+              <div className="media-grid home-album-grid">
+                {data.fresh.map((a) => (
+                  <Link
+                    className="media-card"
+                    key={a.albumKey}
+                    href={entityHref("albums", a.albumKey)}
+                  >
+                    <Artwork
+                      src={`/api/library/artwork?fileId=${a.fileId}&kind=album`}
+                    />
+                    <span className="media-copy">
+                      <strong>{a.album}</strong>
+                      <span>{a.artist}</span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+          {data.requests.length > 0 && (
+            <section className="section">
+              <div className="section-heading">
+                <h2>On the way</h2>
+                <Link className="text-link" href="/requests">
+                  View requests
+                  <ArrowRight />
+                </Link>
+              </div>
+              {data.requests.map((item) => (
+                <Link
+                  className="request-row"
+                  key={item.id}
+                  href={"/requests/" + item.id}
+                >
+                  <div>
+                    <strong>{item.album}</strong>
+                    <span>{item.artist}</span>
+                  </div>
+                  <span className="playlist-state">
+                    {requestLabels[item.status] ?? item.status}
+                  </span>
+                  <ArrowRight />
+                </Link>
+              ))}
+            </section>
+          )}
+        </>
+      )}
+    </>
+  );
 }

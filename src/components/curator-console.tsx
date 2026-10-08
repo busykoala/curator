@@ -1,24 +1,220 @@
 "use client";
-import { AlertTriangle,CheckCircle2,Clock3,Database,Pause,Play,RefreshCw,RotateCcw,ScanLine,SlidersHorizontal,Sparkles } from "lucide-react";
-import { LibraryIssues } from "@/components/library-issues";
-import { StackCards } from "@/components/stack-cards";
-import { AcquisitionPanel } from "@/components/acquisition-panel";
-
-type Job={phase:string;status:string;subject:string;progress_json?:string;processedCount?:number;totalCount?:number};
-type Summary={paused:boolean;metrics:Record<string,number>;operational:{running:boolean;phase:string;lastError?:string};jobs?:Job[]};
-
-export function CuratorConsole({data,busy,action}:{data:Summary|null;busy:boolean;action:(name:string)=>void}){
-  const pending=Number(data?.metrics?.albumsPending??0),issues=Number(data?.metrics?.issues??0),errors=Number(data?.metrics?.errors??0)+Number(data?.metrics?.albumsFailed??0),written=Number(data?.metrics?.written??data?.metrics?.enriched??0),files=Number(data?.metrics?.files??data?.metrics?.indexedFiles??0),percent=files?Math.min(100,Math.round(written/files*100)):0,active=(data?.jobs??[]).filter(job=>job.status==="running").map(job=>{try{return{...job,...JSON.parse(job.progress_json??"{}") as Partial<Job>}}catch{return job}}),state=data?.paused?"paused":data?.operational.running?"working":errors?"attention":pending?"waiting":issues?"review":"ready";
-  const title=state==="paused"?"Automation is paused":state==="working"?"Curator is working":state==="attention"?"Curator needs attention":state==="waiting"?"Work is queued for the next cycle":state==="review"?"Review items are waiting":"Your library is in sync",description=state==="paused"?"New imports are safe, but automatic processing will wait until you resume.":state==="working"?`Processing ${data?.operational.phase||"library updates"}. You can leave this page.`:state==="attention"?`${errors.toLocaleString()} failed item${errors===1?"":"s"} can be retried from maintenance below.`:state==="waiting"?`${pending.toLocaleString()} albums remain; automatic monitoring will continue processing them.`:state==="review"?`${issues.toLocaleString()} library item${issues===1?"":"s"} would benefit from your decision.`:`${files.toLocaleString()} tracks are indexed and automatic monitoring is on.`;
-  const StateIcon=state==="ready"?CheckCircle2:state==="working"?Sparkles:state==="paused"?Pause:state==="waiting"?Clock3:AlertTriangle;
-  return <div className="curator-workspace">
-    <section className={`curator-overview paper ${state}`}><div className="curator-state"><span className={`state-orb ${state}`}><StateIcon/></span><div><span className="kicker">Automation</span><h2>{title}</h2><p>{description}</p></div></div><div className="curator-actions"><button className="secondary-button" disabled={busy||!data} onClick={()=>action(data?.paused?"resume":"pause")}>{data?.paused?<Play/>:<Pause/>}{data?.paused?"Resume":"Pause"}</button><button className="primary-button" disabled={busy||(!data?.paused&&Boolean(data?.operational.running))} onClick={()=>action("scan")}><ScanLine/>Scan now</button></div></section>
-    {data?.operational.lastError&&<div className="error-banner"><AlertTriangle/><div><strong>The last cycle needs attention</strong><p>{data.operational.lastError}</p></div></div>}
-    <section className="curator-metrics"><article className="paper completion-card"><div className="metric-head"><span><Sparkles/>Enrichment</span><strong>{percent}%</strong></div><div className="completion-track"><i style={{width:`${percent}%`}}/></div><p>{written.toLocaleString()} of {files.toLocaleString()} files complete</p></article><article className="paper curator-stat"><Database/><div><strong>{files.toLocaleString()}</strong><span>Indexed tracks</span></div></article><article className={`paper curator-stat ${pending?"warning":"clear"}`}><ScanLine/><div><strong>{pending.toLocaleString()}</strong><span>Albums remaining</span></div></article><article className={`paper curator-stat ${issues?"danger":"clear"}`}><AlertTriangle/><div><strong>{issues.toLocaleString()}</strong><span>Open issues</span></div></article></section>
-    {active.length?<section className="active-jobs"><div className="section-heading"><div><span className="kicker">Live work</span><h3>Processing now</h3></div><small>Safe to close this page</small></div>{active.map((job,index)=>{const total=job.totalCount??0,done=job.processedCount??0;return <article key={`${job.phase}-${index}`}><div><strong>{job.subject||job.phase}</strong><span>{job.phase}</span></div><progress max={Math.max(1,total)} value={done}/><small>{total?`${done} of ${total}`:"Working"}</small></article>})}</section>:null}
-    <section className="stack-section"><div className="section-heading"><div><span className="kicker">Connected services</span><h3>Music stack</h3></div><span className="section-note">Updates independently every 15 seconds</span></div><StackCards/></section>
-    <AcquisitionPanel/>
-    <LibraryIssues/>
-    <details className="maintenance-panel paper"><summary><span><SlidersHorizontal/><strong>Advanced maintenance</strong></span><small>Manual retries and cache controls</small></summary><div><button onClick={()=>action("retry-errors")} disabled={busy}><RotateCcw/>Retry errors</button><button onClick={()=>action("retry-categorization")} disabled={busy}><Sparkles/>Retry incomplete profiles</button><button onClick={()=>action("clear-cache")} disabled={busy}><RefreshCw/>Refresh source cache</button></div></details>
-  </div>
+import Link from "next/link";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Pause,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  ScanLine,
+  SlidersHorizontal,
+} from "lucide-react";
+import { LibraryIssues } from "./library-issues";
+import { StackCards } from "./stack-cards";
+import { AcquisitionPanel } from "./acquisition-panel";
+type Job = {
+  phase: string;
+  status: string;
+  subject: string;
+  progress_json?: string;
+  processedCount?: number;
+  totalCount?: number;
+};
+type Summary = {
+  paused: boolean;
+  metrics: Record<string, number>;
+  operational: { running: boolean; phase: string; lastError?: string };
+  jobs?: Job[];
+};
+export function CuratorConsole({
+  data,
+  busy,
+  action,
+  section = "overview",
+}: {
+  data: Summary | null;
+  busy: boolean;
+  action: (name: string) => void;
+  section?: string;
+}) {
+  if (!data) return <div role="status">Loading library care…</div>;
+  const active = (data.jobs ?? []).filter((job) => job.status === "running"),
+    issues = Number(data.metrics.issues ?? 0);
+  if (section === "review") return <LibraryIssues />;
+  if (section === "activity")
+    return (
+      <div className="care-workspace">
+        <p className="muted">
+          {data.paused
+            ? "Automatic processing is paused."
+            : data.operational.running
+              ? `Processing ${data.operational.phase}. You can leave this page.`
+              : "Automatic processing is on. Queued work continues at the next cycle."}
+        </p>
+        {data.operational.lastError && (
+          <div className="inline-error">
+            <strong>Last cycle needs attention</strong>
+            <p>{data.operational.lastError}</p>
+            <Link className="text-link" href="/curator/diagnostics">
+              Open diagnostics
+              <ArrowRight />
+            </Link>
+          </div>
+        )}
+        {(data.jobs ?? []).length ? (
+          (data.jobs ?? []).map((job, index) => {
+            let progress: Partial<Job> = {};
+            try {
+              progress = JSON.parse(job.progress_json ?? "{}");
+            } catch {}
+            const total = progress.totalCount ?? 0,
+              done = progress.processedCount ?? 0;
+            return (
+              <article className="activity-row" key={index}>
+                <Clock3 />
+                <div>
+                  <strong>
+                    {job.subject || job.phase.replaceAll("_", " ")}
+                  </strong>
+                  <span>
+                    {job.status} · {job.phase.replaceAll("_", " ")}
+                  </span>
+                  {job.status === "running" && total > 0 && (
+                    <progress max={total} value={done} />
+                  )}
+                </div>
+                {total > 0 && (
+                  <small>
+                    {done} / {total}
+                  </small>
+                )}
+              </article>
+            );
+          })
+        ) : (
+          <div className="empty-state">
+            <CheckCircle2 />
+            <h2>No recent jobs</h2>
+            <p>Background work and its results will appear here.</p>
+          </div>
+        )}
+      </div>
+    );
+  if (section === "diagnostics")
+    return (
+      <div className="care-workspace">
+        <p className="muted">
+          Connections and maintenance for the shared library.
+        </p>
+        <StackCards />
+        <details className="diagnostic-section">
+          <summary>Album acquisition controls</summary>
+          <AcquisitionPanel />
+        </details>
+        <details className="diagnostic-section">
+          <summary>Library processing controls</summary>
+          <p className="muted small">
+            These actions apply to the shared library and all listeners.
+          </p>
+          <div className="button-row">
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => action(data.paused ? "resume" : "pause")}
+            >
+              {data.paused ? <Play /> : <Pause />}
+              {data.paused ? "Resume automation" : "Pause automation"}
+            </button>
+            <button
+              className="secondary-button"
+              disabled={busy || (!data.paused && data.operational.running)}
+              onClick={() => action("scan")}
+            >
+              <ScanLine />
+              Scan now
+            </button>
+          </div>
+          <div className="button-row section">
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => action("retry-errors")}
+            >
+              <RotateCcw />
+              Retry failed work
+            </button>
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => action("retry-categorization")}
+            >
+              Retry incomplete profiles
+            </button>
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => action("clear-cache")}
+            >
+              <RefreshCw />
+              Refresh source cache
+            </button>
+          </div>
+        </details>
+        <Link className="text-link" href="/settings/processing">
+          Processing settings
+          <ArrowRight />
+        </Link>
+      </div>
+    );
+  return (
+    <div className="care-workspace">
+      <div className="notice-panel">
+        <Clock3 />
+        <span>
+          {data.paused
+            ? "Automatic processing is paused."
+            : active.length
+              ? `Background work is running (${active.length} active ${active.length === 1 ? "job" : "jobs"}). No action needed.`
+              : "Automatic processing is on. Queued work continues in the background."}
+        </span>
+      </div>
+      <div className="creation-options">
+        <Link className="creation-option" href="/curator/review">
+          <SlidersHorizontal />
+          <span>
+            <strong>Review metadata</strong>
+            <small>
+              Inspect catalogue matches, artwork, and album groupings
+            </small>
+          </span>
+          <ArrowRight />
+        </Link>
+        <Link className="creation-option" href="/curator/activity">
+          <Clock3 />
+          <span>
+            <strong>Activity</strong>
+            <small>Background work and recent results</small>
+          </span>
+          <ArrowRight />
+        </Link>
+        <Link className="creation-option" href="/curator/diagnostics">
+          <ScanLine />
+          <span>
+            <strong>Diagnostics</strong>
+            <small>Connections, acquisition, and maintenance</small>
+          </span>
+          <ArrowRight />
+        </Link>
+      </div>
+      <p className="muted small section">
+        {Number(
+          data.metrics.files ?? data.metrics.indexedFiles ?? 0,
+        ).toLocaleString()}{" "}
+        tracks indexed. Review decisions and automatic queues are shown
+        separately.
+      </p>
+    </div>
+  );
 }

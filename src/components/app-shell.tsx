@@ -1,9 +1,103 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect,useState } from "react";
-import { Activity,Archive,Disc3,House,ListMusic,LogOut,MoreHorizontal,PlusCircle,Settings,X } from "lucide-react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { Disc3, House, Library, ListMusic } from "lucide-react";
 import type { CuratorUser } from "@/features/auth/session";
-const destinations=[{href:"/home",name:"Home",icon:House,description:"A mix made for you"},{href:"/library",name:"Library",icon:Disc3,description:"Browse and edit music"},{href:"/playlists",name:"Playlists",icon:ListMusic,description:"Create and refine mixes"},{href:"/add",name:"Add Music",icon:PlusCircle,description:"Find and queue albums"},{href:"/curator",name:"Curator",icon:Activity,description:"Automation and health"}];
-const title=(path:string)=>destinations.find(item=>path.startsWith(item.href))?.name??(path.startsWith("/settings")?"Settings":"Music Curator");
-export function AppShell({user,children}:{user:CuratorUser;children:React.ReactNode}){const path=usePathname(),[more,setMore]=useState(false);useEffect(()=>setMore(false),[path]);async function logout(){await fetch("/api/auth/logout",{method:"POST"});location.href="/login"}return <div className="app-frame"><aside className="app-sidebar"><div className="brand"><div className="brand-mark"><Archive/></div><div className="brand-copy"><span>Personal archive</span><strong>Music Curator</strong></div></div><nav>{destinations.map(({href,name,icon:Icon,description})=><Link key={href} href={href} className={path.startsWith(href)?"active":""}><Icon/><span><strong>{name}</strong><small>{description}</small></span></Link>)}</nav><div className="account-panel"><span>{user.displayName.slice(0,1).toUpperCase()}</span><div><strong>{user.displayName}</strong><small>{user.tokenStatus==="active"?"Navidrome connected":"Sign in again required"}</small></div><Link href="/settings" aria-label="Settings"><Settings/></Link></div></aside><main className="app-content"><header className="app-topbar"><div><span className="kicker">Music Curator</span><h1>{title(path)}</h1></div><div className="top-user"><span>{user.displayName}</span><Link href="/settings" aria-label="Open settings"><Settings/></Link></div></header><div className="app-page">{children}</div></main><nav className="mobile-nav" aria-label="Primary">{destinations.slice(0,4).map(({href,name,icon:Icon})=><Link key={href} href={href} className={path.startsWith(href)?"active":""}><Icon/><span>{name.replace(" Music","")}</span></Link>)}<button onClick={()=>setMore(true)} className={more||path.startsWith("/curator")||path.startsWith("/settings")?"active":""}><MoreHorizontal/><span>More</span></button></nav>{more&&<div className="mobile-sheet-backdrop" onMouseDown={event=>event.target===event.currentTarget&&setMore(false)}><section className="mobile-sheet" role="dialog" aria-modal="true" aria-label="More navigation"><header><div><span className="kicker">Signed in as</span><strong>{user.displayName}</strong></div><button onClick={()=>setMore(false)} aria-label="Close menu"><X/></button></header><Link href="/curator"><Activity/>Curator</Link><Link href="/settings"><Settings/>Settings</Link><button onClick={()=>void logout()}><LogOut/>Sign out</button></section></div>}</div>}
+import { readJson } from "./http";
+type Appearance = "system" | "light" | "dark";
+const ListenerContext = createContext<{
+  user: CuratorUser;
+  appearance: Appearance;
+  setAppearance: (value: Appearance) => Promise<void>;
+} | null>(null);
+export function useListener() {
+  const listener = useContext(ListenerContext);
+  if (!listener) throw new Error("Listener context is missing");
+  return listener;
+}
+const destinations = [
+  { href: "/home", name: "Home", icon: House },
+  { href: "/library", name: "Library", icon: Library },
+  { href: "/playlists", name: "Playlists", icon: ListMusic },
+];
+export function AppShell({
+  user,
+  children,
+}: {
+  user: CuratorUser;
+  children: React.ReactNode;
+}) {
+  const path = usePathname(),
+    [appearance, updateAppearance] = useState<Appearance>("system");
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/preferences", {
+      signal: controller.signal,
+      cache: "no-store",
+    })
+      .then((response) => readJson<{ appearance: Appearance }>(response))
+      .then((value) => updateAppearance(value.appearance))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [user.id]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = appearance;
+  }, [appearance]);
+  async function setAppearance(value: Appearance) {
+    await readJson(
+      await fetch("/api/preferences", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ appearance: value }),
+      }),
+    );
+    updateAppearance(value);
+  }
+  const active =
+    path.startsWith("/add") || path.startsWith("/requests")
+      ? "/library"
+      : destinations.find((item) => path.startsWith(item.href))?.href;
+  const links = destinations.map(({ href, name, icon: Icon }) => (
+    <Link
+      key={href}
+      href={href}
+      className={active === href ? "active" : ""}
+      aria-current={active === href ? "page" : undefined}
+    >
+      <Icon aria-hidden="true" />
+      <span>{name}</span>
+    </Link>
+  ));
+  return (
+    <ListenerContext.Provider value={{ user, appearance, setAppearance }}>
+      <div className="app-frame">
+        <a className="skip-link" href="#page-content">
+          Skip to content
+        </a>
+        <aside className="app-sidebar">
+          <Link className="brand" href="/home">
+            <Disc3 aria-hidden="true" />
+            <strong>Curator</strong>
+          </Link>
+          <nav aria-label="Primary">{links}</nav>
+          <Link className="account-panel" href="/settings">
+            <span className="avatar">
+              {user.displayName.slice(0, 1).toUpperCase()}
+            </span>
+            <span>
+              <strong>{user.displayName}</strong>
+              <small>Account &amp; settings</small>
+            </span>
+          </Link>
+        </aside>
+        <main className="app-content" id="page-content">
+          <div className="app-page">{children}</div>
+        </main>
+        <nav className="mobile-nav" aria-label="Primary">
+          {links}
+        </nav>
+      </div>
+    </ListenerContext.Provider>
+  );
+}

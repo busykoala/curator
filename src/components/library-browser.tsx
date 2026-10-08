@@ -1,78 +1,365 @@
 "use client";
-
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
-  CalendarDays, ChevronLeft, ChevronRight, Disc3, ImageOff, ListMusic,
-  Mic2, MoreHorizontal, Music2, Search, Tags, UsersRound, X,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
-import { LibraryEntityDrawer } from "@/components/library-entity-drawer";
-
+import { useListener } from "./app-shell";
+import { ActionSheet } from "./action-sheet";
+import { Artwork, Loading, Notice, PageHeader, entityHref } from "./ui";
+import { readJson } from "./http";
+type Item = {
+  key: string;
+  title: string;
+  subtitle: string;
+  count: number;
+  year: string;
+  artwork: string;
+};
+type Result = { items: Item[]; total: number; page: number; pageSize: number };
+type Options = {
+  genres: string[];
+  years: string[];
+  composers: string[];
+  labels: string[];
+};
 const views = [
-  { key: "albums", label: "Albums", icon: Disc3, primary: true },
-  { key: "artists", label: "Artists", icon: Mic2, primary: true },
-  { key: "songs", label: "Songs", icon: Music2, primary: true },
-  { key: "composers", label: "Composers", icon: UsersRound },
-  { key: "years", label: "Years", icon: CalendarDays },
-  { key: "labels", label: "Labels", icon: Tags },
+  ["albums", "Albums"],
+  ["artists", "Artists"],
+  ["songs", "Songs"],
 ];
-type Item = { key:string; title:string; subtitle:string; count:number; year:string; status:string; artwork:string };
-type Result = { items:Item[]; total:number; page:number; pageSize:number; message?:string };
-type Selection = { view:string; key:string };
-const globalViews = ["artists", "albums", "songs"] as const;
-
 export function LibraryBrowser() {
-  const [view,setView] = useState("albums"), [query,setQuery] = useState(""), [search,setSearch] = useState("");
-  const [page,setPage] = useState(1), [result,setResult] = useState<Result|null>(null);
-  const [global,setGlobal] = useState<Record<string,Result>|null>(null), [loading,setLoading] = useState(true);
-  const [error,setError] = useState(""), [selected,setSelected] = useState<Selection|null>(null);
-  const requestVersion=useRef(0);
-  const request = useCallback(async(nextView:string,nextSearch:string,nextPage=1) => {
-    const params = new URLSearchParams({view:nextView,q:nextSearch,page:String(nextPage)});
-    const response = await fetch(`/api/library/browse?${params}`,{cache:"no-store"});
-    const body = await response.json();
-    if(!response.ok) throw new Error(body.error || "Library unavailable");
-    return body as Result;
-  },[]);
-  const load = useCallback(async() => {
-    const version=++requestVersion.current;
-    setLoading(true); setError("");
+  const router = useRouter(),
+    path = usePathname(),
+    params = useSearchParams(),
+    view = [
+      "albums",
+      "artists",
+      "songs",
+      "composers",
+      "years",
+      "labels",
+    ].includes(params.get("view") ?? "")
+      ? params.get("view")!
+      : "albums";
+  const { user } = useListener();
+  const restored = useRef("");
+  const [retry, setRetry] = useState(0);
+  const [query, setQuery] = useState(params.get("q") ?? ""),
+    [result, setResult] = useState<Result>(),
+    [error, setError] = useState(""),
+    [filters, setFilters] = useState(false),
+    [options, setOptions] = useState<Options>(),
+    [optionsError, setOptionsError] = useState("");
+  const key = params.toString(),
+    page = Number(params.get("page")) || 1;
+  useEffect(() => setQuery(params.get("q") ?? ""), [key]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setError("");
+    setResult(undefined);
+    const p = new URLSearchParams(key);
+    p.set("view", view);
+    void fetch("/api/library/browse?" + p, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then((r) => readJson<Result>(r))
+      .then(setResult)
+      .catch((e) => {
+        if (!controller.signal.aborted) setError(e.message);
+      });
+    return () => controller.abort();
+  }, [key, view, retry]);
+  useEffect(() => {
+    if (!result || restored.current === key) return;
+    restored.current = key;
     try {
-      if(search) {
-        const values = await Promise.all(globalViews.map(item => request(item,search,1)));
-        if(version!==requestVersion.current)return;setGlobal(Object.fromEntries(globalViews.map((item,index) => [item,values[index]]))); setResult(null);
-      } else { const next=await request(view,"",page);if(version!==requestVersion.current)return;setResult(next); setGlobal(null); }
-    } catch(reason) { if(version===requestVersion.current)setError(String(reason)); } finally { if(version===requestVersion.current)setLoading(false); }
-  },[page,request,search,view]);
-  useEffect(() => { void load(); },[load]);
-  useEffect(() => { const timer=setTimeout(() => { setPage(1); setSearch(query.trim()); },280); return () => clearTimeout(timer); },[query]);
-  const total = useMemo(() => global ? Object.values(global).reduce((sum,item) => sum+item.total,0) : result?.total ?? 0,[global,result]);
-  const label = views.find(item => item.key===view)?.label ?? "Library";
-  function switchView(next:string) { setView(next); setPage(1); setSelected(null); setQuery(""); setSearch(""); }
-  function submit(event:FormEvent) { event.preventDefault(); setPage(1); setSearch(query.trim()); }
-  function clearSearch() { setQuery(""); setSearch(""); setPage(1); }
-  function cards(items:Item[],itemView:string) {
-    return <div className={`media-grid ${itemView==="songs"?"song-grid":""}`}>
-      {items.map(item => <button className="media-card" key={`${itemView}:${item.key}`} onClick={() => setSelected({view:itemView,key:item.key})} aria-label={`Open ${item.title}`}>
-        <div className="media-art"><ImageOff aria-hidden="true"/><img src={item.artwork} alt="" loading="lazy" onError={event => { event.currentTarget.style.display="none"; }}/><span className={`media-state ${item.status}`} title={item.status}/></div>
-        <div className="media-copy"><strong title={item.title}>{item.title}</strong><span>{item.subtitle}</span>{item.year&&<small>{item.year}</small>}</div>
-      </button>)}
-    </div>;
+      const saved = sessionStorage.getItem(
+        `curator-library-scroll:${user.id}:${path}?${key}`,
+      );
+      if (saved !== null) {
+        window.scrollTo(0, Number(saved));
+        sessionStorage.removeItem(
+          `curator-library-scroll:${user.id}:${path}?${key}`,
+        );
+      }
+    } catch {}
+  }, [result, key, user.id, path]);
+  useEffect(() => {
+    if (!filters || options) return;
+    const controller = new AbortController();
+    void fetch("/api/library/filters", { signal: controller.signal })
+      .then((r) => readJson<Options>(r))
+      .then(setOptions)
+      .catch((e) => {
+        if (!controller.signal.aborted) setOptionsError(e.message);
+      });
+    return () => controller.abort();
+  }, [filters, options]);
+  function url(p: URLSearchParams) {
+    return path + (p.size ? "?" + p : "");
   }
-  return <div className="library-workspace">
-    <header className="library-commandbar">
-      <div><span className="kicker">Your collection</span><h2>{search?"Search results":label}</h2><p>{loading?"Updating library":`${total.toLocaleString()} ${search?"matches":"items"}`}</p></div>
-      <form className="library-search" role="search" onSubmit={submit}><Search aria-hidden="true"/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search your library" aria-label="Search artists, albums and songs"/>{query&&<button type="button" onClick={clearSearch} aria-label="Clear search"><X/></button>}</form>
-    </header>
-    <nav className="library-viewbar" aria-label="Library views">
-      {views.filter(item=>item.primary).map(({key,label:option,icon:Icon}) => <button key={key} className={view===key&&!search?"active":""} onClick={()=>switchView(key)} aria-current={view===key&&!search?"page":undefined}><Icon/><span>{option}</span></button>)}
-      <details className="library-more"><summary className={!views.find(item=>item.key===view)?.primary&&!search?"active":""}><MoreHorizontal/><span>More</span></summary><div>{views.filter(item=>!item.primary).map(({key,label:option,icon:Icon})=><button key={key} onClick={()=>switchView(key)}><Icon/><span>{option}</span></button>)}</div></details>
-    </nav>
-    {error&&<div className="inline-error">{error}</div>}
-    {loading?<div className="media-grid skeleton-grid">{Array.from({length:15},(_,index)=><div className="media-card skeleton" key={index}/>)}</div>
-      :global?<div className="global-results">{globalViews.map(itemView=>{const group=global[itemView];return <section key={itemView}><div className="result-heading"><h3>{views.find(item=>item.key===itemView)?.label}</h3><span>{group.total.toLocaleString()}</span></div>{group.items.length?cards(group.items.slice(0,10),itemView):<p className="quiet-empty">No matching {itemView}</p>}</section>})}</div>
-      :result?.message?<div className="empty-state"><ListMusic/><h3>Playlists are unavailable</h3><p>{result.message}</p></div>
-      :result&&cards(result.items,view)}
-    {!search&&result&&result.total>result.pageSize&&<div className="pagination"><button disabled={page<=1} onClick={()=>setPage(value=>value-1)}><ChevronLeft/>Previous</button><span>{page} / {Math.ceil(result.total/result.pageSize)}</span><button disabled={page>=Math.ceil(result.total/result.pageSize)} onClick={()=>setPage(value=>value+1)}>Next<ChevronRight/></button></div>}
-    {selected&&<LibraryEntityDrawer view={selected.view} entityKey={selected.key} onClose={()=>setSelected(null)} onSaved={load}/>} 
-  </div>;
+  function change(name: string, value: string) {
+    const p = new URLSearchParams(key);
+    value ? p.set(name, value) : p.delete(name);
+    if (name !== "page") p.delete("page");
+    router.push(url(p), { scroll: false });
+  }
+  function search(event: FormEvent) {
+    event.preventDefault();
+    change("q", query.trim());
+  }
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget),
+      p = new URLSearchParams(key);
+    for (const name of ["genre", "year", "composer", "label"]) {
+      const value = String(values.get(name) || "");
+      value ? p.set(name, value) : p.delete(name);
+    }
+    p.delete("page");
+    router.push(url(p), { scroll: false });
+    setFilters(false);
+  }
+  const from = url(new URLSearchParams(key)),
+    activeFilters = ["genre", "year", "composer", "label"].filter((name) =>
+      params.get(name),
+    );
+  return (
+    <div className="library-workspace">
+      <PageHeader
+        title="Library"
+        actions={
+          <Link className="secondary-button" href="/add">
+            <Plus />
+            Add music
+          </Link>
+        }
+      />
+      <nav className="view-tabs" aria-label="Library views">
+        {views.map(([v, label]) => (
+          <Link
+            key={v}
+            href={(() => {
+              const p = new URLSearchParams(key);
+              p.set("view", v);
+              p.delete("page");
+              return url(p);
+            })()}
+            scroll={false}
+            className={view === v ? "selected" : ""}
+            aria-current={view === v ? "page" : undefined}
+          >
+            {label}
+          </Link>
+        ))}
+      </nav>
+      <form className="library-searchbar" onSubmit={search}>
+        <label className="library-search">
+          <Search />
+          <input
+            type="search"
+            aria-label="Search your library"
+            placeholder="Search your library"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <button className="secondary-button" type="submit">
+          Search
+        </button>
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Filter library"
+          onClick={() => setFilters(true)}
+        >
+          <SlidersHorizontal />
+        </button>
+      </form>
+      {activeFilters.length > 0 && (
+        <div className="tag-row">
+          {activeFilters.map((name) => (
+            <button
+              className="filter-chip"
+              key={name}
+              onClick={() => change(name, "")}
+            >
+              {params.get(name)}
+              <X size={14} />
+              <span className="sr-only">Clear {name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="library-toolbar">
+        <span>
+          {result
+            ? `${result.total.toLocaleString()} ${view}`
+            : "Updating library…"}
+        </span>
+        <label>
+          Sort{" "}
+          <select
+            aria-label="Sort library"
+            value={params.get("sort") ?? "name"}
+            onChange={(e) => change("sort", e.target.value)}
+          >
+            <option value="name">Name</option>
+            <option value="recent">Recently updated</option>
+          </select>
+        </label>
+      </div>
+      {error ? (
+        <Notice error>
+          {error}
+          <button
+            className="text-button"
+            onClick={() => setRetry((n) => n + 1)}
+          >
+            Reload
+          </button>
+        </Notice>
+      ) : !result ? (
+        <Loading>Loading your collection…</Loading>
+      ) : result.items.length ? (
+        <div
+          className={view === "albums" ? "media-grid" : "library-result-list"}
+        >
+          {result.items.map((item) => (
+            <Link
+              className={
+                view === "albums" ? "media-card" : "library-result-row"
+              }
+              onClick={() => {
+                try {
+                  sessionStorage.setItem(
+                    `curator-library-scroll:${user.id}:${path}?${key}`,
+                    String(window.scrollY),
+                  );
+                } catch {}
+              }}
+              href={entityHref(view, item.key, from)}
+              key={item.key}
+            >
+              <Artwork src={item.artwork} />
+              <span className="media-copy">
+                <strong>{item.title}</strong>
+                <span>{item.subtitle}</span>
+                {item.year && <small>{item.year}</small>}
+              </span>
+              {view !== "albums" && <ArrowRight />}
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <h2>
+            {params.get("q") || activeFilters.length
+              ? "No matches"
+              : "No music here yet"}
+          </h2>
+          <p>
+            {params.get("q") || activeFilters.length
+              ? "Try another search or clear your filters."
+              : "Add an album to start your collection."}
+          </p>
+          <Link
+            className="secondary-button"
+            href={params.get("q") || activeFilters.length ? "/library" : "/add"}
+          >
+            {params.get("q") || activeFilters.length
+              ? "Clear search and filters"
+              : "Add music"}
+          </Link>
+        </div>
+      )}
+      {result && result.total > result.pageSize && (
+        <nav className="pagination" aria-label="Result pages">
+          <button
+            className="secondary-button"
+            disabled={page <= 1}
+            onClick={() => change("page", String(page - 1))}
+          >
+            <ChevronLeft />
+            Previous
+          </button>
+          <span>
+            {page} / {Math.ceil(result.total / result.pageSize)}
+          </span>
+          <button
+            className="secondary-button"
+            disabled={page >= Math.ceil(result.total / result.pageSize)}
+            onClick={() => change("page", String(page + 1))}
+          >
+            Next
+            <ChevronRight />
+          </button>
+        </nav>
+      )}
+      <footer className="library-footer">
+        <Link className="text-link" href="/requests">
+          Your requests <ArrowRight />
+        </Link>
+        <Link className="text-link" href="/curator/review">
+          Review metadata <ArrowRight />
+        </Link>
+      </footer>
+      {filters && (
+        <ActionSheet
+          title="Filter your library"
+          close={() => setFilters(false)}
+        >
+          {optionsError ? (
+            <Notice error>{optionsError}</Notice>
+          ) : !options ? (
+            <Loading>Reading library filters…</Loading>
+          ) : (
+            <form onSubmit={applyFilters} className="form-stack">
+              {[
+                ["genre", "Genre", options.genres],
+                ["year", "Year", options.years],
+                ["composer", "Composer", options.composers],
+                ["label", "Label", options.labels],
+              ].map(([name, label, values]) => (
+                <label key={String(name)}>
+                  <span>{String(label)}</span>
+                  <select
+                    name={String(name)}
+                    defaultValue={params.get(String(name)) ?? ""}
+                  >
+                    <option value="">Any {String(label).toLowerCase()}</option>
+                    {(values as string[]).map((value) => (
+                      <option key={value}>{value}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+              <div className="button-row">
+                <button className="primary-button">Show results</button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => {
+                    router.push("/library?view=" + view);
+                    setFilters(false);
+                  }}
+                >
+                  Clear filters
+                </button>
+              </div>
+            </form>
+          )}
+        </ActionSheet>
+      )}
+    </div>
+  );
 }

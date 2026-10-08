@@ -1,4 +1,8 @@
-import { acquireChatLease, currentChatItems, releaseChatLease } from "./chat-state";
+import {
+  acquireChatLease,
+  currentChatItems,
+  releaseChatLease,
+} from "./chat-state";
 import { createHash } from "node:crypto";
 import { db } from "@/features/db/client";
 import {
@@ -6,18 +10,11 @@ import {
   replaceManagedPlaylist,
   unresolvedNavidromeCandidates,
 } from "@/features/integrations/navidrome";
-import {
-  type ListeningProfile,
-  norm,
-  scoreCandidate,
-} from "./candidate-score";
+import { type ListeningProfile, norm, scoreCandidate } from "./candidate-score";
 import { getPlaylist, markRun, setNavidromeId } from "./repository";
 import { sequenceJourney } from "./sequence";
 import { playlistAwaitingAcquisition } from "./discovery";
-import type {
-  PlaylistCandidate,
-  PlaylistDefinition,
-} from "./types";
+import type { PlaylistCandidate, PlaylistDefinition } from "./types";
 
 type Row = {
   id: number;
@@ -28,7 +25,11 @@ type Row = {
 };
 
 function values(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(String) : value ? [String(value)] : [];
+  return Array.isArray(value)
+    ? value.map(String)
+    : value
+      ? [String(value)]
+      : [];
 }
 
 function trackTitle(tags: Record<string, unknown>) {
@@ -84,7 +85,7 @@ function activeFeedback(id: number) {
     .prepare(
       "SELECT playlist_id,file_id,artist,action FROM playlist_feedback WHERE owner_user_id=(SELECT owner_user_id FROM smart_playlists WHERE id=?) AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (playlist_id=? OR playlist_id IS NULL)",
     )
-    .all(id,id) as Array<{
+    .all(id, id) as Array<{
     file_id: number;
     artist: string;
     action: string;
@@ -157,7 +158,8 @@ function select(
     const pinned = feedback.pins.has(item.fileId);
     const retainedCount = chosen.filter((value) => value.retained).length;
     if (retained && !pinned && retainedCount >= retain) continue;
-    if (!addable(item, pinned, definition, artists, albums, recordings)) continue;
+    if (!addable(item, pinned, definition, artists, albums, recordings))
+      continue;
     chosen.push({ ...item, retained });
     if (chosen.length >= candidateTarget) break;
   }
@@ -208,10 +210,17 @@ function addable(
 const hash = (value: string) =>
   parseInt(createHash("sha1").update(value).digest("hex").slice(0, 8), 16);
 
-export async function generatePlaylist(id: number, preview = false, heldChatLease?: string) {
+export async function generatePlaylist(
+  id: number,
+  preview = false,
+  heldChatLease?: string,
+) {
   const definition = getPlaylist(id);
   if (!definition) throw new Error("Playlist not found");
-  const lease = definition.category === "chat" && !heldChatLease ? acquireChatLease(id) : undefined;
+  const lease =
+    definition.category === "chat" && !heldChatLease
+      ? acquireChatLease(id)
+      : undefined;
   try {
     return await generatePlaylistRun(definition, preview);
   } finally {
@@ -219,7 +228,10 @@ export async function generatePlaylist(id: number, preview = false, heldChatLeas
   }
 }
 
-async function generatePlaylistRun(definition: PlaylistDefinition, preview: boolean) {
+async function generatePlaylistRun(
+  definition: PlaylistDefinition,
+  preview: boolean,
+) {
   const id = definition.id;
   const configHash = createHash("sha256")
     .update(JSON.stringify(definition))
@@ -228,15 +240,41 @@ async function generatePlaylistRun(definition: PlaylistDefinition, preview: bool
     .prepare(
       "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,owner_user_id) VALUES (?,'running',?,?,?) RETURNING id",
     )
-    .get(id, preview ? 1 : 0, configHash, definition.ownerUserId) as { id: number };
+    .get(id, preview ? 1 : 0, configHash, definition.ownerUserId) as {
+    id: number;
+  };
 
   try {
-    const listening = definition.category === "chat" ? undefined : (await navidromeListeningProfile(definition.ownerUserId).catch(() => ({ frequent: [], starred: [] }))) as ListeningProfile;
-    let items = definition.category === "chat" ? currentChatItems(id) : select(definition, listening);
+    const listening =
+      definition.category === "chat"
+        ? undefined
+        : ((await navidromeListeningProfile(definition.ownerUserId).catch(
+            () => ({ frequent: [], starred: [] }),
+          )) as ListeningProfile);
+    let items =
+      definition.category === "chat"
+        ? currentChatItems(id)
+        : select(definition, listening);
     if (definition.category === "chat") {
-      const feedback=activeFeedback(id);
-      const available=new Set((db().prepare("SELECT id FROM files WHERE status='written'").all() as Array<{id:number}>).map(row=>row.id));
-      if(items.some(item=>!available.has(item.fileId)||feedback.excluded.has(item.fileId)||feedback.artists.has(norm(item.artist))))throw new Error("Some selected songs are unavailable or excluded. Ask the chat to replace them first.");
+      const feedback = activeFeedback(id);
+      const available = new Set(
+        (
+          db()
+            .prepare("SELECT id FROM files WHERE status='written'")
+            .all() as Array<{ id: number }>
+        ).map((row) => row.id),
+      );
+      if (
+        items.some(
+          (item) =>
+            !available.has(item.fileId) ||
+            feedback.excluded.has(item.fileId) ||
+            feedback.artists.has(norm(item.artist)),
+        )
+      )
+        throw new Error(
+          "Some selected songs are unavailable or excluded. Ask the chat to replace them first.",
+        );
     }
     let navidromeId = definition.navidromePlaylistId;
     let songIds = new Map<number, string>();
@@ -247,20 +285,29 @@ async function generatePlaylistRun(definition: PlaylistDefinition, preview: bool
         attempt < Math.max(12, definition.config.targetTracks);
         attempt += 1
       ) {
-        const unresolved = await unresolvedNavidromeCandidates(items, definition.ownerUserId);
+        const unresolved = await unresolvedNavidromeCandidates(
+          items,
+          definition.ownerUserId,
+        );
         if (!unresolved.length) break;
-        if(definition.category === "chat")break;
+        if (definition.category === "chat") break;
         const ignoredBefore = ignored.size;
         unresolved.forEach((item) => ignored.add(item.fileId));
         items = select(definition, listening, ignored);
         if (
           ignored.size === ignoredBefore ||
           items.length < definition.config.targetTracks
-        ) break;
+        )
+          break;
       }
-      const unresolved = await unresolvedNavidromeCandidates(items, definition.ownerUserId);
+      const unresolved = await unresolvedNavidromeCandidates(
+        items,
+        definition.ownerUserId,
+      );
       if (unresolved.length || items.length < definition.config.targetTracks) {
-        throw new Error(`Only ${items.length - unresolved.length} of ${definition.config.targetTracks} tracks have unambiguous Navidrome identity`);
+        throw new Error(
+          `Only ${items.length - unresolved.length} of ${definition.config.targetTracks} tracks have unambiguous Navidrome identity`,
+        );
       }
       const synced = await replaceManagedPlaylist(definition, items);
       navidromeId = synced.playlistId;
@@ -297,7 +344,16 @@ async function generatePlaylistRun(definition: PlaylistDefinition, preview: bool
         "UPDATE playlist_runs SET status='complete',detail_json=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
       )
       .run(JSON.stringify(detail), run.id);
-    console.log(JSON.stringify({event:"playlist_run_complete",playlistId:id,ownerUserId:definition.ownerUserId,preview,tracks:items.length,at:new Date().toISOString()}));
+    console.log(
+      JSON.stringify({
+        event: "playlist_run_complete",
+        playlistId: id,
+        ownerUserId: definition.ownerUserId,
+        preview,
+        tracks: items.length,
+        at: new Date().toISOString(),
+      }),
+    );
     return { runId: run.id, definition, items, detail };
   } catch (error) {
     db()
@@ -305,7 +361,16 @@ async function generatePlaylistRun(definition: PlaylistDefinition, preview: bool
         "UPDATE playlist_runs SET status='failed',error=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
       )
       .run(String(error), run.id);
-    console.error(JSON.stringify({event:"playlist_run_failed",playlistId:id,ownerUserId:definition.ownerUserId,preview,error:String(error),at:new Date().toISOString()}));
+    console.error(
+      JSON.stringify({
+        event: "playlist_run_failed",
+        playlistId: id,
+        ownerUserId: definition.ownerUserId,
+        preview,
+        error: String(error),
+        at: new Date().toISOString(),
+      }),
+    );
     throw error;
   }
 }
@@ -318,7 +383,11 @@ export async function generateEnabledPlaylists() {
   for (const row of rows) {
     const acquisition = playlistAwaitingAcquisition(row.name);
     if (acquisition) {
-      results.push({ playlistId: row.id, waitingForAcquisition: true, acquisition });
+      results.push({
+        playlistId: row.id,
+        waitingForAcquisition: true,
+        acquisition,
+      });
       continue;
     }
     try {
@@ -328,4 +397,119 @@ export async function generateEnabledPlaylists() {
     }
   }
   return results;
+}
+
+// Save the exact reviewed ordering. Never silently replace unresolved preview
+// songs with a different selection during the explicit save action.
+export async function savePlaylistPreview(id: number, previewRunId: number) {
+  const definition = getPlaylist(id);
+  if (!definition) throw new Error("Playlist not found");
+  const lease = acquireChatLease(id);
+  try {
+    const preview = db()
+      .prepare(
+        "SELECT id,config_hash FROM playlist_runs WHERE id=? AND playlist_id=? AND preview=1 AND status='complete'",
+      )
+      .get(previewRunId, id) as { id: number; config_hash: string } | undefined;
+    if (
+      !preview ||
+      preview.config_hash !==
+        createHash("sha256").update(JSON.stringify(definition)).digest("hex")
+    )
+      throw new Error(
+        "Playlist settings changed. Create a new preview before saving.",
+      );
+    const rows = db()
+      .prepare(
+        "SELECT i.*,f.artist_name,f.album_name,f.status file_status,f.tags_json,p.profile_json FROM playlist_items i JOIN files f ON f.id=i.file_id LEFT JOIN track_profiles p ON p.file_id=f.id WHERE i.run_id=? ORDER BY i.position",
+      )
+      .all(previewRunId) as Array<{
+      file_id: number;
+      artist_name: string;
+      album_name: string;
+      file_status: string;
+      tags_json: string;
+      profile_json: string | null;
+      score: number;
+      origin: string;
+      reason: string;
+      retained: number;
+    }>;
+    const preferences = activeFeedback(id);
+    if (
+      rows.some(
+        (row) =>
+          row.file_status !== "written" ||
+          preferences.excluded.has(row.file_id) ||
+          preferences.artists.has(norm(row.artist_name)),
+      )
+    )
+      throw new Error(
+        "Some preview songs are unavailable or excluded. Create a new preview.",
+      );
+    const items = rows.map((row) => ({
+      fileId: row.file_id,
+      title: trackTitle(JSON.parse(row.tags_json)),
+      artist: row.artist_name,
+      album: row.album_name,
+      year: 0,
+      profile: JSON.parse(row.profile_json ?? "{}"),
+      score: row.score,
+      origin: row.origin,
+      reason: row.reason,
+      retained: Boolean(row.retained),
+    })) as PlaylistCandidate[];
+    if (items.length < definition.config.targetTracks)
+      throw new Error(
+        "Broaden your settings or reduce the song count before saving.",
+      );
+    if (
+      (await unresolvedNavidromeCandidates(items, definition.ownerUserId))
+        .length
+    )
+      throw new Error(
+        "Some preview songs have unresolved Navidrome identity. Your saved playlist has not changed.",
+      );
+    const synced = await replaceManagedPlaylist(definition, items);
+    db().transaction(() => {
+      const run = db()
+        .prepare(
+          "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,owner_user_id,detail_json,finished_at) VALUES (?,'complete',0,?,?,?,CURRENT_TIMESTAMP) RETURNING id",
+        )
+        .get(
+          id,
+          preview.config_hash,
+          definition.ownerUserId,
+          JSON.stringify({
+            tracks: items.length,
+            navidromeId: synced.playlistId,
+          }),
+        ) as { id: number };
+      const insert = db().prepare(
+        "INSERT INTO playlist_items(run_id,playlist_id,file_id,navidrome_song_id,position,score,origin,reason,retained) VALUES (?,?,?,?,?,?,?,?,?)",
+      );
+      items.forEach((item, index) =>
+        insert.run(
+          run.id,
+          id,
+          item.fileId,
+          synced.songIds.get(item.fileId),
+          index,
+          item.score,
+          item.origin,
+          item.reason,
+          item.retained ? 1 : 0,
+        ),
+      );
+      setNavidromeId(id, synced.playlistId);
+      markRun(id);
+    })();
+    return {
+      definition: getPlaylist(id)!,
+      items,
+      detail: { tracks: items.length, navidromeId: synced.playlistId },
+    };
+  } finally {
+    releaseChatLease(id, lease);
+  }
 }

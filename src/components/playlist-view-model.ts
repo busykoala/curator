@@ -19,7 +19,12 @@ export type PlaylistDefinition = {
   ownerDisplayName?: string;
   ownerTokenStatus?: string;
   navidromePlaylistId?: string | null;
-  chatJob?: {status: "queued" | "running" | "completed" | "failed";updatedAt:number} | null;
+  unreadReply?: boolean;
+  chatJob?: {
+    syncError?: string;
+    status: "queued" | "running" | "completed" | "failed";
+    updatedAt: number;
+  } | null;
   runs?: Array<{ status: string; createdAt?: string; finishedAt?: string }>;
 };
 
@@ -40,11 +45,13 @@ export type PreviewItem = {
   artist: string;
   album: string;
   reason: string;
+  albumKey?: string;
   profile?: Record<string, unknown>;
   retained?: boolean;
 };
 
 export type PlaylistPreview = {
+  runId?: number | null;
   definition: PlaylistDefinition;
   items: PreviewItem[];
   detail?: Record<string, unknown>;
@@ -67,7 +74,12 @@ export const categoryOrder = [
 ] as const;
 
 export const categoryMeta: Record<string, CategoryMeta> = {
-  chat: { label: "AI Chat", shortLabel: "Talk it through", description: "Describe a mix and refine it in conversation.", icon: MessageCircle },
+  chat: {
+    label: "Chat",
+    shortLabel: "Talk it through",
+    description: "Describe a mix and refine it in conversation.",
+    icon: MessageCircle,
+  },
   discovery: {
     label: "Discovery",
     shortLabel: "New music",
@@ -75,19 +87,19 @@ export const categoryMeta: Record<string, CategoryMeta> = {
     icon: Compass,
   },
   depth: {
-    label: "Deep Dive",
+    label: "Deep dive",
     shortLabel: "Go deeper",
     description: "Deep cuts and connections inside your collection.",
     icon: Telescope,
   },
   mood: {
-    label: "Mood & Occasion",
+    label: "Mood or occasion",
     shortLabel: "Set a mood",
     description: "Purposeful mixes for a place, feeling, or activity.",
     icon: MoonStar,
   },
   journey: {
-    label: "Progressive Journey",
+    label: "Journey",
     shortLabel: "Build an arc",
     description: "A deliberate opening, rise, peak, release, and ending.",
     icon: Route,
@@ -95,7 +107,8 @@ export const categoryMeta: Record<string, CategoryMeta> = {
   rediscovery: {
     label: "Rediscovery",
     shortLabel: "Bring it back",
-    description: "Revisit favorites and highly rated music you have not played recently.",
+    description:
+      "Revisit favorites and highly rated music you have not played recently.",
     icon: History,
   },
 };
