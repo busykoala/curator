@@ -100,3 +100,17 @@ test("long AI prose is bounded without discarding valid songs or spending a repa
   assert.equal(result.items[0].fileId,1);assert.ok(result.reply.length<=1600);assert.ok(result.reply.endsWith("…"));assert.ok(result.guidance.length<=2000);assert.ok(result.items[0].reason.length<=180);
   assert.equal(result.detail.usage.total_tokens,20);assert.equal(result.detail.repairDurationMs,undefined);
 });
+
+test("chat search surfaces only songs meeting active requirements and marks incompatible current songs",()=>{
+  let allowed=new Set([1]);
+  const tools=libraryTools(library,new Set(),[],8,()=>allowed);
+  const overview=tools.find(tool=>tool.name==="library_overview")!.execute({}) as {tracks:number};
+  assert.equal(overview.tracks,1);
+  const search=tools.find(tool=>tool.name==="search_library")!.execute(filters) as {tracks:Array<{fileId:number}>};
+  assert.deepEqual(search.tracks.map(item=>item.fileId),[1]);
+  const inspect=tools.find(tool=>tool.name==="inspect_tracks")!.execute({fileIds:[1,2]}) as {tracks:Array<{fileId:number;meetsRequirements:boolean}>};
+  assert.deepEqual(inspect.tracks.map(item=>[item.fileId,item.meetsRequirements]),[[1,true],[2,false]]);
+  allowed=new Set([2]);
+  const updated=tools.find(tool=>tool.name==="search_library")!.execute(filters) as {tracks:Array<{fileId:number}>};
+  assert.deepEqual(updated.tracks.map(item=>item.fileId),[2]);
+});
