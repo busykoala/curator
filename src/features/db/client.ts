@@ -8,7 +8,15 @@ function tableColumns(instance: Database.Database, table: string) { return new S
 function addColumns(instance: Database.Database, table: string, additions: ReadonlyArray<readonly [string, string]>) { const existing = tableColumns(instance, table); for (const [name, type] of additions) if (!existing.has(name)) instance.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`); }
 function migrate(instance: Database.Database) {
   const applied = new Set((instance.prepare("SELECT version FROM schema_migrations").all() as Array<{ version: number }>).map((row) => row.version));
-  const migration = (version: number, run: () => void) => { if (applied.has(version)) return; instance.transaction(() => { run(); instance.prepare("INSERT INTO schema_migrations(version) VALUES (?)").run(version); })(); };
+  const migration = (version: number, run: () => void) => {
+    if (applied.has(version)) return;
+    // Web and supervised workers can start together. Serialize the migration and
+    // recheck inside its write transaction rather than trusting an earlier read.
+    instance.transaction(() => {
+      if (instance.prepare("SELECT 1 FROM schema_migrations WHERE version=?").get(version)) return;
+      run(); instance.prepare("INSERT INTO schema_migrations(version) VALUES (?)").run(version);
+    }).immediate();
+  };
   migration(3, () => {
     addColumns(instance, "smart_playlists", [["owner_user_id", "INTEGER REFERENCES curator_users(id)"]]);
     addColumns(instance, "playlist_runs", [["owner_user_id", "INTEGER REFERENCES curator_users(id)"]]);
@@ -65,12 +73,17 @@ export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;
   mkdirSync(dirname(config.DATABASE_PATH), { recursive: true }); const instance = new Database(config.DATABASE_PATH);
   instance.pragma("journal_mode = WAL"); instance.pragma("synchronous = NORMAL"); instance.pragma("foreign_keys = ON"); instance.pragma("busy_timeout = 2000");
-  instance.exec(schemaSql);
-  const jobColumns = new Set((instance.prepare("PRAGMA table_info(jobs)").all() as Array<{ name: string }>).map((row) => row.name));
-  for (const [name, type] of [["heartbeat_at","TEXT"],["progress_json","TEXT DEFAULT '{}'"],["error_detail","TEXT"]] as const) if (!jobColumns.has(name)) instance.exec(`ALTER TABLE jobs ADD COLUMN ${name} ${type}`);
-  const discovery = new Set((instance.prepare("PRAGMA table_info(discovery_candidates)").all() as Array<{ name: string }>).map((row) => row.name));
-  for (const [name,type] of [["lidarr_artist_id","INTEGER"],["lidarr_album_id","INTEGER"],["queued_at","TEXT"],["last_search_at","TEXT"],["last_checked_at","TEXT"],["last_progress_at","TEXT"],["last_size_left","INTEGER"],["search_attempts","INTEGER NOT NULL DEFAULT 0"],["cooldown_until","TEXT"],["imported_at","TEXT"]] as const) if(!discovery.has(name))instance.exec(`ALTER TABLE discovery_candidates ADD COLUMN ${name} ${type}`);
-  instance.prepare("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)").run(); migrate(instance); globalDb.curatorDb = instance; return instance;
+  try {
+    instance.transaction(() => {
+      instance.exec(schemaSql);
+      addColumns(instance, "jobs", [["heartbeat_at","TEXT"],["progress_json","TEXT DEFAULT '{}'"],["error_detail","TEXT"]]);
+      addColumns(instance, "discovery_candidates", [["lidarr_artist_id","INTEGER"],["lidarr_album_id","INTEGER"],["queued_at","TEXT"],["last_search_at","TEXT"],["last_checked_at","TEXT"],["last_progress_at","TEXT"],["last_size_left","INTEGER"],["search_attempts","INTEGER NOT NULL DEFAULT 0"],["cooldown_until","TEXT"],["imported_at","TEXT"]]);
+      instance.prepare("INSERT OR IGNORE INTO schema_migrations(version) VALUES (2)").run();
+      migrate(instance);
+    }).immediate();
+  } catch (error) { instance.close(); throw error; }
+  globalDb.curatorDb = instance;
+  return instance;
 }
 export function stateGet(key: string, fallback = ""): string { return (db().prepare("SELECT value FROM state WHERE key=?").get(key) as { value: string } | undefined)?.value ?? fallback; }
 export function stateSet(key: string, value: string): void { db().prepare("INSERT INTO state(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP").run(key, value); }
