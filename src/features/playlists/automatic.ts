@@ -14,11 +14,11 @@ export async function ensureAutomaticPlaylists(ownerUserId?: number) {
   let created = 0;
 
   for (const item of defaults) {
-    if (ensurePlaylist({ ...item, enabled: true, ownerUserId })) created += 1;
+    if (ensurePlaylist({ ...item, enabled: true, ownerUserId }, String(item.key))) created += 1;
   }
 
   const names = new Set(defaults.map((item) => String(item.name)));
-  const removed = removeUnusedAutomaticPlaylists(ownerUserId, names);
-  const active = listPlaylists(ownerUserId).filter((item) => names.has(item.name));
+  const removed = removeUnusedAutomaticPlaylists(ownerUserId, new Set(defaults.map(item => String(item.key))));
+  const active = listPlaylists(ownerUserId).filter((item) => item.automatic);
   return { created, removed, total: active.length, names: [...names] };
 }

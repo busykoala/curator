@@ -107,7 +107,9 @@ export function PlaylistStudio() {
         }),
       );
       setEditor(undefined);
-      setNotice("Playlist saved. Curator will maintain it automatically.");
+      setNotice(value.automatic
+        ? "This playlist is now yours. Your settings will be kept."
+        : value.enabled ? "Playlist saved. Nightly refresh is on." : "Playlist saved. Nightly refresh is paused.");
       await load(currentUserId);
     } catch (error) {
       setNotice(String(error));
@@ -117,7 +119,7 @@ export function PlaylistStudio() {
   }
 
   async function remove(item: PlaylistDefinition) {
-    if (!item.id || !window.confirm("Remove " + item.name + "?")) return;
+    if (!item.id || !window.confirm("Remove " + item.name + " from Curator and Navidrome?" + (item.automatic ? " This Curator pick will not be created again." : ""))) return;
     try {
       await readJson(
         await fetch("/api/playlists/" + item.id, { method: "DELETE" }),
@@ -196,15 +198,10 @@ export function PlaylistStudio() {
   }
 
   const connectionConfigured = data.connection.configured;
-  const enabled = data.definitions.filter((item) => item.enabled).length;
-  const playlists = [...data.definitions].sort((left, right) => {
-    const leftManaged =
-      Boolean(left.automatic);
-    const rightManaged =
-      Boolean(right.automatic);
-    return Number(rightManaged) - Number(leftManaged) ||
-      left.name.localeCompare(right.name);
-  });
+  const enabled = data.definitions.filter((item) => item.enabled && item.category !== "chat").length;
+  const playlists = [...data.definitions].sort((left, right) => left.name.localeCompare(right.name));
+  const curatorPicks = playlists.filter(item => item.automatic);
+  const personalPlaylists = playlists.filter(item => !item.automatic);
 
   function row(item: PlaylistDefinition) {
     const managed =
@@ -219,7 +216,7 @@ export function PlaylistStudio() {
         </span>
         <div className="playlist-row-copy">
           <span>
-            {managed ? "Automatic · " + meta.label : meta.label}
+            {meta.label}
           </span>
           <h3>{item.name}</h3>
           <p>
@@ -237,7 +234,7 @@ export function PlaylistStudio() {
           </span>
           <span>
             <strong>{item.category === "chat" ? "Chat" : Number(item.config.rotationPercent ?? 30) + "%"}</strong>
-            {item.category === "chat" ? "updates" : "nightly change"}
+            {item.category === "chat" ? "updates" : "change per refresh"}
           </span>
           <span>
             <strong>{latest?.status || "Ready"}</strong>
@@ -247,13 +244,16 @@ export function PlaylistStudio() {
         <div className="playlist-row-actions">
           {item.category !== "chat" && <button
             className={"playlist-toggle " + (item.enabled ? "on" : "")}
+            aria-label={`${item.enabled ? "Pause" : "Enable"} nightly refresh for ${item.name}`}
+            title={item.enabled ? "Pause nightly refresh" : "Enable nightly refresh"}
+            aria-pressed={item.enabled}
             onClick={() => void toggle(item)}
           >
             {item.enabled ? <Pause /> : <Play />}
-            {item.enabled ? "On" : "Off"}
+            {item.enabled ? "Nightly" : "Paused"}
           </button>}
           {item.category === "chat" && <button aria-label={`Chat about ${item.name}`} title="Continue playlist chat" onClick={() => setChat({initial:item})}><MessageCircle /></button>}
-          {!managed && item.category !== "chat" && (
+          {item.category !== "chat" && (
             <button aria-label={`Edit ${item.name}`} title="Edit playlist" onClick={() => setEditor(item)}>
               <SlidersHorizontal />
             </button>
@@ -274,16 +274,14 @@ export function PlaylistStudio() {
           >
             <RefreshCw />
           </button>
-          {!managed && (
-            <button
+          <button
               className="danger-icon"
               aria-label={`Remove ${item.name}`}
               title="Remove playlist"
               onClick={() => void remove(item)}
             >
               <Trash2 />
-            </button>
-          )}
+          </button>
         </div>
       </article>
     );
@@ -293,7 +291,7 @@ export function PlaylistStudio() {
     <div className="playlist-studio playlist-studio-v2">
       <header className="playlist-page-head">
         <div>
-          <span className="kicker">Automatic nightly playlists</span>
+          <span className="kicker">Your playlist studio</span>
           <h2>Your library, kept in motion</h2>
           <p>
             Explore your collection, rediscover favorites, or shape a mix in conversation.
@@ -325,8 +323,8 @@ export function PlaylistStudio() {
       <section className="playlist-statusbar">
         <div>
           <span className="status-pulse" />
-          <strong>{enabled} active</strong>
-          <span>of {data.definitions.length} playlists</span>
+          <strong>{enabled} refresh nightly</strong>
+          <span>· {data.definitions.length} playlists in total</span>
         </div>
         <div>
           <Clock3 />
@@ -377,17 +375,32 @@ export function PlaylistStudio() {
         </div>
       </section>
 
-      <section className="playlist-list-section">
+      <section className="playlist-list-section" aria-labelledby="curator-picks-title">
         <header>
           <div>
-            <span className="kicker">Managed collection</span>
-            <h2>Playlists for {data.selectedUser.displayName}</h2>
+            <span className="kicker">Chosen from your listening</span>
+            <h2 id="curator-picks-title">Curator picks</h2>
+            <p>Ready-made directions for {data.selectedUser.displayName}. Edit a pick to make it yours, or remove it to dismiss it.</p>
           </div>
-          <span>{playlists.length} total</span>
+          <span>{curatorPicks.length} playlists</span>
         </header>
         <div className="playlist-row-list">
-          {playlists.map(row)}
+          {curatorPicks.map(row)}
         </div>
+        {!curatorPicks.length && <p className="playlist-group-empty">No Curator picks right now. Suggestions come from your listening and favorites; removed picks stay dismissed.</p>}
+      </section>
+
+      <section className="playlist-list-section" aria-labelledby="personal-playlists-title">
+        <header>
+          <div>
+            <span className="kicker">Your directions</span>
+            <h2 id="personal-playlists-title">Your playlists</h2>
+            <p>You choose the settings. Nightly refresh is optional; AI chat playlists change through conversation.</p>
+          </div>
+          <span>{personalPlaylists.length} playlists</span>
+        </header>
+        <div className="playlist-row-list">{personalPlaylists.map(row)}</div>
+        {!personalPlaylists.length && <p className="playlist-group-empty">Create a playlist above, or edit a Curator pick to make it yours.</p>}
       </section>
 
       {data.acquisitions.length > 0 && (

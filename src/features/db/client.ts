@@ -44,6 +44,17 @@ function migrate(instance: Database.Database) {
     instance.exec("DELETE FROM listening_clusters");
     instance.exec("DELETE FROM state WHERE key LIKE 'listening_clusters_refreshed:%'");
   });
+  migration(8, () => {
+    // Bind existing picks before their first edit or deletion. A NULL playlist
+    // records a dismissed pick; stable cluster keys survive renames and refreshes.
+    instance.exec(`INSERT OR IGNORE INTO automatic_playlist_choices(owner_user_id,default_key,playlist_id)
+      SELECT p.owner_user_id,'depth:' || c.id,p.id FROM smart_playlists p JOIN listening_clusters c
+      ON c.user_id=p.owner_user_id AND lower(p.name)=lower(c.label || ' Deep Dive')
+      WHERE p.automatic=1 AND p.category='depth'`);
+    instance.exec(`INSERT OR IGNORE INTO automatic_playlist_choices(owner_user_id,default_key,playlist_id)
+      SELECT owner_user_id,'rediscovery:forgotten',id FROM smart_playlists
+      WHERE automatic=1 AND category='rediscovery' AND lower(name)='forgotten favorites' AND owner_user_id IS NOT NULL`);
+  });
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

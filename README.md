@@ -28,7 +28,7 @@ Published images are available from ghcr.io/busykoala/curator. Deployment config
 
 ## Playlists
 
-Create Discovery, Deep Dive, Mood & Occasion, Progressive Journey, or Rediscovery playlists from the playlist studio. Personal Deep Dive and Rediscovery playlists accept a genre or style and remain editable; automatic listening-based defaults are managed separately.
+Create Discovery, Deep Dive, Mood & Occasion, Progressive Journey, or Rediscovery playlists from the playlist studio. The musical type is separate from who chooses the direction and whether it refreshes nightly. Listening-based defaults appear under **Curator picks**; user-created and customized playlists appear under **Your playlists**. Every structured playlist can be edited, removed, and independently paused. Editing a Curator pick makes it yours, preserving its playlist ID, songs, feedback, and Navidrome link. Stable per-listener default choices prevent customized, renamed, transferred, or deleted picks from being recreated. Existing picks migrate without changing their settings or links.
 
 AI Chat playlists use a conversation and a song count (1–100). The AI explores the available library with overview, filtered search, and track-inspection tools, and can research public musical references. Conversations and exact ordered selections persist across visits. Save the first draft to Navidrome; subsequent chat corrections update that playlist immediately. If synchronization fails, the draft remains available for retry. Chat playlists do not regenerate their selection nightly.
 

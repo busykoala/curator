@@ -115,7 +115,7 @@ export function PlaylistEditor({ initial, users, close, save }: Props) {
           <div>
             <span className="intent-category">{meta.label}</span>
             <h2 id="playlist-editor-title">{title}</h2>
-            <p>{meta.description}</p>
+            <p>{initial.automatic ? "Saving makes this your playlist and keeps its songs and Navidrome link. Your direction will be kept, with nightly refresh optional." : meta.description}</p>
           </div>
           <button type="button" className="icon-button" aria-label="Close playlist editor" onClick={close}>
             <X />
@@ -363,7 +363,7 @@ export function PlaylistEditor({ initial, users, close, save }: Props) {
           </button>
           <button className="primary-button" disabled={busy}>
             <Save />
-            {busy ? "Saving…" : value.id ? "Save changes" : "Create playlist"}
+            {busy ? "Saving…" : initial.automatic ? "Make this playlist yours" : value.id ? "Save changes" : "Create playlist"}
           </button>
         </footer>
       </form>
