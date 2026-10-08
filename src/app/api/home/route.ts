@@ -1,7 +1,6 @@
 import { requestedUserMatches } from "@/features/playlists/access";
 import { currentUser } from "@/features/auth/session";
 import { homeData } from "@/features/home/query";
-import { ensureAutomaticPlaylists } from "@/features/playlists/automatic";
 
 export async function GET(request: Request) {
   try {
@@ -11,22 +10,9 @@ export async function GET(request: Request) {
     if (!requestedUserMatches(request, current.id)) return Response.json({ error: "Forbidden" }, { status: 403 });
     const target = current, users = [current];
 
-    let automatic = { created: 0, removed: 0, total: 0, names: [] as string[] };
-    let automaticWarning = "";
-    try {
-      automatic = await ensureAutomaticPlaylists(target.id);
-    } catch (error) {
-      automaticWarning =
-        error instanceof Error
-          ? error.message
-          : "Automatic playlists could not be refreshed.";
-    }
-
     return Response.json({
       user: target,
       users,
-      automatic,
-      automaticWarning,
       ...homeData(target.id),
     });
   } catch (error) {

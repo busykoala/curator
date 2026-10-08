@@ -13,7 +13,6 @@ export type PlaylistDefinition = {
   name: string;
   category: string;
   enabled: boolean;
-  automatic?: boolean;
   intent: string;
   config: Record<string, unknown>;
   ownerUserId?: number;
@@ -24,14 +23,13 @@ export type PlaylistDefinition = {
   runs?: Array<{ status: string; createdAt?: string; finishedAt?: string }>;
 };
 
-export type PlaylistSuggestion = PlaylistDefinition;
+export type PlaylistSuggestion = PlaylistDefinition & { key: string };
 
 export type PlaylistData = {
   definitions: PlaylistDefinition[];
   acquisitions: Array<Record<string, unknown>>;
   selectedUser: { id: number; displayName: string; tokenStatus: string };
   users: Array<{ id: number; displayName: string; tokenStatus: string }>;
-  automaticWarning?: string;
   connection: { configured: boolean };
   schedule: { phase?: string; lastRun?: string; nextRun?: string };
 };
@@ -73,7 +71,7 @@ export const categoryMeta: Record<string, CategoryMeta> = {
   discovery: {
     label: "Discovery",
     shortLabel: "New music",
-    description: "Editorially sourced releases close to your taste.",
+    description: "Find recent releases and build a mix around your taste.",
     icon: Compass,
   },
   depth: {
@@ -97,7 +95,7 @@ export const categoryMeta: Record<string, CategoryMeta> = {
   rediscovery: {
     label: "Rediscovery",
     shortLabel: "Bring it back",
-    description: "Favorites that have quietly fallen out of rotation.",
+    description: "Revisit favorites and highly rated music you have not played recently.",
     icon: History,
   },
 };

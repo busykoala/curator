@@ -1,16 +1,15 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ChevronDown, LoaderCircle, Save, X } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, LoaderCircle, Save, Sparkles, X } from "lucide-react";
 import { EnergyShape } from "./energy-shape";
-import {
-  TagCombobox,
-  type ComboOption,
-} from "./tag-combobox";
+import { TagCombobox, type ComboOption } from "./tag-combobox";
+import { readJson } from "./http";
 import {
   getMeta,
   list,
   type PlaylistDefinition,
+  type PlaylistSuggestion,
 } from "./playlist-view-model";
 
 type Props = {
@@ -41,47 +40,112 @@ const emptyOptions: Options = {
   exclusions: [],
 };
 
-function copy(
-  value: PlaylistDefinition,
-  key: string,
-  next: unknown,
-): PlaylistDefinition {
-  return {
-    ...value,
-    config: { ...value.config, [key]: next },
-  };
-}
+const directionCopy: Record<
+  string,
+  { label: string; hint: string; placeholder: string; name: string }
+> = {
+  rediscovery: {
+    label: "Genre or style to rediscover",
+    hint: "Optional. Leave empty to revisit favorites across your collection.",
+    placeholder: "Search jazz, rock, soul…",
+    name: "Forgotten jazz favorites",
+  },
+  depth: {
+    label: "Part of your collection to explore",
+    hint: "Optional genres, styles, or themes. Leave empty to explore the whole collection.",
+    placeholder: "Search alternative rock, ambient, acoustic…",
+    name: "Deeper into alternative rock",
+  },
+  discovery: {
+    label: "Genre, style, or theme",
+    hint: "Choose the direction for new releases and your library mix.",
+    placeholder: "Search melodic techno, future jazz…",
+    name: "New alternative soul",
+  },
+  journey: {
+    label: "Sound of the journey",
+    hint: "Choose genres, styles, or textures; the energy shape controls their progression.",
+    placeholder: "Search rock, electronic, cinematic…",
+    name: "A slow electronic ascent",
+  },
+};
 
 export function PlaylistEditor({ initial, close, save }: Props) {
   const [busy, setBusy] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(true);
+  const [optionsError, setOptionsError] = useState("");
   const [options, setOptions] = useState<Options>(emptyOptions);
+  const [ideas, setIdeas] = useState<PlaylistSuggestion[]>();
+  const [loadingIdeas, setLoadingIdeas] = useState(false);
+  const [ideasError, setIdeasError] = useState("");
+  const [error, setError] = useState("");
   const [value, setValue] = useState(initial);
+  const form = useRef<HTMLFormElement>(null);
   const config = value.config;
   const meta = getMeta(value.category);
-  const title = value.id
-    ? "Edit " + value.name
-    : value.category === "mood"
-      ? "Add a mood or occasion"
-      : value.category === "discovery"
-        ? "Add a discovery lane"
-        : value.category === "rediscovery" ? "Rediscover your favorites" : value.category === "depth" ? "Explore your collection" : "Build a progressive journey";
+  const direction = directionCopy[value.category];
 
   useEffect(() => {
-    let active = true;
-    fetch("/api/playlists/options")
-      .then((response) => response.json())
-      .then((result) => {
-        if (active) setOptions({ ...emptyOptions, ...result });
-      })
-      .finally(() => {
-        if (active) setLoadingOptions(false);
-      });
-    return () => {
-      active = false;
-    };
+    const controller = new AbortController();
+    // Library vocabulary is optional: a custom direction still works if it fails.
+    void (async () => {
+      try {
+        const result = await readJson<Options>(
+          await fetch("/api/playlists/options", { signal: controller.signal }),
+          "Library options could not be loaded",
+        );
+        if (!controller.signal.aborted)
+          setOptions({ ...emptyOptions, ...result });
+      } catch {
+        if (!controller.signal.aborted)
+          setOptionsError(
+            "Library suggestions are unavailable. You can still type your own terms.",
+          );
+      } finally {
+        if (!controller.signal.aborted) setLoadingOptions(false);
+      }
+    })();
+    return () => controller.abort();
   }, []);
-  useEffect(()=>{const escape=(event:KeyboardEvent)=>{if(event.key==="Escape"&&window.confirm("Close without saving these playlist changes?"))close()};window.addEventListener("keydown",escape);return()=>window.removeEventListener("keydown",escape)},[close]);
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    form.current
+      ?.querySelector<HTMLInputElement>("input[name=playlistName]")
+      ?.focus();
+    return () => previous?.focus();
+  }, []);
+
+  useEffect(() => {
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key === "Tab") {
+        const controls = [
+          ...(form.current?.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]',
+          ) ?? []),
+        ].filter((node) => node.getClientRects().length > 0);
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement;
+      if (
+        target.getAttribute("role") === "combobox" &&
+        target.getAttribute("aria-expanded") === "true"
+      )
+        return;
+      if (!busy) close();
+    };
+    window.addEventListener("keydown", keyboard);
+    return () => window.removeEventListener("keydown", keyboard);
+  }, [close, busy]);
 
   const directionOptions = useMemo(
     () => [
@@ -94,11 +158,55 @@ export function PlaylistEditor({ initial, close, save }: Props) {
     [options],
   );
 
+  function setting(key: string, next: unknown) {
+    setValue((current) => ({
+      ...current,
+      config: { ...current.config, [key]: next },
+    }));
+  }
+
+  function changeDirection(next: string[]) {
+    // Older presets stored the same direction twice. Show both fields and clear
+    // the legacy one on edit so removing a chip really removes that filter.
+    setValue((current) => ({
+      ...current,
+      config: { ...current.config, tasteLanes: next, genres: [] },
+    }));
+  }
+
+  async function loadIdeas() {
+    if (loadingIdeas || ideas) return;
+    setLoadingIdeas(true);
+    setIdeasError("");
+    try {
+      const result = await readJson<{ suggestions: PlaylistSuggestion[] }>(
+        await fetch("/api/playlists/suggestions", { cache: "no-store" }),
+        "Starting ideas could not be loaded",
+      );
+      setIdeas(
+        result.suggestions.filter((item) => item.category === initial.category),
+      );
+    } catch {
+      setIdeasError(
+        "Starting ideas are unavailable. You can create your own direction below.",
+      );
+    } finally {
+      setLoadingIdeas(false);
+    }
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
+    setError("");
     try {
       await save(value);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Playlist could not be saved. Please retry.",
+      );
     } finally {
       setBusy(false);
     }
@@ -107,56 +215,131 @@ export function PlaylistEditor({ initial, close, save }: Props) {
   return (
     <div
       className="drawer-backdrop"
-      onMouseDown={(event) => event.target === event.currentTarget && close()}
+      onMouseDown={(event) =>
+        event.target === event.currentTarget && !busy && close()
+      }
     >
-      <form className="playlist-editor playlist-editor-v2 intent-editor" role="dialog" aria-modal="true" aria-labelledby="playlist-editor-title" onSubmit={submit}>
+      <form
+        ref={form}
+        className="playlist-editor playlist-editor-v2 intent-editor"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="playlist-editor-title"
+        onSubmit={submit}
+      >
         <header>
           <div>
             <span className="intent-category">{meta.label}</span>
-            <h2 id="playlist-editor-title">{title}</h2>
-            <p>{initial.automatic ? "Saving makes this your playlist and keeps its songs and Navidrome link. Your direction will be kept, with nightly refresh optional." : meta.description}</p>
+            <h2 id="playlist-editor-title">
+              {value.id
+                ? "Edit playlist"
+                : "Create " + meta.label.toLowerCase()}
+            </h2>
+            <p>{meta.description}</p>
           </div>
-          <button type="button" className="icon-button" aria-label="Close playlist editor" onClick={close}>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Close playlist editor"
+            disabled={busy}
+            onClick={close}
+          >
             <X />
           </button>
         </header>
 
         <div className="playlist-editor-body">
+          {!initial.id && (
+            <details
+              className="playlist-starting-ideas"
+              onToggle={(event) => event.currentTarget.open && void loadIdeas()}
+            >
+              <summary>
+                <Sparkles />
+                Start from an idea
+                <ChevronDown />
+              </summary>
+              <p>
+                Choose an optional starting point, then adjust it before
+                creating your playlist.
+              </p>
+              {loadingIdeas && (
+                <p role="status">
+                  <LoaderCircle className="spin" />
+                  Finding ideas from your listening…
+                </p>
+              )}
+              {ideasError && (
+                <p role="status">
+                  {ideasError}{" "}
+                  <button type="button" onClick={() => void loadIdeas()}>
+                    Retry
+                  </button>
+                </p>
+              )}
+              {ideas && !ideas.length && (
+                <p>
+                  Ideas for this type will appear as Curator learns from your
+                  listening.
+                </p>
+              )}
+              <div>
+                {ideas?.map((idea) => (
+                  <button
+                    type="button"
+                    key={idea.key}
+                    onClick={() =>
+                      setValue((current) => ({
+                        ...current,
+                        name: idea.name,
+                        intent: idea.intent,
+                        config: { ...current.config, ...idea.config },
+                      }))
+                    }
+                  >
+                    {idea.name}
+                  </button>
+                ))}
+              </div>
+            </details>
+          )}
+
           {loadingOptions && (
-            <div className="options-loading">
+            <div className="options-loading" role="status">
               <LoaderCircle className="spin" />
               Reading your library vocabulary…
             </div>
+          )}
+          {optionsError && (
+            <p className="playlist-editor-note" role="status">
+              {optionsError}
+            </p>
           )}
 
           <div className="playlist-essentials">
             <label>
               <span>Playlist name</span>
               <input
+                name="playlistName"
                 required
+                minLength={2}
+                maxLength={100}
                 value={value.name}
-                placeholder={
-                  value.category === "mood"
-                    ? "Sunday morning"
-                    : value.category === "discovery"
-                      ? "New alternative soul"
-                      : "A slow electronic ascent"
-                }
+                placeholder={direction?.name ?? "Sunday morning"}
                 onChange={(event) =>
                   setValue({ ...value, name: event.target.value })
                 }
               />
             </label>
-
-            {value.category === "mood" && (
+            {value.category === "mood" ? (
               <>
                 <TagCombobox
                   label="Moods"
-                  hint="Choose from moods already found in your library, or type your own."
+                  hint="How should the music feel?"
                   placeholder="Search reflective, warm, serene…"
                   values={list(config.moods)}
                   options={options.moods}
-                  change={(next) => setValue(copy(value, "moods", next))}
+                  change={(next) => setting("moods", next)}
                 />
                 <TagCombobox
                   label="Occasions"
@@ -164,181 +347,130 @@ export function PlaylistEditor({ initial, close, save }: Props) {
                   placeholder="Search focus, dinner, late night…"
                   values={list(config.contexts)}
                   options={options.contexts}
-                  change={(next) => setValue(copy(value, "contexts", next))}
+                  change={(next) => setting("contexts", next)}
                 />
                 <TagCombobox
                   label="Sound palette"
-                  hint="Optional genres, styles, textures, or timbres."
-                  placeholder="Search jazz, mellow, acoustic, smooth…"
-                  values={list(config.tasteLanes)}
+                  hint="Optional genres, styles, textures, or instruments."
+                  placeholder="Search jazz, mellow, acoustic…"
+                  values={[
+                    ...new Set([
+                      ...list(config.tasteLanes),
+                      ...list(config.genres),
+                    ]),
+                  ]}
                   options={directionOptions}
-                  change={(next) => setValue(copy(value, "tasteLanes", next))}
+                  change={changeDirection}
                 />
               </>
+            ) : (
+              direction && (
+                <TagCombobox
+                  label={direction.label}
+                  hint={direction.hint}
+                  placeholder={direction.placeholder}
+                  values={[
+                    ...new Set([
+                      ...list(config.tasteLanes),
+                      ...list(config.genres),
+                    ]),
+                  ]}
+                  options={directionOptions}
+                  change={changeDirection}
+                />
+              )
             )}
 
-            {(value.category === "discovery" ||
-              value.category === "journey" || value.category === "depth" || value.category === "rediscovery") && (
-              <TagCombobox
-                label={value.category === "rediscovery" ? "Genre or style to rediscover" : "Genre, subgenre, or theme"}
-                hint="Suggestions come from your actual tags and technical profiles."
-                placeholder={
-                  value.category === "discovery"
-                    ? "Search melodic techno, future jazz…"
-                    : "Search rock, uplifting, crescendo…"
-                }
-                values={list(config.tasteLanes)}
-                options={directionOptions}
-                change={(next) => setValue(copy(value, "tasteLanes", next))}
-              />
+            {value.category === "rediscovery" && (
+              <label>
+                <span>
+                  Not played in the last{" "}
+                  <strong>{Number(config.noveltyDays ?? 30)} days</strong>
+                </span>
+                <input
+                  type="number"
+                  min={7}
+                  max={365}
+                  value={Number(config.noveltyDays ?? 30)}
+                  onChange={(event) =>
+                    setting("noveltyDays", Number(event.target.value))
+                  }
+                />
+                <small>
+                  Revisit rated or starred favorites and albums from your
+                  listening history. Recently played albums stay out.
+                </small>
+              </label>
             )}
 
-            <label>
-              <span>
-                {value.category === "mood"
-                  ? "Extra guidance"
-                  : value.category === "discovery"
-                    ? "What should Curator look for?"
-                    : value.category === "journey" ? "Describe the musical progression" : "Extra guidance"}
-              </span>
-              <textarea
-                value={value.intent}
-                placeholder={
-                  value.category === "journey"
-                    ? "Begin with restraint, become energizing, reach one clear peak, then settle."
-                    : "Optional boundaries, exclusions, or atmosphere."
-                }
-                onChange={(event) =>
-                  setValue({ ...value, intent: event.target.value })
-                }
-              />
-            </label>
+            {value.category === "discovery" && (
+              <label>
+                <span>
+                  Research brief <small>optional</small>
+                </span>
+                <textarea
+                  maxLength={1000}
+                  value={value.intent}
+                  placeholder="What should Curator look for in new releases?"
+                  onChange={(event) =>
+                    setValue({ ...value, intent: event.target.value })
+                  }
+                />
+                <small>
+                  Guides research into recent releases. The direction above
+                  controls which library songs fit.
+                </small>
+              </label>
+            )}
           </div>
 
           {value.category === "journey" && (
             <EnergyShape
-              value={String(config.energyCurve ?? "slow_burn") as "slow_burn" | "ascent" | "wave" | "descent"}
-              change={(next) => setValue(copy(value, "energyCurve", next))}
+              value={config.energyCurve ?? "slow_burn"}
+              change={(next) => setting("energyCurve", next)}
             />
           )}
 
-          <section className="mix-controls">
+          <section
+            className="mix-controls"
+            aria-label="Playlist size and refresh"
+          >
             <label>
-              <span>
-                Length <strong>{Number(config.targetTracks ?? 30)} tracks</strong>
-              </span>
+              <span>Number of songs</span>
               <input
-                type="range"
-                min="8"
-                max="80"
+                aria-label="Number of songs"
+                type="number"
+                min={1}
+                max={100}
                 value={Number(config.targetTracks ?? 30)}
                 onChange={(event) =>
-                  setValue(
-                    copy(value, "targetTracks", Number(event.target.value)),
-                  )
+                  setting("targetTracks", Number(event.target.value))
                 }
               />
+              <small>Curator uses songs available in your library.</small>
             </label>
             <label>
               <span>
-                Change nightly{" "}
+                Refresh variation{" "}
                 <strong>{Number(config.rotationPercent ?? 30)}%</strong>
               </span>
               <input
+                aria-label="Refresh variation"
                 type="range"
-                min="0"
-                max="60"
-                step="5"
+                min={0}
+                max={100}
+                step={5}
                 value={Number(config.rotationPercent ?? 30)}
                 onChange={(event) =>
-                  setValue(
-                    copy(value, "rotationPercent", Number(event.target.value)),
-                  )
+                  setting("rotationPercent", Number(event.target.value))
                 }
               />
-              <small>30% balances familiarity and variety.</small>
-            </label>
-            <label>
-              <span>Adventure <strong>{Number(config.explorationPercent ?? 35)}%</strong></span>
-              <input type="range" min="0" max="100" step="5" value={Number(config.explorationPercent ?? 35)} onChange={event=>setValue(copy(value,"explorationPercent",Number(event.target.value)))}/>
-              <small>Higher values favor less familiar parts of the library.</small>
+              <small>
+                Aim to replace this share of songs whenever you refresh,
+                manually or nightly.
+              </small>
             </label>
           </section>
-
-          <TagCombobox
-            label="Exclude"
-            hint="Search artists, albums, genres, or styles. Custom exclusions are accepted."
-            placeholder="Search your library…"
-            values={list(config.exclusions)}
-            options={options.exclusions}
-            change={(next) => setValue(copy(value, "exclusions", next))}
-          />
-
-          <details className="playlist-advanced">
-            <summary>
-              <ChevronDown />
-              Advanced limits
-            </summary>
-            <div>
-              <label>
-                <span>Tracks per artist</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="8"
-                  value={Number(config.maxTracksPerArtist ?? 2)}
-                  onChange={(event) =>
-                    setValue(
-                      copy(
-                        value,
-                        "maxTracksPerArtist",
-                        Number(event.target.value),
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label>
-                <span>Tracks per album</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="5"
-                  value={Number(config.maxTracksPerAlbum ?? 1)}
-                  onChange={(event) =>
-                    setValue(
-                      copy(
-                        value,
-                        "maxTracksPerAlbum",
-                        Number(event.target.value),
-                      ),
-                    )
-                  }
-                />
-              </label>
-              {value.category === "discovery" && (
-                <label>
-                  <span>Preferred publications</span>
-                  <input
-                    value={list(config.sourceDomains).join(", ")}
-                    placeholder="bandcamp.com, thequietus.com"
-                    onChange={(event) =>
-                      setValue(
-                        copy(
-                          value,
-                          "sourceDomains",
-                          event.target.value
-                            .split(",")
-                            .map((item) => item.trim())
-                            .filter(Boolean),
-                        ),
-                      )
-                    }
-                  />
-                </label>
-              )}
-            </div>
-          </details>
 
           <label className="enable-row">
             <input
@@ -350,18 +482,146 @@ export function PlaylistEditor({ initial, close, save }: Props) {
             />
             <span>
               <strong>Refresh this playlist nightly</strong>
-              <small>Curator reconciles it at 04:30 Europe/Zurich.</small>
+              <small>
+                {value.enabled
+                  ? "Refreshes at 04:30 Europe/Zurich. You can also refresh it yourself."
+                  : "Refresh it yourself whenever you want a new mix."}
+              </small>
             </span>
           </label>
+
+          <details className="playlist-advanced">
+            <summary>
+              <ChevronDown />
+              Fine-tune the mix
+            </summary>
+            <div>
+              {value.category !== "rediscovery" && (
+                <label className="playlist-wide-field">
+                  <span>
+                    Favor familiar music{" "}
+                    <strong>
+                      {100 - Number(config.explorationPercent ?? 35)}%
+                    </strong>
+                  </span>
+                  <input
+                    aria-label="Favor familiar music"
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={100 - Number(config.explorationPercent ?? 35)}
+                    onChange={(event) =>
+                      setting(
+                        "explorationPercent",
+                        100 - Number(event.target.value),
+                      )
+                    }
+                  />
+                  <small>
+                    How much your listening history influences the selection.
+                  </small>
+                </label>
+              )}
+              <label>
+                <span>Maximum songs per artist</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={8}
+                  value={Number(config.maxTracksPerArtist ?? 2)}
+                  onChange={(event) =>
+                    setting("maxTracksPerArtist", Number(event.target.value))
+                  }
+                />
+              </label>
+              <label>
+                <span>Maximum songs per album</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={Number(config.maxTracksPerAlbum ?? 1)}
+                  onChange={(event) =>
+                    setting("maxTracksPerAlbum", Number(event.target.value))
+                  }
+                />
+              </label>
+              {value.category !== "mood" && (
+                <>
+                  <div className="playlist-wide-field">
+                    <TagCombobox
+                      label="Mood filters"
+                      placeholder="Search moods…"
+                      values={list(config.moods)}
+                      options={options.moods}
+                      change={(next) => setting("moods", next)}
+                    />
+                  </div>
+                  <div className="playlist-wide-field">
+                    <TagCombobox
+                      label="Occasion filters"
+                      placeholder="Search occasions…"
+                      values={list(config.contexts)}
+                      options={options.contexts}
+                      change={(next) => setting("contexts", next)}
+                    />
+                  </div>
+                </>
+              )}
+              <div className="playlist-wide-field">
+                <TagCombobox
+                  label="Exclude"
+                  hint="Artists, albums, genres, or styles to leave out."
+                  placeholder="Search your library…"
+                  values={list(config.exclusions)}
+                  options={options.exclusions}
+                  change={(next) => setting("exclusions", next)}
+                />
+              </div>
+              {value.category === "discovery" && (
+                <label className="playlist-wide-field">
+                  <span>Preferred publications</span>
+                  <input
+                    value={list(config.sourceDomains).join(", ")}
+                    placeholder="bandcamp.com, thequietus.com"
+                    onChange={(event) =>
+                      setting(
+                        "sourceDomains",
+                        event.target.value
+                          .split(",")
+                          .map((item) => item.trim())
+                          .filter(Boolean),
+                      )
+                    }
+                  />
+                  <small>
+                    Suggestions for the release research, separated by commas.
+                    Research runs on Tuesday and Friday.
+                  </small>
+                </label>
+              )}
+            </div>
+          </details>
+          {error && (
+            <p className="playlist-editor-error" role="alert">
+              {error}
+            </p>
+          )}
         </div>
 
         <footer>
-          <button type="button" className="secondary-button" onClick={close}>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={close}
+          >
             Cancel
           </button>
           <button className="primary-button" disabled={busy}>
             <Save />
-            {busy ? "Saving…" : initial.automatic ? "Make this playlist yours" : value.id ? "Save changes" : "Create playlist"}
+            {busy ? "Saving…" : value.id ? "Save changes" : "Create & preview"}
           </button>
         </footer>
       </form>

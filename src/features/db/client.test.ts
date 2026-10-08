@@ -11,6 +11,6 @@ test("web and multiple workers can migrate the same database at startup",async()
   const code="import {db} from './src/features/db/client.ts';const database=db();console.log(JSON.stringify({versions:database.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),columns:database.prepare('PRAGMA table_info(playlist_feedback)').all().map(x=>x.name)}));database.close();";
   try{
     const outputs=await Promise.all(Array.from({length:4},()=>promisify(execFile)(process.execPath,['--import','tsx','--input-type=module','-e',code],{cwd:process.cwd(),env:{...process.env,CURATOR_DB_PATH:path}})));
-    for(const output of outputs){const parsed=JSON.parse(output.stdout);assert.ok(parsed.versions.some((x:{version:number})=>x.version===9));assert.ok(parsed.columns.includes('owner_user_id'));assert.deepEqual(parsed,JSON.parse(outputs[0].stdout));}
+    for(const output of outputs){const parsed=JSON.parse(output.stdout);assert.ok(parsed.versions.some((x:{version:number})=>x.version===10));assert.ok(parsed.columns.includes('owner_user_id'));assert.deepEqual(parsed,JSON.parse(outputs[0].stdout));}
   }finally{rmSync(directory,{recursive:true,force:true})}
 });

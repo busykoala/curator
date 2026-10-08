@@ -7,7 +7,7 @@ import { LibraryBrowser } from "@/components/library-browser";
 import { PlaylistStudio } from "@/components/playlist-studio";
 
 type Summary={paused:boolean;metrics:Record<string,number>;operational:{running:boolean;phase:string;lastError?:string};jobs?:Array<{phase:string;status:string;subject:string;progress_json?:string}>};
-const destinations=[{name:"Dashboard",icon:Disc3,description:"Browse and edit your music"},{name:"Playlists",icon:ListMusic,description:"Design nightly smart mixes"},{name:"Curator",icon:Activity,description:"Automation, health and issues"},{name:"Add Music",icon:PlusCircle,description:"Find and queue new albums"}];
+const destinations=[{name:"Dashboard",icon:Disc3,description:"Browse and edit your music"},{name:"Playlists",icon:ListMusic,description:"Create and refine mixes"},{name:"Curator",icon:Activity,description:"Automation, health and issues"},{name:"Add Music",icon:PlusCircle,description:"Find and queue new albums"}];
 export function Dashboard(){
   const[view,setView]=useState("Dashboard"),[data,setData]=useState<Summary|null>(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[menu,setMenu]=useState(false);
   const refresh=useCallback(async()=>{try{const response=await fetch("/api/summary",{cache:"no-store"});if(response.ok)setData(await response.json())}catch{}},[]);

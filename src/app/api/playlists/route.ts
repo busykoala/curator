@@ -2,7 +2,6 @@ import { currentUser, sameOrigin } from "@/features/auth/session";
 import { ownerInputMatches, requestedUserMatches } from "@/features/playlists/access";
 import { stateGet } from "@/features/db/client";
 import { navidromeConfigured } from "@/features/integrations/navidrome";
-import { ensureAutomaticPlaylists } from "@/features/playlists/automatic";
 import {
   createPlaylist,
   dashboardData,
@@ -16,21 +15,10 @@ export async function GET(request: Request) {
     if (!requestedUserMatches(request, current.id)) return Response.json({ error: "Forbidden" }, { status: 403 });
     const target = current, users = [current];
 
-    let automaticWarning = "";
-    try {
-      await ensureAutomaticPlaylists(target.id);
-    } catch (error) {
-      automaticWarning =
-        error instanceof Error
-          ? error.message
-          : "Automatic playlists could not be refreshed.";
-    }
-
     return Response.json({
       ...dashboardData(target.id),
       selectedUser: target,
       users,
-      automaticWarning,
       connection: {
         configured: target.tokenStatus === "active",
         serviceConfigured: navidromeConfigured(),

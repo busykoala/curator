@@ -3,24 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Ban,
-  History,
-  Telescope,
   MessageCircle,
   Clock3,
-  Compass,
   ExternalLink,
   LoaderCircle,
   Pause,
   Pin,
   Play,
-  Plus,
   RefreshCw,
-  Route,
   SlidersHorizontal,
   Sparkles,
   Trash2,
   X,
 } from "lucide-react";
+import {
+  defaultConfig,
+  type PlaylistCategory,
+} from "@/features/playlists/types";
 import { PlaylistChat } from "./playlist-chat";
 import { PlaylistEditor } from "./playlist-editor";
 import { readJson } from "./http";
@@ -31,75 +30,116 @@ import {
   type PlaylistPreview,
 } from "./playlist-view-model";
 
-function template(category: "mood" | "discovery" | "journey" | "depth" | "rediscovery", ownerUserId: number) {
+const creationTypes = [
+  "chat",
+  "mood",
+  "rediscovery",
+  "depth",
+  "journey",
+  "discovery",
+] as const;
+
+function template(
+  category: Exclude<PlaylistCategory, "chat">,
+  ownerUserId: number,
+): PlaylistDefinition {
   return {
     name: "",
     category,
-    enabled: true,
+    enabled: false,
     intent: "",
     ownerUserId,
-    config: {
-      tasteLanes: [],
-      genres: [],
-      moods: [],
-      contexts: [],
-      exclusions: [],
-      sourceDomains: [],
-      targetTracks:
-        category === "mood" ? 40 : category === "journey" ? 16 : 24,
-      rotationPercent: 30,
-      maxTracksPerArtist: 2,
-      maxTracksPerAlbum: 1,
-      energyCurve: category === "journey" ? "slow_burn" : "steady",
-      explorationPercent: 35,
-      externalDiscovery: category === "discovery",
-      noveltyDays: 30,
-    },
-  } satisfies PlaylistDefinition;
+    config: defaultConfig(category),
+  };
 }
 
 export function PlaylistStudio() {
   const [data, setData] = useState<PlaylistData>();
   const [editor, setEditor] = useState<PlaylistDefinition>();
-  const [chat, setChat] = useState<{initial?: PlaylistDefinition}>();
+  const [chat, setChat] = useState<{ initial?: PlaylistDefinition }>();
   const [preview, setPreview] = useState<PlaylistPreview>();
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
 
-  const [currentUserId,setCurrentUserId]=useState(0);
-  const [undo,setUndo]=useState<{playlistId:number;fileId:number;artist:string;action:string}|null>(null);
-  const requestId=useRef(0);
+  const [currentUserId, setCurrentUserId] = useState(0);
+  const [undo, setUndo] = useState<{
+    playlistId: number;
+    fileId: number;
+    artist: string;
+    action: string;
+  } | null>(null);
+  const requestId = useRef(0);
 
   const load = useCallback(async (ownerUserId: number) => {
-    if(!ownerUserId)return;
-    const activeRequest=++requestId.current;
+    if (!ownerUserId) return;
+    const activeRequest = ++requestId.current;
     try {
-      const playlists=await readJson<PlaylistData>(await fetch(`/api/playlists?userId=${ownerUserId}`,{cache:"no-store"}),"Playlists could not be loaded");
-      if(activeRequest!==requestId.current)return;
+      const playlists = await readJson<PlaylistData>(
+        await fetch(`/api/playlists?userId=${ownerUserId}`, {
+          cache: "no-store",
+        }),
+        "Playlists could not be loaded",
+      );
+      if (activeRequest !== requestId.current) return;
       setData(playlists);
-      if(playlists.automaticWarning)setNotice(`Automatic playlists were not refreshed: ${playlists.automaticWarning}`);
     } catch (error) {
-      if(activeRequest===requestId.current)setNotice(error instanceof Error?error.message:"Playlists could not be loaded");
+      if (activeRequest === requestId.current)
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : "Playlists could not be loaded",
+        );
     }
   }, []);
 
   useEffect(() => {
-    void (async()=>{try{const session=await readJson<{user:{id:number};users:Array<{id:number;displayName:string;tokenStatus:string}>}>(await fetch("/api/session",{cache:"no-store"}),"Session could not be loaded");const selected=session.user.id;setCurrentUserId(selected)}catch(error){setNotice(error instanceof Error?error.message:"Session could not be loaded")}})();
+    void (async () => {
+      try {
+        const session = await readJson<{
+          user: { id: number };
+          users: Array<{
+            id: number;
+            displayName: string;
+            tokenStatus: string;
+          }>;
+        }>(
+          await fetch("/api/session", { cache: "no-store" }),
+          "Session could not be loaded",
+        );
+        const selected = session.user.id;
+        setCurrentUserId(selected);
+      } catch (error) {
+        setNotice(
+          error instanceof Error
+            ? error.message
+            : "Session could not be loaded",
+        );
+      }
+    })();
   }, []);
   useEffect(() => {
-    if(!currentUserId)return;
-    setData(undefined);setEditor(undefined);setPreview(undefined);setChat(undefined);
+    if (!currentUserId) return;
+    setData(undefined);
+    setEditor(undefined);
+    setPreview(undefined);
+    setChat(undefined);
     void load(currentUserId);
     const timer = window.setInterval(() => void load(currentUserId), 30_000);
     return () => window.clearInterval(timer);
-  }, [currentUserId,load]);
-  useEffect(()=>{if(!preview)return;const escape=(event:KeyboardEvent)=>event.key==="Escape"&&setPreview(undefined);window.addEventListener("keydown",escape);return()=>window.removeEventListener("keydown",escape)},[preview]);
+  }, [currentUserId, load]);
+  useEffect(() => {
+    if (!preview) return;
+    const escape = (event: KeyboardEvent) =>
+      event.key === "Escape" && setPreview(undefined);
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [preview]);
 
   async function save(value: PlaylistDefinition) {
     setBusy("save");
     try {
       const path = value.id ? "/api/playlists/" + value.id : "/api/playlists";
-      await readJson(
+      const result = await readJson<{ playlist: PlaylistDefinition }>(
         await fetch(path, {
           method: value.id ? "PATCH" : "POST",
           headers: { "content-type": "application/json" },
@@ -107,19 +147,27 @@ export function PlaylistStudio() {
         }),
       );
       setEditor(undefined);
-      setNotice(value.automatic
-        ? "This playlist is now yours. Your settings will be kept."
-        : value.enabled ? "Playlist saved. Nightly refresh is on." : "Playlist saved. Nightly refresh is paused.");
+      setNotice(
+        value.id
+          ? "Playlist saved. " +
+              (value.enabled
+                ? "Nightly refresh is on."
+                : "Refresh it whenever you like.")
+          : "Playlist created. Preparing your preview…",
+      );
       await load(currentUserId);
-    } catch (error) {
-      setNotice(String(error));
+      if (!value.id) await run(result.playlist, true);
     } finally {
       setBusy("");
     }
   }
 
   async function remove(item: PlaylistDefinition) {
-    if (!item.id || !window.confirm("Remove " + item.name + " from Curator and Navidrome?" + (item.automatic ? " This Curator pick will not be created again." : ""))) return;
+    if (
+      !item.id ||
+      !window.confirm("Remove " + item.name + " from Curator and Navidrome?")
+    )
+      return;
     try {
       await readJson(
         await fetch("/api/playlists/" + item.id, { method: "DELETE" }),
@@ -133,7 +181,10 @@ export function PlaylistStudio() {
 
   async function run(item: PlaylistDefinition, previewOnly: boolean) {
     if (!item.id) return;
-    if(item.category === "chat" && previewOnly){setChat({initial:item});return;}
+    if (item.category === "chat" && previewOnly) {
+      setChat({ initial: item });
+      return;
+    }
     setBusy((previewOnly ? "preview-" : "sync-") + item.id);
     try {
       const result = await readJson<PlaylistPreview>(
@@ -143,8 +194,10 @@ export function PlaylistStudio() {
           body: JSON.stringify({ preview: previewOnly }),
         }),
       );
-      if (previewOnly) setPreview(result);
-      else {
+      if (previewOnly) {
+        setPreview(result);
+        setNotice("");
+      } else {
         setNotice(item.name + " is synchronized with Navidrome.");
         await load(currentUserId);
       }
@@ -178,17 +231,52 @@ export function PlaylistStudio() {
     action: string,
   ) {
     if (!playlistId) return;
-    try { await readJson(await fetch("/api/playlists/" + playlistId + "/feedback", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fileId, artist, action }),
-      })); setUndo({playlistId,fileId,artist,action}); setNotice("Preference saved for the next refresh."); }
-    catch(error){setNotice(String(error))}
+    try {
+      await readJson(
+        await fetch("/api/playlists/" + playlistId + "/feedback", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ fileId, artist, action }),
+        }),
+      );
+      setUndo({ playlistId, fileId, artist, action });
+      setNotice("Preference saved for the next refresh.");
+    } catch (error) {
+      setNotice(String(error));
+    }
   }
-  async function undoFeedback(){if(!undo)return;try{await readJson(await fetch(`/api/playlists/${undo.playlistId}/feedback`,{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify(undo)}));setNotice("Preference undone.");setUndo(null)}catch(error){setNotice(String(error))}}
+  async function undoFeedback() {
+    if (!undo) return;
+    try {
+      await readJson(
+        await fetch(`/api/playlists/${undo.playlistId}/feedback`, {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(undo),
+        }),
+      );
+      setNotice("Preference undone.");
+      setUndo(null);
+    } catch (error) {
+      setNotice(String(error));
+    }
+  }
 
   if (!data) {
-    if(notice)return <div className="empty-state"><Ban/><h3>Playlists could not be loaded</h3><p>{notice}</p><button className="primary-button" onClick={()=>void load(currentUserId)}>Retry</button></div>;
+    if (notice)
+      return (
+        <div className="empty-state">
+          <Ban />
+          <h3>Playlists could not be loaded</h3>
+          <p>{notice}</p>
+          <button
+            className="primary-button"
+            onClick={() => void load(currentUserId)}
+          >
+            Retry
+          </button>
+        </div>
+      );
     return (
       <div className="playlist-loading">
         <LoaderCircle className="spin" />
@@ -198,14 +286,14 @@ export function PlaylistStudio() {
   }
 
   const connectionConfigured = data.connection.configured;
-  const enabled = data.definitions.filter((item) => item.enabled && item.category !== "chat").length;
-  const playlists = [...data.definitions].sort((left, right) => left.name.localeCompare(right.name));
-  const curatorPicks = playlists.filter(item => item.automatic);
-  const personalPlaylists = playlists.filter(item => !item.automatic);
+  const enabled = data.definitions.filter(
+    (item) => item.enabled && item.category !== "chat",
+  ).length;
+  const playlists = [...data.definitions].sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
 
   function row(item: PlaylistDefinition) {
-    const managed =
-      Boolean(item.automatic);
     const meta = getMeta(item.category);
     const Icon = meta.icon;
     const latest = item.runs?.[0];
@@ -215,72 +303,128 @@ export function PlaylistStudio() {
           <Icon />
         </span>
         <div className="playlist-row-copy">
-          <span>
-            {meta.label}
-          </span>
+          <span>{meta.label}</span>
           <h3>{item.name}</h3>
           <p>
-            {item.intent ||
-              (managed
-                ? "Built from listening patterns and library connections."
-                : meta.description)}
+            {item.category === "discovery" || item.category === "chat"
+              ? item.intent || meta.description
+              : meta.description}
           </p>
         </div>
         <div className="playlist-row-facts">
-          <span><strong>{item.ownerDisplayName||"Unassigned"}</strong>owner</span>
           <span>
             <strong>{Number(item.config.targetTracks ?? 30)}</strong>
             tracks
           </span>
           <span>
-            <strong>{item.category === "chat" ? "Chat" : Number(item.config.rotationPercent ?? 30) + "%"}</strong>
+            <strong>
+              {item.category === "chat"
+                ? "Chat"
+                : Number(item.config.rotationPercent ?? 30) + "%"}
+            </strong>
             {item.category === "chat" ? "updates" : "change per refresh"}
           </span>
           <span>
-            <strong>{item.chatJob?.status === "queued" ? "Queued" : item.chatJob?.status === "running" ? "Working" : item.chatJob?.status === "completed" ? "Reply ready" : item.chatJob?.status === "failed" ? "Needs retry" : latest?.status || "Ready"}</strong>
+            <strong>
+              {item.chatJob?.status === "queued"
+                ? "Queued"
+                : item.chatJob?.status === "running"
+                  ? "Working"
+                  : item.chatJob?.status === "completed"
+                    ? "Reply ready"
+                    : item.chatJob?.status === "failed"
+                      ? "Needs retry"
+                      : latest?.status || "Ready"}
+            </strong>
             last result
           </span>
         </div>
         <div className="playlist-row-actions">
-          {item.category !== "chat" && <button
-            className={"playlist-toggle " + (item.enabled ? "on" : "")}
-            aria-label={`${item.enabled ? "Pause" : "Enable"} nightly refresh for ${item.name}`}
-            title={item.enabled ? "Pause nightly refresh" : "Enable nightly refresh"}
-            aria-pressed={item.enabled}
-            onClick={() => void toggle(item)}
-          >
-            {item.enabled ? <Pause /> : <Play />}
-            {item.enabled ? "Nightly" : "Paused"}
-          </button>}
-          {item.category === "chat" && <button aria-label={`Chat about ${item.name}`} title="Continue playlist chat" onClick={() => setChat({initial:item})}><MessageCircle /></button>}
           {item.category !== "chat" && (
-            <button aria-label={`Edit ${item.name}`} title="Edit playlist" onClick={() => setEditor(item)}>
+            <button
+              className={"playlist-toggle " + (item.enabled ? "on" : "")}
+              disabled={Boolean(busy)}
+              aria-label={`${item.enabled ? "Pause" : "Enable"} nightly refresh for ${item.name}`}
+              title={
+                item.enabled
+                  ? "Pause nightly refresh"
+                  : "Enable nightly refresh"
+              }
+              aria-pressed={item.enabled}
+              onClick={() => void toggle(item)}
+            >
+              {item.enabled ? <Pause /> : <Play />}
+              {item.enabled ? "Nightly" : "Manual"}
+            </button>
+          )}
+          {item.category === "chat" && (
+            <button
+              className="playlist-main-action"
+              aria-label={`Chat about ${item.name}`}
+              title="Continue playlist chat"
+              onClick={() => setChat({ initial: item })}
+            >
+              <MessageCircle />
+              Open chat
+            </button>
+          )}
+          {item.category !== "chat" && (
+            <button
+              aria-label={`Edit ${item.name}`}
+              title="Edit playlist"
+              disabled={Boolean(busy)}
+              onClick={() => setEditor(item)}
+            >
               <SlidersHorizontal />
             </button>
           )}
-          <button
-            aria-label={`Preview ${item.name}`}
-            title="Preview playlist"
-            disabled={Boolean(busy)}
-            onClick={() => void run(item, true)}
-          >
-            <Sparkles />
-          </button>
+          {item.category !== "chat" && (
+            <button
+              className="playlist-main-action"
+              aria-label={`Preview ${item.name}`}
+              title="Preview playlist"
+              disabled={Boolean(busy)}
+              onClick={() => void run(item, true)}
+            >
+              {busy === "preview-" + item.id ? (
+                <LoaderCircle className="spin" />
+              ) : (
+                <Sparkles />
+              )}
+              Preview
+            </button>
+          )}
           <button
             aria-label={`Synchronize ${item.name}`}
-            title="Synchronize now"
-            disabled={Boolean(busy) || item.ownerTokenStatus !== "active"}
+            title={
+              item.category === "chat"
+                ? "Sync saved mix to Navidrome"
+                : item.navidromePlaylistId
+                  ? "Refresh mix in Navidrome"
+                  : "Publish to Navidrome"
+            }
+            disabled={
+              Boolean(busy) ||
+              item.ownerTokenStatus !== "active" ||
+              item.chatJob?.status === "queued" ||
+              item.chatJob?.status === "running"
+            }
             onClick={() => void run(item, false)}
           >
             <RefreshCw />
           </button>
           <button
-              className="danger-icon"
-              aria-label={`Remove ${item.name}`}
-              title="Remove playlist"
-              onClick={() => void remove(item)}
-            >
-              <Trash2 />
+            className="danger-icon"
+            aria-label={`Remove ${item.name}`}
+            title="Remove playlist"
+            disabled={
+              Boolean(busy) ||
+              item.chatJob?.status === "queued" ||
+              item.chatJob?.status === "running"
+            }
+            onClick={() => void remove(item)}
+          >
+            <Trash2 />
           </button>
         </div>
       </article>
@@ -294,10 +438,21 @@ export function PlaylistStudio() {
           <span className="kicker">Your playlist studio</span>
           <h2>Your library, kept in motion</h2>
           <p>
-            Explore your collection, rediscover favorites, or shape a mix in conversation.
+            Explore your collection, rediscover favorites, or shape a mix in
+            conversation.
           </p>
         </div>
-        <div className="playlist-user-tools"><span>Playlists for {data.selectedUser.displayName}</span><a className="secondary-button" href="/api/navidrome/open" target="_blank"><ExternalLink />Navidrome</a></div>
+        <div className="playlist-user-tools">
+          <span>Playlists for {data.selectedUser.displayName}</span>
+          <a
+            className="secondary-button"
+            href="/api/navidrome/open"
+            target="_blank"
+          >
+            <ExternalLink />
+            Navidrome
+          </a>
+        </div>
       </header>
 
       {!connectionConfigured && (
@@ -305,7 +460,10 @@ export function PlaylistStudio() {
           <Ban />
           <div>
             <strong>Navidrome is not connected</strong>
-            <span>The playlist owner must sign into Curator with Navidrome before synchronization.</span>
+            <span>
+              The playlist owner must sign into Curator with Navidrome before
+              synchronization.
+            </span>
           </div>
         </div>
       )}
@@ -313,7 +471,11 @@ export function PlaylistStudio() {
       {notice && (
         <div className="playlist-notice">
           <span>{notice}</span>
-          {undo&&<button className="notice-undo" onClick={()=>void undoFeedback()}>Undo</button>}
+          {undo && (
+            <button className="notice-undo" onClick={() => void undoFeedback()}>
+              Undo
+            </button>
+          )}
           <button aria-label="Dismiss message" onClick={() => setNotice("")}>
             <X />
           </button>
@@ -328,8 +490,8 @@ export function PlaylistStudio() {
         </div>
         <div>
           <Clock3 />
-          <span>Next refresh</span>
-          <strong>04:30</strong>
+          <span>Nightly refresh</span>
+          <strong>{enabled ? "04:30 Zurich" : "Manual"}</strong>
         </div>
         <div>
           <RefreshCw />
@@ -343,64 +505,55 @@ export function PlaylistStudio() {
           <span className="kicker">Add your direction</span>
           <h2>What do you want to hear?</h2>
           <p>
-            Pick a starting point. The next step offers options found in your
-            library, while still allowing your own terms.
+            Choose how to shape your mix. Start with your own direction or
+            browse optional ideas before creating a playlist.
           </p>
         </header>
         <div>
-          <button onClick={() => setChat({})}>
-            <span><MessageCircle /></span><strong>AI chat playlist</strong><small>Describe your mix, then refine it as you go.</small>
-          </button>
-          <button onClick={() => setEditor(template("rediscovery",currentUserId))}>
-            <span><History /></span><strong>Rediscovery</strong><small>Bring back favorites in a genre you choose.</small>
-          </button>
-          <button onClick={() => setEditor(template("depth",currentUserId))}>
-            <span><Telescope /></span><strong>Deep dive</strong><small>Explore deep cuts in your collection.</small>
-          </button>
-          <button onClick={() => setEditor(template("mood",currentUserId))}>
-            <span><Plus /></span>
-            <strong>Mood or occasion</strong>
-            <small>Choose feelings, context, and sound.</small>
-          </button>
-          <button onClick={() => setEditor(template("discovery",currentUserId))}>
-            <span><Compass /></span>
-            <strong>Discovery lane</strong>
-            <small>Give Curator a genre, subgenre, or theme.</small>
-          </button>
-          <button onClick={() => setEditor(template("journey",currentUserId))}>
-            <span><Route /></span>
-            <strong>Progressive journey</strong>
-            <small>Choose a direction and energy arc.</small>
-          </button>
+          {creationTypes.map((category) => {
+            const meta = getMeta(category),
+              Icon = meta.icon;
+            return (
+              <button
+                key={category}
+                onClick={() =>
+                  category === "chat"
+                    ? setChat({})
+                    : setEditor(template(category, currentUserId))
+                }
+              >
+                <span>
+                  <Icon />
+                </span>
+                <strong>{meta.label}</strong>
+                <small>{meta.description}</small>
+              </button>
+            );
+          })}
         </div>
       </section>
 
-      <section className="playlist-list-section" aria-labelledby="curator-picks-title">
+      <section
+        className="playlist-list-section"
+        aria-labelledby="your-playlists-title"
+      >
         <header>
           <div>
-            <span className="kicker">Chosen from your listening</span>
-            <h2 id="curator-picks-title">Curator picks</h2>
-            <p>Ready-made directions for {data.selectedUser.displayName}. Edit a pick to make it yours, or remove it to dismiss it.</p>
+            <h2 id="your-playlists-title">Your playlists</h2>
+            <p>
+              Refine chat playlists through conversation. Preview, edit, or
+              refresh your other mixes whenever you like.
+            </p>
           </div>
-          <span>{curatorPicks.length} playlists</span>
+          <span>{playlists.length} playlists</span>
         </header>
-        <div className="playlist-row-list">
-          {curatorPicks.map(row)}
-        </div>
-        {!curatorPicks.length && <p className="playlist-group-empty">No Curator picks right now. Suggestions come from your listening and favorites; removed picks stay dismissed.</p>}
-      </section>
-
-      <section className="playlist-list-section" aria-labelledby="personal-playlists-title">
-        <header>
-          <div>
-            <span className="kicker">Your directions</span>
-            <h2 id="personal-playlists-title">Your playlists</h2>
-            <p>You choose the settings. Nightly refresh is optional; AI chat playlists change through conversation.</p>
-          </div>
-          <span>{personalPlaylists.length} playlists</span>
-        </header>
-        <div className="playlist-row-list">{personalPlaylists.map(row)}</div>
-        {!personalPlaylists.length && <p className="playlist-group-empty">Create a playlist above, or edit a Curator pick to make it yours.</p>}
+        <div className="playlist-row-list">{playlists.map(row)}</div>
+        {!playlists.length && (
+          <p className="playlist-group-empty">
+            Choose a playlist type above to create your first mix. Starting
+            ideas are optional, and nightly refresh is your choice.
+          </p>
+        )}
       </section>
 
       {data.acquisitions.length > 0 && (
@@ -426,17 +579,45 @@ export function PlaylistStudio() {
             if (event.target === event.currentTarget) setPreview(undefined);
           }}
         >
-          <section className="playlist-preview-drawer" role="dialog" aria-modal="true" aria-labelledby="playlist-preview-title">
+          <section
+            className="playlist-preview-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="playlist-preview-title"
+          >
             <header>
               <div>
                 <span className="kicker">Preview</span>
                 <h2 id="playlist-preview-title">{preview.definition.name}</h2>
-                <p>{preview.items.length} tracks in proposed order</p>
+                <p>
+                  {preview.items.length} of{" "}
+                  {Number(preview.definition.config.targetTracks)} songs in
+                  proposed order
+                </p>
               </div>
-              <button className="icon-button" aria-label="Close playlist preview" onClick={() => setPreview(undefined)}>
+              <button
+                className="icon-button"
+                aria-label="Close playlist preview"
+                onClick={() => setPreview(undefined)}
+              >
                 <X />
               </button>
             </header>
+            {preview.items.length > 0 &&
+              preview.items.length <
+                Number(preview.definition.config.targetTracks) && (
+                <p className="playlist-group-empty">
+                  This direction has fewer matching songs than requested.
+                  Broaden your settings or reduce the song count before
+                  publishing.
+                </p>
+              )}
+            {!preview.items.length && (
+              <p className="playlist-group-empty">
+                No songs match this direction yet. Adjust the settings or choose
+                a broader sound.
+              </p>
+            )}
             <div className="preview-track-list">
               {preview.items.map((item, index) => (
                 <article key={item.fileId + "-" + index}>
@@ -500,11 +681,49 @@ export function PlaylistStudio() {
                 </article>
               ))}
             </div>
+            <footer className="playlist-preview-actions">
+              <button
+                className="secondary-button"
+                disabled={Boolean(busy)}
+                onClick={() => {
+                  setEditor(preview.definition);
+                  setPreview(undefined);
+                }}
+              >
+                Adjust settings
+              </button>
+              <button
+                className="primary-button"
+                disabled={
+                  Boolean(busy) ||
+                  preview.items.length <
+                    Number(preview.definition.config.targetTracks) ||
+                  preview.definition.ownerTokenStatus !== "active"
+                }
+                onClick={() => {
+                  const definition = preview.definition;
+                  setPreview(undefined);
+                  void run(definition, false);
+                }}
+              >
+                <ExternalLink />
+                {preview.definition.navidromePlaylistId
+                  ? "Refresh in Navidrome"
+                  : "Publish to Navidrome"}
+              </button>
+            </footer>
           </section>
         </div>
       )}
 
-      {chat && <PlaylistChat initial={chat.initial} ownerUserId={currentUserId} close={() => setChat(undefined)} changed={() => void load(currentUserId)} />}
+      {chat && (
+        <PlaylistChat
+          initial={chat.initial}
+          ownerUserId={currentUserId}
+          close={() => setChat(undefined)}
+          changed={() => void load(currentUserId)}
+        />
+      )}
       {editor && (
         <PlaylistEditor
           initial={editor}

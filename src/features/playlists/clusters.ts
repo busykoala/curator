@@ -42,4 +42,4 @@ export async function playlistSuggestions(ownerUserId?:number){
   if(clusters.length)suggestions.push(suggestion("rediscovery","Forgotten Favorites",[],"forgotten"));
   return{clusters,suggestions};
 }
-function suggestion(category:PlaylistCategory,name:string,lanes:string[],key:string){return{key:`${category}:${key}`,name,category,intent:"",enabled:true,config:{...defaultConfig(category),tasteLanes:lanes,genres:lanes}}}
+function suggestion(category:PlaylistCategory,name:string,lanes:string[],key:string){return{key:`${category}:${key}`,name,category,intent:"",enabled:false,config:{...defaultConfig(category),tasteLanes:lanes}}}

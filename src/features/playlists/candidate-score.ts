@@ -1,7 +1,4 @@
-import type {
-  PlaylistConfig,
-  PlaylistDefinition,
-} from "./types";
+import type { PlaylistConfig, PlaylistDefinition } from "./types";
 
 export type ListeningProfile = {
   frequent?: Array<Record<string, unknown>>;
@@ -51,9 +48,7 @@ function match(wanted: string, available: string[]) {
   if (!target) return 0;
   if (available.includes(target)) return 1;
   if (
-    available.some(
-      (value) => value.includes(target) || target.includes(value),
-    )
+    available.some((value) => value.includes(target) || target.includes(value))
   ) {
     return 0.72;
   }
@@ -79,38 +74,58 @@ function listeningSignal(
 ) {
   const key = norm(artist) + "|" + norm(album);
   const frequent = listening?.frequent ?? [];
-  const item = frequent.find(
+  const items = frequent.filter(
     (entry) =>
       norm(String(entry.artist ?? "")) +
         "|" +
         norm(String(entry.name ?? entry.album ?? "")) ===
-      key,
+        key &&
+      (Number(entry.playCount ?? 0) > 0 ||
+        Number.isFinite(Date.parse(String(entry.played ?? "")))),
   );
-  const starred = (listening?.starred ?? []).some((entry) => norm(String(entry.artist ?? (entry.Artists as string[] | undefined)?.[0] ?? "")) === norm(artist) && (!entry.album || norm(String(entry.album)) === norm(album)));
-  if (!item && !starred) return { score: 0, reason: "" };
-  const plays = Number(item?.playCount ?? 0);
-  const played = Date.parse(String(item?.played ?? ""));
-  const ageDays = Number.isFinite(played)
-    ? Math.max(0, (Date.now() - played) / 86_400_000)
-    : 60;
+  const starred = (listening?.starred ?? []).some(
+    (entry) =>
+      norm(
+        String(
+          entry.artist ?? (entry.Artists as string[] | undefined)?.[0] ?? "",
+        ),
+      ) === norm(artist) &&
+      (!entry.album || norm(String(entry.album)) === norm(album)),
+  );
+  if (!items.length && !starred)
+    return { score: 0, reason: "", ageDays: Number.POSITIVE_INFINITY };
+  const plays = items.reduce(
+    (sum, item) => sum + Math.max(0, Number(item.playCount ?? 0) || 0),
+    0,
+  );
+  // Navidrome returns songs. An album stays recent if any of its songs was
+  // played recently, even when the most-played song has an older timestamp.
+  const ageDays = Math.min(
+    ...items.map((item) => {
+      const played = Date.parse(String(item.played ?? ""));
+      return Number.isFinite(played)
+        ? Math.max(0, (Date.now() - played) / 86_400_000)
+        : Number.POSITIVE_INFINITY;
+    }),
+  );
   const score =
-    Math.log1p(plays) * 8 + (starred ? 24 : 0) +
+    Math.log1p(plays) * 8 +
+    (starred ? 24 : 0) +
     Math.min(18, ageDays * 0.35) -
     (ageDays < 14 ? 18 : 0);
   return {
     score,
+    ageDays,
     reason:
-      starred && !item ? "Starred in Navidrome" : ageDays >= 30
-        ? "A former favorite not played recently"
-        : "Previously played " + plays + " times",
+      starred && !items.length
+        ? "Starred in Navidrome"
+        : ageDays >= 30
+          ? "A former favorite not played recently"
+          : "Previously played " + plays + " times",
   };
 }
 
-function matches(
-  wanted: string[],
-  available: string[],
-  weight: number,
-) {
+function matches(wanted: string[], available: string[], weight: number) {
   const found = wanted
     .map((value) => ({ value, quality: match(value, available) }))
     .filter((item) => item.quality > 0);
@@ -151,16 +166,26 @@ export function scoreCandidate(input: {
   const ratingValue = rating(tags);
   const listeningValue = listeningSignal(artist, album, listening);
   let score = 20 + direction.score + moods.score + contexts.score;
-  if (definition.category !== "rediscovery") score += listeningValue.score * .3 * (1-definition.config.explorationPercent/100);
+  if (definition.category !== "rediscovery")
+    score +=
+      listeningValue.score *
+      0.3 *
+      (1 - definition.config.explorationPercent / 100);
   let eligible = !blocked;
 
   if (definition.category === "discovery") {
-    score += Math.max(0, Math.min(18, (year - (new Date().getFullYear() - 4)) * 4));
+    score += Math.max(
+      0,
+      Math.min(18, (year - (new Date().getFullYear() - 4)) * 4),
+    );
   }
   if (definition.category === "depth") score += available.length * 0.25;
   if (definition.category === "rediscovery") {
     score = ratingValue * 8 + listeningValue.score;
-    eligible = eligible && score >= 12;
+    eligible =
+      eligible &&
+      score >= 12 &&
+      listeningValue.ageDays >= definition.config.noveltyDays;
   }
 
   const expected =
@@ -175,7 +200,11 @@ export function scoreCandidate(input: {
       ? listeningValue.reason ||
         (ratingValue ? "Highly rated in your library" : "Rediscovery candidate")
       : found.length
-        ? "Matches " + found.slice(0, 4).join(", ") + (listeningValue.reason && definition.config.explorationPercent < 50 ? ` · ${listeningValue.reason}` : "")
+        ? "Matches " +
+          found.slice(0, 4).join(", ") +
+          (listeningValue.reason && definition.config.explorationPercent < 50
+            ? ` · ${listeningValue.reason}`
+            : "")
         : "Fits " + definition.category.replaceAll("_", " ") + " intent";
 
   return { score, reason, eligible };

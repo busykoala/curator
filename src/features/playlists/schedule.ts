@@ -1,6 +1,5 @@
 import { stateGet, stateSet } from "@/features/db/client";
 import { listCuratorUsers } from "@/features/auth/users";
-import { ensureAutomaticPlaylists } from "./automatic";
 import { refreshListeningClusters } from "./clusters";
 import { researchDiscovery, refreshDiscoveryStates } from "./discovery";
 import { generateEnabledPlaylists } from "./generate";
@@ -30,7 +29,6 @@ export async function runPlaylistSchedule() {
   stateSet("playlist_error", "");
   const now = local();
   await refreshDiscoveryStates();
-  for (const user of listCuratorUsers()) await ensureAutomaticPlaylists(user.id).catch((error) => stateSet("playlist_error", String(error)));
   refreshNextRunTimes();
 
   if (
@@ -60,7 +58,6 @@ export async function runPlaylistSchedule() {
     stateSet("playlist_phase", "clusters");
     for (const user of listCuratorUsers()) {
       await refreshListeningClusters(user.id).catch((error) => stateSet("playlist_error", String(error)));
-      await ensureAutomaticPlaylists(user.id).catch((error) => stateSet("playlist_error", String(error)));
     }
     stateSet("playlist_phase", "generate");
     const results = await generateEnabledPlaylists();

@@ -2,7 +2,7 @@
 
 import type { PlaylistDefinition } from "./playlist-view-model";
 
-type Curve = "slow_burn" | "ascent" | "wave" | "descent";
+type Curve = "steady" | "slow_burn" | "ascent" | "wave" | "descent";
 
 const shapes: Array<{
   value: Curve;
@@ -10,6 +10,12 @@ const shapes: Array<{
   detail: string;
   path: string;
 }> = [
+  {
+    value: "steady",
+    label: "Even flow",
+    detail: "Keep energy balanced",
+    path: "M4 18 C32 16 54 20 76 18 C92 16 106 18 116 18",
+  },
   {
     value: "slow_burn",
     label: "Slow burn",
@@ -51,6 +57,7 @@ export function EnergyShape({
           type="button"
           className={value === shape.value ? "selected" : ""}
           key={shape.value}
+          aria-pressed={value === shape.value}
           onClick={() => change(shape.value)}
         >
           <svg viewBox="0 0 120 36" aria-hidden="true">

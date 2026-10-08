@@ -68,6 +68,11 @@ function migrate(instance: Database.Database) {
     instance.exec("UPDATE playlist_feedback SET owner_user_id=(SELECT owner_user_id FROM smart_playlists WHERE id=playlist_feedback.playlist_id) WHERE playlist_id IS NOT NULL");
     instance.exec("CREATE INDEX IF NOT EXISTS playlist_feedback_owner ON playlist_feedback(owner_user_id,playlist_id,file_id)");
   });
+  migration(10, () => {
+    // Keep every existing mix, its refresh preference, history, and native link.
+    // Suggestions now become playlists only after an explicit create action.
+    instance.exec("UPDATE smart_playlists SET automatic=0 WHERE automatic=1");
+  });
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

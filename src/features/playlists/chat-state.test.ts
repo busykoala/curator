@@ -8,7 +8,7 @@ import { config } from "@/config";
 import { db } from "../db/client";
 import { schemaSql } from "../db/schema";
 import { acquireChatLease, chatState, releaseChatLease, storeChatResult } from "./chat-state";
-import { createPlaylist, ensurePlaylist, getPlaylist, removeUnusedAutomaticPlaylists } from "./repository";
+import { createPlaylist, getPlaylist } from "./repository";
 import { defaultConfig } from "./types";
 import { generatePlaylist } from "./generate";
 const directory=mkdtempSync(join(tmpdir(),"curator-chat-test-"));
@@ -19,13 +19,11 @@ const database=db();
 database.prepare("INSERT INTO curator_users(id,navidrome_user_id,username,display_name,token_status) VALUES (1,'test','test','Test listener','missing')").run();
 const create=(category:"chat"|"rediscovery"|"depth",name:string)=>createPlaylist({name,category,ownerUserId:1,config:defaultConfig(category)});
 
-test("legacy defaults migrate as automatic; personal rediscovery and depth survive default cleanup",()=>{
-  assert.equal(getPlaylist(1)?.automatic,true);
+test("legacy rediscovery mixes remain available as ordinary playlists",()=>{
+  assert.equal(getPlaylist(1)?.name,"Legacy favorites");
+  assert.equal((database.prepare("SELECT automatic FROM smart_playlists WHERE id=1").get() as {automatic:number}).automatic,0);
   const personal=create("rediscovery","My Jazz Favorites"),depth=create("depth","My Deep Dive");
-  ensurePlaylist({name:"Auto Jazz",category:"depth",ownerUserId:1,config:defaultConfig("depth")});
-  removeUnusedAutomaticPlaylists(1,new Set());
   assert.ok(getPlaylist(personal.id));assert.ok(getPlaylist(depth.id));
-  assert.equal((database.prepare("SELECT count(*) n FROM smart_playlists WHERE name='Auto Jazz'").get() as {n:number}).n,0);
 });
 test("chat revisions persist, concurrent writers are blocked and stale leases cannot commit",()=>{
   const playlist=create("chat","A Conversation"),lease=acquireChatLease(playlist.id);
