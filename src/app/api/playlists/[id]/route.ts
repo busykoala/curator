@@ -1,6 +1,29 @@
-import { authenticated,sameOrigin } from "@/features/auth/session";
+import { db } from "@/features/db/client";
 import { deleteManagedPlaylist } from "@/features/integrations/navidrome";
-import { getPlaylist,removePlaylist,updatePlaylist } from "@/features/playlists/repository";
-const idOf=async(context:{params:Promise<{id:string}>})=>Number((await context.params).id);
-export async function PATCH(request:Request,context:{params:Promise<{id:string}>}){if(!sameOrigin(request)||!await authenticated())return new Response("Forbidden",{status:403});try{return Response.json({playlist:updatePlaylist(await idOf(context),await request.json())})}catch(error){return Response.json({error:String(error)},{status:400})}}
-export async function DELETE(request:Request,context:{params:Promise<{id:string}>}){if(!sameOrigin(request)||!await authenticated())return new Response("Forbidden",{status:403});try{const id=await idOf(context),playlist=getPlaylist(id);if(!playlist)throw new Error("Playlist not found");await deleteManagedPlaylist(playlist);removePlaylist(id);return Response.json({ok:true})}catch(error){return Response.json({error:String(error)},{status:400})}}
+import { removePlaylist, updatePlaylist } from "@/features/playlists/repository";
+import { ownerInputMatches, playlistAccess, playlistError } from "@/features/playlists/access";
+import { assertChatIdle } from "@/features/playlists/chat-jobs";
+import { acquireChatLease, releaseChatLease } from "@/features/playlists/chat-state";
+type Context = { params: Promise<{ id: string }> };
+export async function PATCH(request: Request, { params }: Context) {
+  const id = Number((await params).id), access = await playlistAccess(request, id, true);
+  if (access instanceof Response) return access;
+  try {
+    const body = await request.json() as Record<string, unknown>;
+    if (!ownerInputMatches(body, access.user.id)) return Response.json({ error: "Playlist ownership cannot be changed" }, { status: 403 });
+    const playlist = db().transaction(() => { assertChatIdle(id); return updatePlaylist(id, body); })();
+    return Response.json({ playlist });
+  } catch (error) { return playlistError(error); }
+}
+export async function DELETE(request: Request, { params }: Context) {
+  const id = Number((await params).id), access = await playlistAccess(request, id, true);
+  if (access instanceof Response) return access;
+  let lease: string | undefined;
+  try {
+    if (access.playlist.category === "chat") lease = acquireChatLease(id);
+    await deleteManagedPlaylist(access.playlist);
+    removePlaylist(id);
+    return Response.json({ ok: true });
+  } catch (error) { return playlistError(error); }
+  finally { if (lease) releaseChatLease(id, lease); }
+}

@@ -20,6 +20,7 @@ export type PlaylistDefinition = {
   ownerDisplayName?: string;
   ownerTokenStatus?: string;
   navidromePlaylistId?: string | null;
+  chatJob?: {status: "queued" | "running" | "completed" | "failed";updatedAt:number} | null;
   runs?: Array<{ status: string; createdAt?: string; finishedAt?: string }>;
 };
 

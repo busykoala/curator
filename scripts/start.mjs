@@ -27,3 +27,5 @@ process.on("SIGINT", () => stop(0));
 launch("web", "node", ["server.js"], false, { ...process.env, HOSTNAME: "0.0.0.0", PORT: process.env.PORT ?? "3000" });
 launch("worker", "node", [".workers/worker.mjs"], true);
 launch("acquisition", "node", [".workers/acquisition-worker.mjs"], true);
+
+launch("playlist-chat", "node", [".workers/playlist-chat-worker.mjs"], true);

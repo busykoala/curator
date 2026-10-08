@@ -1,4 +1,5 @@
-import { currentUser, listCuratorUsers } from "@/features/auth/session";
+import { requestedUserMatches } from "@/features/playlists/access";
+import { currentUser } from "@/features/auth/session";
 import { homeData } from "@/features/home/query";
 import { ensureAutomaticPlaylists } from "@/features/playlists/automatic";
 
@@ -7,17 +8,8 @@ export async function GET(request: Request) {
     const current = await currentUser();
     if (!current) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-    const users = listCuratorUsers();
-    const requested = Number(
-      new URL(request.url).searchParams.get("userId") || current.id,
-    );
-    const target = users.find((user) => user.id === requested);
-    if (!target) {
-      return Response.json(
-        { error: "User has not signed into Curator" },
-        { status: 404 },
-      );
-    }
+    if (!requestedUserMatches(request, current.id)) return Response.json({ error: "Forbidden" }, { status: 403 });
+    const target = current, users = [current];
 
     let automatic = { created: 0, removed: 0, total: 0, names: [] as string[] };
     let automaticWarning = "";

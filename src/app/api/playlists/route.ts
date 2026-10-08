@@ -1,4 +1,5 @@
-import { currentUser, listCuratorUsers, sameOrigin } from "@/features/auth/session";
+import { currentUser, sameOrigin } from "@/features/auth/session";
+import { ownerInputMatches, requestedUserMatches } from "@/features/playlists/access";
 import { stateGet } from "@/features/db/client";
 import { navidromeConfigured } from "@/features/integrations/navidrome";
 import { ensureAutomaticPlaylists } from "@/features/playlists/automatic";
@@ -12,17 +13,8 @@ export async function GET(request: Request) {
     const current = await currentUser();
     if (!current) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-    const users = listCuratorUsers();
-    const requested = Number(
-      new URL(request.url).searchParams.get("userId") || current.id,
-    );
-    const target = users.find((item) => item.id === requested);
-    if (!target) {
-      return Response.json(
-        { error: "User has not signed into Curator" },
-        { status: 404 },
-      );
-    }
+    if (!requestedUserMatches(request, current.id)) return Response.json({ error: "Forbidden" }, { status: 403 });
+    const target = current, users = [current];
 
     let automaticWarning = "";
     try {
@@ -68,8 +60,9 @@ export async function POST(request: Request) {
   }
   try {
     const body = await request.json() as Record<string, unknown>;
+    if (!ownerInputMatches(body, user.id)) return Response.json({ error: "Forbidden" }, { status: 403 });
     return Response.json(
-      { playlist: createPlaylist({ ...body, ownerUserId: Number(body.ownerUserId) || user.id }) },
+      { playlist: createPlaylist({ ...body, ownerUserId: user.id }) },
       { status: 201 },
     );
   } catch (error) {

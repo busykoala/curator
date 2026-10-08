@@ -1,6 +1,18 @@
 import { z } from "zod";
-import { authenticated,sameOrigin } from "@/features/auth/session";
-import { feedback,removeFeedback } from "@/features/playlists/repository";
-const schema=z.object({fileId:z.number().int().positive(),artist:z.string().max(200),action:z.enum(["pin","exclude","snooze","artist_exclude"])});
-export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){if(!sameOrigin(request)||!await authenticated())return new Response("Forbidden",{status:403});try{const value=schema.parse(await request.json());feedback(Number((await params).id),value.fileId,value.artist,value.action);return Response.json({ok:true})}catch(error){return Response.json({error:String(error)},{status:400})}}
-export async function DELETE(request:Request,{params}:{params:Promise<{id:string}>}){if(!sameOrigin(request)||!await authenticated())return new Response("Forbidden",{status:403});try{const value=schema.parse(await request.json());removeFeedback(Number((await params).id),value.fileId,value.action);return Response.json({ok:true})}catch(error){return Response.json({error:String(error)},{status:400})}}
+import { db } from "@/features/db/client";
+import { playlistAccess, playlistError } from "@/features/playlists/access";
+import { assertChatIdle } from "@/features/playlists/chat-jobs";
+import { feedback, removeFeedback } from "@/features/playlists/repository";
+const schema = z.object({ fileId: z.number().int().positive(), artist: z.string().max(200), action: z.enum(["pin", "exclude", "snooze", "artist_exclude"]) });
+type Context = { params: Promise<{ id: string }> };
+async function mutate(request: Request, { params }: Context, remove: boolean) {
+  const id = Number((await params).id), access = await playlistAccess(request, id, true);
+  if (access instanceof Response) return access;
+  try {
+    const value = schema.parse(await request.json());
+    db().transaction(() => { assertChatIdle(id); if (remove) removeFeedback(id, value.fileId, value.action); else feedback(id, value.fileId, value.artist, value.action); })();
+    return Response.json({ ok: true });
+  } catch (error) { return playlistError(error); }
+}
+export const POST = (request: Request, context: Context) => mutate(request, context, false);
+export const DELETE = (request: Request, context: Context) => mutate(request, context, true);

@@ -82,9 +82,9 @@ function candidates(
 function activeFeedback(id: number) {
   const rows = db()
     .prepare(
-      "SELECT playlist_id,file_id,artist,action FROM playlist_feedback WHERE (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (playlist_id=? OR playlist_id IS NULL)",
+      "SELECT playlist_id,file_id,artist,action FROM playlist_feedback WHERE owner_user_id=(SELECT owner_user_id FROM smart_playlists WHERE id=?) AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP) AND (playlist_id=? OR playlist_id IS NULL)",
     )
-    .all(id) as Array<{
+    .all(id,id) as Array<{
     file_id: number;
     artist: string;
     action: string;

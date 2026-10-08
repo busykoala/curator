@@ -122,12 +122,12 @@ export async function researchDiscovery() {
 }
 
 function pinImported(item: Candidate) {
-  const playlist = db().prepare("SELECT id FROM smart_playlists WHERE lower(name)=lower(?) AND enabled=1").get(item.lane) as { id: number } | undefined;
+  const playlist = db().prepare("SELECT id,owner_user_id FROM smart_playlists WHERE lower(name)=lower(?) AND enabled=1").get(item.lane) as { id: number;owner_user_id:number } | undefined;
   if (!playlist) return;
   const file = (db().prepare("SELECT id,artist_name,album_name FROM files ORDER BY id").all() as Array<{ id: number; artist_name: string; album_name: string }>).find((row) => norm(row.artist_name) === norm(item.artist) && norm(row.album_name) === norm(item.album));
   if (!file) return;
   db().prepare("DELETE FROM playlist_feedback WHERE playlist_id=? AND file_id=? AND action='pin' AND expires_at IS NOT NULL").run(playlist.id, file.id);
-  db().prepare("INSERT INTO playlist_feedback(playlist_id,file_id,artist,action,expires_at) VALUES (?,?,?,'pin',datetime('now','+14 days'))").run(playlist.id, file.id, file.artist_name);
+  db().prepare("INSERT INTO playlist_feedback(playlist_id,file_id,artist,owner_user_id,action,expires_at) VALUES (?,?,?,?,'pin',datetime('now','+14 days'))").run(playlist.id, file.id, file.artist_name,playlist.owner_user_id);
 }
 
 export async function refreshDiscoveryStates() {

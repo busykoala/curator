@@ -1,3 +1,12 @@
-import { authenticated,sameOrigin } from "@/features/auth/session";
+import { playlistAccess, playlistError } from "@/features/playlists/access";
 import { generatePlaylist } from "@/features/playlists/generate";
-export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){if(!sameOrigin(request)||!await authenticated())return new Response("Forbidden",{status:403});try{const body=await request.json().catch(()=>({}));return Response.json(await generatePlaylist(Number((await params).id),body.preview!==false))}catch(error){return Response.json({error:String(error)},{status:400})}}
+import { markChatSynced } from "@/features/playlists/chat-jobs";
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const id = Number((await params).id), access = await playlistAccess(request, id, true);
+  if (access instanceof Response) return access;
+  try {
+    const body = await request.json().catch(() => ({})), result = await generatePlaylist(id, body.preview !== false);
+    if (access.playlist.category === "chat" && body.preview === false) markChatSynced(id);
+    return Response.json(result);
+  } catch (error) { return playlistError(error); }
+}

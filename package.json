@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack && npm run build:workers",
-    "build:workers": "esbuild src/worker.ts src/acquisition-worker.ts --bundle --platform=node --format=esm --packages=external --outdir=.workers --out-extension:.js=.mjs",
+    "build:workers": "esbuild src/worker.ts src/acquisition-worker.ts src/playlist-chat-worker.ts --bundle --platform=node --format=esm --packages=external --outdir=.workers --out-extension:.js=.mjs",
     "start": "node scripts/start.mjs",
     "web": "next start -H 0.0.0.0 -p 3000",
     "worker": "tsx src/worker.ts",

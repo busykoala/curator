@@ -15,7 +15,6 @@ import {
 
 type Props = {
   initial: PlaylistDefinition;
-  users: Array<{id:number;displayName:string;tokenStatus:string}>;
   close: () => void;
   save: (value: PlaylistDefinition) => Promise<void>;
 };
@@ -53,7 +52,7 @@ function copy(
   };
 }
 
-export function PlaylistEditor({ initial, users, close, save }: Props) {
+export function PlaylistEditor({ initial, close, save }: Props) {
   const [busy, setBusy] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [options, setOptions] = useState<Options>(emptyOptions);
@@ -131,7 +130,6 @@ export function PlaylistEditor({ initial, users, close, save }: Props) {
           )}
 
           <div className="playlist-essentials">
-            <label><span>Playlist owner</span><select value={value.ownerUserId} onChange={event=>setValue({...value,ownerUserId:Number(event.target.value)})}>{users.map(user=><option key={user.id} value={user.id}>{user.displayName}{user.tokenStatus!=="active"?" · sign-in required":""}</option>)}</select><small>Any Curator user may assign this playlist to any provisioned listener.</small></label>
             <label>
               <span>Playlist name</span>
               <input

@@ -65,7 +65,7 @@ export function PlaylistStudio() {
   const [preview, setPreview] = useState<PlaylistPreview>();
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
-  const [users,setUsers]=useState<Array<{id:number;displayName:string;tokenStatus:string}>>([]);
+
   const [currentUserId,setCurrentUserId]=useState(0);
   const [undo,setUndo]=useState<{playlistId:number;fileId:number;artist:string;action:string}|null>(null);
   const requestId=useRef(0);
@@ -76,7 +76,7 @@ export function PlaylistStudio() {
     try {
       const playlists=await readJson<PlaylistData>(await fetch(`/api/playlists?userId=${ownerUserId}`,{cache:"no-store"}),"Playlists could not be loaded");
       if(activeRequest!==requestId.current)return;
-      setData(playlists);setUsers(playlists.users);
+      setData(playlists);
       if(playlists.automaticWarning)setNotice(`Automatic playlists were not refreshed: ${playlists.automaticWarning}`);
     } catch (error) {
       if(activeRequest===requestId.current)setNotice(error instanceof Error?error.message:"Playlists could not be loaded");
@@ -84,7 +84,7 @@ export function PlaylistStudio() {
   }, []);
 
   useEffect(() => {
-    void (async()=>{try{const session=await readJson<{user:{id:number};users:Array<{id:number;displayName:string;tokenStatus:string}>}>(await fetch("/api/session",{cache:"no-store"}),"Session could not be loaded");const requested=Number(new URLSearchParams(window.location.search).get("userId"));const selected=session.users.some(user=>user.id===requested)?requested:session.user.id;setUsers(session.users);setCurrentUserId(selected)}catch(error){setNotice(error instanceof Error?error.message:"Session could not be loaded")}})();
+    void (async()=>{try{const session=await readJson<{user:{id:number};users:Array<{id:number;displayName:string;tokenStatus:string}>}>(await fetch("/api/session",{cache:"no-store"}),"Session could not be loaded");const selected=session.user.id;setCurrentUserId(selected)}catch(error){setNotice(error instanceof Error?error.message:"Session could not be loaded")}})();
   }, []);
   useEffect(() => {
     if(!currentUserId)return;
@@ -237,7 +237,7 @@ export function PlaylistStudio() {
             {item.category === "chat" ? "updates" : "change per refresh"}
           </span>
           <span>
-            <strong>{latest?.status || "Ready"}</strong>
+            <strong>{item.chatJob?.status === "queued" ? "Queued" : item.chatJob?.status === "running" ? "Working" : item.chatJob?.status === "completed" ? "Reply ready" : item.chatJob?.status === "failed" ? "Needs retry" : latest?.status || "Ready"}</strong>
             last result
           </span>
         </div>
@@ -297,7 +297,7 @@ export function PlaylistStudio() {
             Explore your collection, rediscover favorites, or shape a mix in conversation.
           </p>
         </div>
-        <div className="playlist-user-tools"><label><span>Playlists for</span><select value={currentUserId} onChange={event=>{const id=Number(event.target.value);setCurrentUserId(id);const url=new URL(window.location.href);url.searchParams.set("userId",String(id));window.history.replaceState({},"",url)} }>{users.map(user=><option key={user.id} value={user.id}>{user.displayName}</option>)}</select></label><a className="secondary-button" href="/api/navidrome/open" target="_blank"><ExternalLink />Navidrome</a></div>
+        <div className="playlist-user-tools"><span>Playlists for {data.selectedUser.displayName}</span><a className="secondary-button" href="/api/navidrome/open" target="_blank"><ExternalLink />Navidrome</a></div>
       </header>
 
       {!connectionConfigured && (
@@ -508,7 +508,6 @@ export function PlaylistStudio() {
       {editor && (
         <PlaylistEditor
           initial={editor}
-          users={users}
           close={() => setEditor(undefined)}
           save={save}
         />

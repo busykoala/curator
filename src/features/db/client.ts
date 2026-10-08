@@ -55,6 +55,11 @@ function migrate(instance: Database.Database) {
       SELECT owner_user_id,'rediscovery:forgotten',id FROM smart_playlists
       WHERE automatic=1 AND category='rediscovery' AND lower(name)='forgotten favorites' AND owner_user_id IS NOT NULL`);
   });
+  migration(9, () => {
+    addColumns(instance, "playlist_feedback", [["owner_user_id", "INTEGER REFERENCES curator_users(id) ON DELETE CASCADE"]]);
+    instance.exec("UPDATE playlist_feedback SET owner_user_id=(SELECT owner_user_id FROM smart_playlists WHERE id=playlist_feedback.playlist_id) WHERE playlist_id IS NOT NULL");
+    instance.exec("CREATE INDEX IF NOT EXISTS playlist_feedback_owner ON playlist_feedback(owner_user_id,playlist_id,file_id)");
+  });
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

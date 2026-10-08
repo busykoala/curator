@@ -55,6 +55,28 @@ test("published chat corrections replace the exact playlist; failed sync retains
     const unsynced=await sendPlaylistMessage(playlist.id,{message:"Bring the original back",targetTracks:1,revision:2});
     assert.equal(unsynced.synced,false);assert.ok(unsynced.syncError.includes("503"));assert.equal(unsynced.result?.items[0].fileId,1);assert.equal(unsynced.revision,3);assert.equal(unsynced.messages.length,6);
     assert.deepEqual(publishedIds,["song-2"]);
+    const {enqueuePlaylistMessage,claimChatJob,checkpointChatJob,latestChatJob}=await import("./chat-jobs");
+    const {runNextChatJob}=await import("./chat-job-runner");
+    const {acquireChatLease,chatState}=await import("./chat-state");
+    const {randomUUID}=await import("node:crypto");
+    failWrites=false;
+    enqueuePlaylistMessage(playlist.id,{requestId:randomUUID(),message:"Update in the background",targetTracks:1,revision:3});
+    await assert.rejects(generatePlaylist(playlist.id,false),/already being updated/);
+    await runNextChatJob();
+    assert.equal(latestChatJob(playlist.id)?.status,"completed");assert.equal(latestChatJob(playlist.id)?.synced,true);
+    assert.deepEqual(publishedIds,["song-1"]);assert.equal(chatState(playlist.id).revision,4);
+    const pending={requestId:randomUUID(),message:"Recover a published correction",targetTracks:1,revision:4};
+    enqueuePlaylistMessage(playlist.id,pending);
+    const interrupted=claimChatJob()!;acquireChatLease(playlist.id,interrupted.id,interrupted.lease);
+    failWrites=true;
+    await sendPlaylistMessage(playlist.id,pending,{lease:interrupted.lease,stored:()=>checkpointChatJob(interrupted.id,interrupted.lease,chatState(playlist.id).revision)});
+    const beforeRecovery=aiRequests;
+    database.prepare("UPDATE playlist_chat_jobs SET lease_until=1 WHERE id=?").run(interrupted.id);
+    failWrites=false;
+    await runNextChatJob();
+    assert.equal(aiRequests,beforeRecovery);assert.equal(chatState(playlist.id).revision,5);
+    assert.equal(latestChatJob(playlist.id)?.synced,true);assert.equal(latestChatJob(playlist.id)?.status,"completed");
+    assert.deepEqual(publishedIds,["song-1"]);assert.equal(chatState(playlist.id).messages.length,10);
   }finally{
     globalThis.fetch=originalFetch;aiClient.structured=originalStructured;database.close();delete (globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true});
   }
