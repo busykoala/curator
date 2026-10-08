@@ -27,7 +27,7 @@ export async function sendPlaylistMessage(id:number,raw:unknown){
   try{
     const state=chatState(id);
     if(request.revision!==state.revision)throw new Error("This conversation has changed. Reopen the playlist and retry.");
-    const result=await suggestChatPlaylist({client:aiClient,library:chatLibrary(id),messages:state.messages,message:request.message,targetTracks:request.targetTracks,current:state.result?.items??[],guidance:state.result?.guidance,name:state.result?definition.name:undefined});
+    const result=await suggestChatPlaylist({client:aiClient,library:chatLibrary(id),messages:state.messages,message:request.message,targetTracks:request.targetTracks,current:state.result?.items??[],guidance:state.result?.guidance,priorRequirements:state.result?.detail.requirements,name:state.result?definition.name:undefined});
     recordAiUsage("playlist_chat",aiModel,{usage:result.detail.usage});
     const messages=[...state.messages,{role:"user" as const,content:request.message},{role:"assistant" as const,content:result.reply}];
     db().transaction(()=>{

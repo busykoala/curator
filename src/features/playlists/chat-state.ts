@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { db } from "@/features/db/client";
 import type { PlaylistCandidate } from "./types";
 import type { ChatMessage, suggestChatPlaylist } from "./chat-agent";
-export type ChatResult = Awaited<ReturnType<typeof suggestChatPlaylist>>;
+type Suggestion=Awaited<ReturnType<typeof suggestChatPlaylist>>;
+export type ChatResult=Omit<Suggestion,"detail">&{detail:Omit<Suggestion["detail"],"requirements">&{requirements?:Suggestion["detail"]["requirements"]}};
 type Row={revision:number;conversation_json:string;result_json:string};
 export function chatState(id:number){
   const row=db().prepare("SELECT revision,conversation_json,result_json FROM playlist_chat_state WHERE playlist_id=?").get(id) as Row|undefined;

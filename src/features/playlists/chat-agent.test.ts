@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CuratorAiClient, type StructuredRequest } from "../ai/client";
-import { libraryTools, searchLibrary, suggestChatPlaylist, type LibraryTrack } from "./chat-agent";
+import { libraryTools, searchLibrary, suggestChatPlaylist, type LibraryTrack, unrestrictedRequirements } from "./chat-agent";
 const track=(fileId:number,title:string,artist:string,profile:Record<string,unknown>,year=1994):LibraryTrack=>({fileId,title,artist,album:"Album",year,profile,tags:{},score:0,reason:"",origin:"catalog"});
 const library=[
   track(1,"Piano","Jazz Artist",{genre:["jazz"],vocalProfile:["instrumental"],instrumentation:["piano"],energy:"low",bpm:90}),
@@ -24,6 +24,7 @@ test("library tools expose inspected IDs and reject malformed filters",()=>{
 function clientFor(data:unknown,inspect=[1]) {
   const client=new CuratorAiClient({apiKey:"test",baseURL:"http://localhost",model:"test"});
   client.structured=async <T>(request:StructuredRequest)=>{
+    await request.tools?.find(tool=>tool.name==="set_requirements")?.execute(unrestrictedRequirements);
     await request.tools?.find(tool=>tool.name==="inspect_tracks")?.execute({fileIds:inspect});
     return {data:data as T,usage:{input_tokens:10,output_tokens:10,total_tokens:20}};
   };
@@ -49,6 +50,7 @@ test("a malformed selection gets one bounded repair using only inspected candida
   const client=clientFor(output);let requests=0;
   client.structured=async <T>(request:StructuredRequest)=>{
     requests++;
+    await request.tools?.find(tool=>tool.name==="set_requirements")?.execute(unrestrictedRequirements);
     await request.tools?.find(tool=>tool.name==="inspect_tracks")?.execute({fileIds:[1]});
     return {data:(requests===1?{...output,tracks:[...output.tracks,...output.tracks]}:output) as T,usage:{input_tokens:10,output_tokens:10,total_tokens:20}};
   };
@@ -60,4 +62,34 @@ test("non-Latin song titles remain distinct during recording validation",async()
   const foreign=[track(11,"春","音楽家",{}),track(12,"秋","音楽家",{})];
   const result=await suggestChatPlaylist({...input,library:foreign,targetTracks:2,client:clientFor({...output,tracks:[{fileId:11,reason:"First"},{fileId:12,reason:"Second"}]},[11,12])});
   assert.equal(result.items.length,2);
+});
+
+test("a correction rejects retained songs without required instruments and repairs using compliant metadata only",async()=>{
+  const guitar=track(5,"Bossa","Jazz Guitarist",{genre:["jazz"],vocalProfile:["instrumental"],instrumentation:["acoustic_guitar"]});
+  const client=clientFor(output);let requests=0;
+  client.structured=async <T>(request:StructuredRequest)=>{
+    requests++;
+    if(request.tools){
+      await request.tools.find(tool=>tool.name==="set_requirements")?.execute({...unrestrictedRequirements,genres:["jazz"],instruments:["piano"],vocal:"instrumental"});
+      assert.throws(()=>request.tools!.find(tool=>tool.name==="set_requirements")!.execute(unrestrictedRequirements),/already set/);
+      await request.tools.find(tool=>tool.name==="inspect_tracks")?.execute({fileIds:[1,5]});
+    }else{
+      const repair=JSON.parse(request.input);
+      assert.deepEqual(repair.candidates.map((item:{fileId:number})=>item.fileId),[1]);
+      assert.deepEqual(repair.requirements.instruments,["piano"]);
+    }
+    return {data:(requests===1?{...output,tracks:[{fileId:5,reason:"Hallucinated piano"}]}:output) as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}};
+  };
+  const result=await suggestChatPlaylist({...input,library:[...library,guitar],current:[guitar],message:"Make it strictly instrumental piano jazz",client});
+  assert.equal(requests,2);assert.equal(result.items[0].fileId,1);assert.equal(result.detail.requirements.vocal,"instrumental");
+});
+
+test("hard metadata requirements cannot be weakened by a repair",async()=>{
+  const client=clientFor(output);
+  client.structured=async <T>(request:StructuredRequest)=>{
+    await request.tools?.find(tool=>tool.name==="set_requirements")?.execute({...unrestrictedRequirements,genres:["jazz"],instruments:["piano"],vocal:"instrumental"});
+    await request.tools?.find(tool=>tool.name==="inspect_tracks")?.execute({fileIds:[1,2]});
+    return {data:{...output,tracks:[{fileId:2,reason:"Does not meet the requirements"}]} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}};
+  };
+  await assert.rejects(suggestChatPlaylist({...input,client}),/mandatory metadata requirements/);
 });

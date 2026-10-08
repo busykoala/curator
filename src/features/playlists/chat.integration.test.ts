@@ -22,7 +22,7 @@ test("published chat corrections replace the exact playlist; failed sync retains
   }
   let aiRequests=0,published=false,failWrites=false,publishedIds:string[]=[];
   aiClient.structured=async <T>(request:StructuredRequest)=>{
-    aiRequests++;await request.tools?.find(tool=>tool.name==="inspect_tracks")?.execute({fileIds:[1,2]});
+    aiRequests++;await request.tools?.find(tool=>tool.name==="set_requirements")?.execute({genres:[],excludeGenres:[],instruments:[],artists:[],excludeArtists:[],vocal:"any",minYear:0,maxYear:0,minBpm:0,maxBpm:0});await request.tools?.find(tool=>tool.name==="inspect_tracks")?.execute({fileIds:[1,2]});
     const fileId=aiRequests===2?2:1;
     return {data:{name:"Test Mix",reply:"Updated",guidance:"Keep it calm",tracks:[{fileId,reason:"Matches your request"}]} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}};
   };
