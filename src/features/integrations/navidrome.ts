@@ -1,13 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import { config } from "@/config";
-import {identityName as norm,trackArtistMatches,trackAlbumMatches} from "./navidrome-identity";
+import {identityName as norm,trackArtistMatches,trackAlbumMatches,trackPositionMatches} from "./navidrome-identity";
 import { jellyfinCall } from "@/features/auth/navidrome";
 import { db } from "@/features/db/client";
 import { navidromePassword, runtimeSettings } from "@/features/settings/runtime";
 import type { PlaylistCandidate, PlaylistDefinition } from "@/features/playlists/types";
 
 type Track = { id:string; title:string; artist?:string; album?:string; year?:number; track?:number; discNumber?:number; path?:string; playCount?:number; played?:string; starred?:string; userRating?:number };
-type JellyItem = { Id:string; Name?:string; Album?:string; Artists?:string[]; Path?:string; Overview?:string; UserData?:{PlayCount?:number;LastPlayedDate?:string;IsFavorite?:boolean;Rating?:number} };
+type JellyItem = { Id:string; Name?:string; Album?:string; Artists?:string[]; Path?:string; IndexNumber?:number; ParentIndexNumber?:number; Overview?:string; UserData?:{PlayCount?:number;LastPlayedDate?:string;IsFavorite?:boolean;Rating?:number} };
 type JellyItems = { Items?: JellyItem[]; TotalRecordCount?: number };
 function credentials(){const settings=runtimeSettings();return{username:config.NAVIDROME_USERNAME||settings.navidromeUsername,password:config.NAVIDROME_PASSWORD||navidromePassword()}}
 function auth(){const value=credentials(),salt=randomBytes(6).toString("hex"),token=createHash("md5").update(value.password+salt).digest("hex");return new URLSearchParams({u:value.username,t:token,s:salt,v:"1.16.1",c:"music-curator",f:"json"})}
@@ -25,8 +25,25 @@ export async function navidromeListeningProfile(userId?:number){
 const pathKey=(value:string)=>decodeURIComponent(value).replace(/\\/g,"/").replace(/^\/?music\//,"").replace(/^\/+/,"").toLowerCase();
 async function jellyfinSongId(item:PlaylistCandidate,userId:number,refresh=false){
   const cached=db().prepare("SELECT jellyfin_song_id FROM navidrome_track_map WHERE file_id=?").get(item.fileId)as{jellyfin_song_id:string|null}|undefined;if(cached?.jellyfin_song_id&&!refresh)return cached.jellyfin_song_id;
-  const root=await jellyfinCall<JellyItems>(userId,`Items?IncludeItemTypes=Audio&Recursive=true&SearchTerm=${encodeURIComponent(item.title)}&Limit=50&Fields=Path`),songs=root.Items??[],file=db().prepare("SELECT path,tags_json FROM files WHERE id=?").get(item.fileId)as{path:string;tags_json:string}|undefined,tags=JSON.parse(file?.tags_json??"{}") as Record<string,unknown>,matches=songs.filter(song=>norm(song.Name??"")===norm(item.title)&&trackArtistMatches(song.Artists??[],item.artist,tags.artist)&&trackAlbumMatches(song.Album??"",item.album,tags.album)),expected=pathKey(file?.path??""),pathMatches=expected?matches.filter(song=>{const actual=pathKey(song.Path??"");return actual===expected||actual.endsWith(expected)||expected.endsWith(actual)}):[],match=pathMatches.length===1?pathMatches[0]:matches.length===1?matches[0]:undefined;
-  if(!match)return null;db().prepare("INSERT INTO navidrome_track_map(file_id,song_id,identity_hash,jellyfin_song_id) VALUES (?,?,?,?) ON CONFLICT(file_id) DO UPDATE SET jellyfin_song_id=excluded.jellyfin_song_id,verified_at=CURRENT_TIMESTAMP").run(item.fileId,"",createHash("sha256").update(`${item.title}|${item.artist}|${item.album}`).digest("hex"),match.Id);return match.Id;
+  const file=db().prepare("SELECT path,tags_json FROM files WHERE id=?").get(item.fileId) as {path:string;tags_json:string}|undefined;
+  const tags=JSON.parse(file?.tags_json??"{}") as Record<string,unknown>;
+  const search=async(query:string,limit:number)=>(await jellyfinCall<JellyItems>(userId,`Items?IncludeItemTypes=Audio&Recursive=true&SearchTerm=${encodeURIComponent(query)}&Limit=${limit}&Fields=Path`)).Items??[];
+  const matching=(songs:JellyItem[])=>songs.filter(song=>norm(song.Name??"")===norm(item.title)&&trackArtistMatches(song.Artists??[],item.artist,tags.artist)&&trackAlbumMatches(song.Album??"",item.album,tags.album));
+  const titleResults=await search(item.title,50);
+  let matches=matching(titleResults);
+  // Navidrome ignores very short search terms; the file's exact album tag also
+  // narrows broad title searches while all identity checks still apply.
+  if(!matches.length||titleResults.length===50){
+    const album=Array.isArray(tags.album)?tags.album[0]:tags.album;
+    matches=matching(await search(norm(item.artist+" "+String(album||item.album)),200));
+  }
+  const expected=pathKey(file?.path??"");
+  const pathMatches=expected?matches.filter(song=>{const actual=pathKey(song.Path??"");return Boolean(actual)&&(actual===expected||actual.endsWith(expected)||expected.endsWith(actual))}):[];
+  const positions=matches.filter(song=>trackPositionMatches(tags,song.IndexNumber,song.ParentIndexNumber));
+  const match=pathMatches.length===1?pathMatches[0]:matches.length===1?matches[0]:positions.length===1?positions[0]:undefined;
+  if(!match)return null;
+  db().prepare("INSERT INTO navidrome_track_map(file_id,song_id,identity_hash,jellyfin_song_id) VALUES (?,?,?,?) ON CONFLICT(file_id) DO UPDATE SET jellyfin_song_id=excluded.jellyfin_song_id,verified_at=CURRENT_TIMESTAMP").run(item.fileId,"",createHash("sha256").update(`${item.title}|${item.artist}|${item.album}`).digest("hex"),match.Id);
+  return match.Id;
 }
 async function subsonicSongId(item:PlaylistCandidate,refresh=false){const identity=createHash("sha256").update(`${item.title}|${item.artist}|${item.album}`).digest("hex"),cached=db().prepare("SELECT song_id FROM navidrome_track_map WHERE file_id=? AND identity_hash=?").get(item.fileId,identity)as{song_id:string}|undefined;if(cached?.song_id&&!refresh)return cached.song_id;const root=await call("search3",[["query",item.title],["artistCount","0"],["albumCount","0"],["songCount","50"]]),songs=((root.searchResult3 as{song?:Track[]}|undefined)?.song??[]),file=db().prepare("SELECT path,tags_json FROM files WHERE id=?").get(item.fileId)as{path:string;tags_json:string}|undefined,tags=JSON.parse(file?.tags_json??"{}") as Record<string,unknown>,matches=songs.filter(song=>norm(song.title)===norm(item.title)&&trackArtistMatches([song.artist??""],item.artist,tags.artist)&&trackAlbumMatches(song.album??"",item.album,tags.album)),expected=pathKey(file?.path??""),pathMatches=expected?matches.filter(song=>{const actual=pathKey(song.path??"");return actual===expected||actual.endsWith(expected)||expected.endsWith(actual)}):[],match=pathMatches.length===1?pathMatches[0]:matches.length===1?matches[0]:undefined;if(!match)return null;db().prepare("INSERT INTO navidrome_track_map(file_id,song_id,identity_hash) VALUES (?,?,?) ON CONFLICT(file_id) DO UPDATE SET song_id=excluded.song_id,identity_hash=excluded.identity_hash,verified_at=CURRENT_TIMESTAMP").run(item.fileId,match.id,identity);return match.id}
 export async function unresolvedNavidromeCandidates(items:PlaylistCandidate[],userId?:number){const unresolved:PlaylistCandidate[]=[];for(const item of items)if(!(userId?await jellyfinSongId(item,userId):await subsonicSongId(item)))unresolved.push(item);return unresolved}

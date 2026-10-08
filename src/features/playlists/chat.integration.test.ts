@@ -18,7 +18,7 @@ test("published chat corrections replace the exact playlist; failed sync retains
   const originalFetch=globalThis.fetch,originalStructured=aiClient.structured;
   const database=db(),user=provisionUser({token:"test-listener-token",navidromeUserId:"listener",username:"listener",displayName:"Listener"});
   for(const id of [1,2]){
-    database.prepare("INSERT INTO files(id,path,album_key,artist_name,album_name,format,inode,link_count,size,mtime_ms,tags_json,properties_json,artwork_json,status) VALUES (?,?,'test','Artist',?,'flac',?,1,1,1,?,'{}','{}','written')").run(id,`/music/song-${id}.flac`,id===2?"Album [Bonus Track]":"Album",id,JSON.stringify({title:[`Song ${id}`],artist:id===2?"Collaborator feat. Artist":"Artist",album:"Album"}));
+    database.prepare("INSERT INTO files(id,path,album_key,artist_name,album_name,format,inode,link_count,size,mtime_ms,tags_json,properties_json,artwork_json,status) VALUES (?,?,'test','Artist',?,'flac',?,1,1,1,?,'{}','{}','written')").run(id,`/music/song-${id}.flac`,id===2?"Album [Bonus Track]":"Album",id,JSON.stringify({title:[id===2?"7":`Song ${id}`],trackNumber:id,discNumber:1,artist:id===2?"Collaborator feat. Artist":"Artist",album:"Album"}));
   }
   let aiRequests=0,published=false,failWrites=false,publishedIds:string[]=[];
   aiClient.structured=async <T>(request:StructuredRequest)=>{
@@ -29,8 +29,9 @@ test("published chat corrections replace the exact playlist; failed sync retains
   globalThis.fetch=async(url,init)=>{
     const parsed=new URL(String(url)),path=parsed.pathname;
     if(path.endsWith("/Items")&&parsed.searchParams.get("IncludeItemTypes")==="Audio"){
-      const id=parsed.searchParams.get("SearchTerm")==="Song 2"?2:1;
-      return Response.json({Items:id===2?[{Id:"wrong-collaboration",Name:"Song 2",Album:"Album",Artists:["Artist,Someone Else"]},{Id:"song-2",Name:"Song 2",Album:"Album",Artists:["Artist","Collaborator"]}]:[{Id:"song-1",Name:"Song 1",Album:"Album",Artists:["Artist"],Path:"/music/song-1.flac"}]});
+      const query=parsed.searchParams.get("SearchTerm");
+      if(query==="7")return Response.json({Items:[]});
+      return Response.json({Items:query==="Song 1"?[{Id:"song-1",Name:"Song 1",Album:"Album",Artists:["Artist"],Path:"/music/song-1.flac"}]:[{Id:"wrong-collaboration",Name:"7",Album:"Album",Artists:["Artist,Someone Else"],IndexNumber:2,ParentIndexNumber:1},{Id:"different-position",Name:"7",Album:"Album",Artists:["Artist","Collaborator"],IndexNumber:3,ParentIndexNumber:1},{Id:"song-2",Name:"7",Album:"Album",Artists:["Artist","Collaborator"],IndexNumber:2,ParentIndexNumber:1}]});
     }
     if(path.endsWith("/Items")&&parsed.searchParams.get("IncludeItemTypes")==="Playlist")return Response.json({Items:published?[{Id:"playlist-id",Name:"Test Mix"}]:[]});
     if(path.endsWith("/Playlists/playlist-id/Items"))return Response.json({Items:publishedIds.map(Id=>({Id}))});

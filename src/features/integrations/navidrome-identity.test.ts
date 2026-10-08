@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {identityName,trackAlbumMatches,trackArtistMatches} from "./navidrome-identity";
+import {identityName,trackAlbumMatches,trackArtistMatches,trackPositionMatches} from "./navidrome-identity";
 
 test("Navidrome recordings match exact collaborative file credits, including split and reordered featured artists",()=>{
   assert.equal(trackArtistMatches(["Tom Misch,Yussef Dayes"],"Tom Misch","Tom Misch,Yussef Dayes"),true);
@@ -20,4 +20,12 @@ test("identity matching preserves distinct non-Latin names",()=>{
   assert.equal(trackArtistMatches(["東京事変"],"宇多田ヒカル",undefined),false);
   assert.equal(trackAlbumMatches("春の歌","冬の歌",undefined),false);
   assert.equal(trackArtistMatches([""],"",undefined),false);
+});
+test("repeated titles use exact known track and disc positions rather than guessing",()=>{
+  const tags={trackNumber:["10/11"],discNumber:1};
+  assert.equal(trackPositionMatches(tags,10,1),true);
+  assert.equal(trackPositionMatches(tags,11,1),false);
+  assert.equal(trackPositionMatches(tags,10,2),false);
+  assert.equal(trackPositionMatches(tags,10,undefined),false);
+  assert.equal(trackPositionMatches({},10,1),false);
 });

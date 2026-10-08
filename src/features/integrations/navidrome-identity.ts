@@ -14,3 +14,8 @@ export function trackAlbumMatches(actual:string,primary:string,tagAlbum:unknown)
   const name=identityName(actual);
   return Boolean(name)&&[primary,...strings(tagAlbum)].some(value=>identityName(value)===name);
 }
+export function trackPositionMatches(tags:Record<string,unknown>,track:unknown,disc:unknown){
+  const position=(value:unknown)=>{const first=Array.isArray(value)?value[0]:value;const number=Number(String(first??"").split("/")[0]);return Number.isInteger(number)&&number>0?number:0};
+  const expectedTrack=position(tags.track??tags.trackNumber),expectedDisc=position(tags.disc??tags.discNumber);
+  return expectedTrack>0&&position(track)===expectedTrack&&(!expectedDisc||position(disc)===expectedDisc);
+}
