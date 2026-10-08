@@ -30,17 +30,18 @@ export const requirementsSchema=searchSchema.omit({query:true,offset:true,moods:
 export type ChatRequirements=z.infer<typeof requirementsSchema>;
 export const unrestrictedRequirements:ChatRequirements={genres:[],excludeGenres:[],instruments:[],artists:[],excludeArtists:[],vocal:"any",minYear:0,maxYear:0,minBpm:0,maxBpm:0};
 const requirementsJsonSchema={...searchJsonSchema,required:Object.keys(requirementsSchema.shape),properties:Object.fromEntries(Object.keys(requirementsSchema.shape).map(key=>[key,searchJsonSchema.properties[key as keyof typeof searchJsonSchema.properties]]))};
+const boundedText=(limit:number,allowEmpty=false)=>z.string().trim().min(allowEmpty?0:1).transform(value=>value.length>limit?value.slice(0,limit-1).trimEnd()+"…":value);
 export const chatOutputSchema = z.object({
-  name: z.string().trim().min(2).max(100), reply: z.string().trim().min(1).max(1600),
-  guidance: z.string().trim().max(2000),
-  tracks: z.array(z.object({ fileId: z.number().int().positive(), reason: z.string().trim().min(1).max(180) })).max(100),
+  name: z.string().trim().min(2).max(100), reply: boundedText(1600),
+  guidance: boundedText(2000,true),
+  tracks: z.array(z.object({ fileId: z.number().int().positive(), reason: boundedText(180) })).max(100),
 });
 const outputJsonSchema = {
   type: "object", additionalProperties: false, required: ["name", "reply", "guidance", "tracks"],
   properties: {
-    name: { type: "string" }, reply: { type: "string" },
-    guidance: { type: "string", description: "Cumulative user preferences and specific keep/remove/order instructions, including earlier corrections." },
-    tracks: { type: "array", maxItems: 100, items: { type: "object", additionalProperties: false, required: ["fileId", "reason"], properties: { fileId: { type: "integer" }, reason: { type: "string" } } } },
+    name: { type: "string",minLength:2,maxLength:100 }, reply: { type: "string",minLength:1,maxLength:1600 },
+    guidance: { type: "string",maxLength:2000, description: "Cumulative user preferences and specific keep/remove/order instructions, including earlier corrections." },
+    tracks: { type: "array", maxItems: 100, items: { type: "object", additionalProperties: false, required: ["fileId", "reason"], properties: { fileId: { type: "integer" }, reason: { type: "string",minLength:1,maxLength:180 } } } },
   },
 };
 const values = (value: unknown): string[] => Array.isArray(value) ? value.map(String) : typeof value === "string" ? [value] : [];

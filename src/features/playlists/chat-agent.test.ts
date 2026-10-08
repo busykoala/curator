@@ -93,3 +93,10 @@ test("hard metadata requirements cannot be weakened by a repair",async()=>{
   };
   await assert.rejects(suggestChatPlaylist({...input,client}),/mandatory metadata requirements/);
 });
+
+test("long AI prose is bounded without discarding valid songs or spending a repair request",async()=>{
+  const client=clientFor({...output,reply:"Explanation ".repeat(200),guidance:"Preferences ".repeat(200),tracks:[{fileId:1,reason:"Piano evidence ".repeat(30)}]});
+  const result=await suggestChatPlaylist({...input,client});
+  assert.equal(result.items[0].fileId,1);assert.ok(result.reply.length<=1600);assert.ok(result.reply.endsWith("…"));assert.ok(result.guidance.length<=2000);assert.ok(result.items[0].reason.length<=180);
+  assert.equal(result.detail.usage.total_tokens,20);assert.equal(result.detail.repairDurationMs,undefined);
+});
