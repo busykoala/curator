@@ -1,8 +1,137 @@
 import { config } from "@/config";
-import { db,stateGet,stateSet } from "@/features/db/client";
+import { db, stateGet, stateSet } from "@/features/db/client";
 import type { SourceScore } from "./types";
-async function call<T>(path:string,init:RequestInit={}){const response=await fetch(`${config.PROWLARR_URL}/api/v1${path}`,{...init,headers:{"X-Api-Key":config.PROWLARR_API_KEY,"Content-Type":"application/json",...init.headers},signal:AbortSignal.timeout(15_000)});if(!response.ok)throw new Error(`Prowlarr ${path} failed (${response.status})`);const text=await response.text();return(text?JSON.parse(text):undefined)as T}
-type Indexer=Record<string,unknown>&{id:number;name:string;enable:boolean;priority:number};
-type Outcomes={grabs:number|null;imports:number|null;failures:number|null;grabFailures:number|null;replacements:number|null;unavailable:number|null};
-export function outcomeScore(outcome:Outcomes,latency:number){const grabs=Number(outcome.grabs??0),imports=Number(outcome.imports??0),failed=Number(outcome.replacements??0)+Number(outcome.unavailable??0),terminal=imports+failed,completion=terminal?(imports/terminal-.5)*.5:0;return Math.max(0,Math.min(1,.45+Math.min(grabs,10)*.005+completion-Math.min(Number(outcome.grabFailures??0),5)*.03-Math.min(Number(outcome.failures??0),3)*.12-latency/60_000))}
-export async function maintainSources(apply:boolean){const rows=await call<Indexer[]>("/indexer"),scores:SourceScore[]=[];for(const item of rows){const key=`source_health_${item.id}`,saved=JSON.parse(stateGet(key,'{"failures":0,"successes":0,"disabledByCurator":false}')) as{failures:number;successes:number;disabledByCurator:boolean};let ok=false,latency=0;try{const start=Date.now();await call("/indexer/test",{method:"POST",body:JSON.stringify(item)});latency=Date.now()-start;ok=true}catch{}const next={failures:ok?0:saved.failures+1,successes:ok?saved.successes+1:0,disabledByCurator:saved.disabledByCurator};if(!ok)db().prepare("INSERT INTO source_outcomes(indexer_id,indexer_name,event,latency_ms) VALUES(?,?,'hard_failure',?)").run(item.id,item.name,latency);if(apply&&item.enable&&next.failures>=3){await call(`/indexer/${item.id}`,{method:"PUT",body:JSON.stringify({...item,enable:false})});next.disabledByCurator=true}if(apply&&!item.enable&&saved.disabledByCurator&&next.successes>=2){await call(`/indexer/${item.id}`,{method:"PUT",body:JSON.stringify({...item,enable:true})});next.disabledByCurator=false}stateSet(key,JSON.stringify(next));const outcome=db().prepare("SELECT sum(event='grab') grabs,sum(event='import') imports,sum(event='hard_failure') failures,sum(event='grab_failure') grabFailures,sum(event='replacement') replacements,sum(event='unavailable') unavailable FROM source_outcomes WHERE (indexer_id=? OR lower(replace(indexer_name,' (Prowlarr)',''))=lower(?)) AND created_at>=datetime('now','-7 days')").get(item.id,item.name) as Outcomes;const score=outcomeScore(outcome,latency);scores.push({indexerId:item.id,name:item.name,score,priority:score>.7?10:score>.35?25:40,hardFailures:next.failures})}if(apply&&Date.now()-Number(stateGet("source_priority_at","0"))>86_400_000){for(const score of scores){const item=rows.find(row=>row.id===score.indexerId);if(item&&item.priority!==score.priority)await call(`/indexer/${item.id}`,{method:"PUT",body:JSON.stringify({...item,priority:score.priority})})}stateSet("source_priority_at",String(Date.now()))}stateSet("source_scores",JSON.stringify(scores));return scores}
+async function call<T>(path: string, init: RequestInit = {}) {
+  const response = await fetch(`${config.PROWLARR_URL}/api/v1${path}`, {
+    ...init,
+    headers: {
+      "X-Api-Key": config.PROWLARR_API_KEY,
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok)
+    throw new Error(`Prowlarr ${path} failed (${response.status})`);
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+type Indexer = Record<string, unknown> & {
+  id: number;
+  name: string;
+  enable: boolean;
+  priority: number;
+};
+type Outcomes = {
+  grabs: number | null;
+  imports: number | null;
+  failures: number | null;
+  grabFailures: number | null;
+  replacements: number | null;
+  unavailable: number | null;
+};
+export function outcomeScore(outcome: Outcomes, latency: number) {
+  const grabs = Number(outcome.grabs ?? 0),
+    imports = Number(outcome.imports ?? 0),
+    failed =
+      Number(outcome.replacements ?? 0) + Number(outcome.unavailable ?? 0),
+    terminal = imports + failed,
+    completion = terminal ? (imports / terminal - 0.5) * 0.5 : 0;
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      0.45 +
+        Math.min(grabs, 10) * 0.005 +
+        completion -
+        Math.min(Number(outcome.grabFailures ?? 0), 5) * 0.03 -
+        Math.min(Number(outcome.failures ?? 0), 3) * 0.12 -
+        latency / 60_000,
+    ),
+  );
+}
+export async function maintainSources(apply: boolean) {
+  const rows = await call<Indexer[]>("/indexer"),
+    scores: SourceScore[] = [],
+    updatePriorities =
+      Date.now() - Number(stateGet("source_priority_at", "0")) > 86_400_000;
+  for (const item of rows) {
+    const key = `source_health_${item.id}`,
+      saved = JSON.parse(
+        stateGet(key, '{"failures":0,"successes":0,"disabledByCurator":false}'),
+      ) as {
+        failures: number;
+        successes: number;
+        disabledByCurator: boolean;
+      };
+    let ok = false,
+      latency = 0;
+    try {
+      const start = Date.now();
+      await call("/indexer/test", {
+        method: "POST",
+        body: JSON.stringify(item),
+      });
+      latency = Date.now() - start;
+      ok = true;
+    } catch {}
+    const next = {
+      failures: ok ? 0 : saved.failures + 1,
+      successes: ok ? saved.successes + 1 : 0,
+      disabledByCurator: saved.disabledByCurator,
+    };
+    if (!ok)
+      db()
+        .prepare(
+          "INSERT INTO source_outcomes(indexer_id,indexer_name,event,latency_ms) VALUES(?,?,'hard_failure',?)",
+        )
+        .run(item.id, item.name, latency);
+    let enable = item.enable;
+    if (apply && item.enable && next.failures >= 3) {
+      enable = false;
+      next.disabledByCurator = true;
+    } else if (
+      apply &&
+      !item.enable &&
+      saved.disabledByCurator &&
+      next.successes >= 2
+    ) {
+      enable = true;
+      next.disabledByCurator = false;
+    }
+    const outcome = db()
+      .prepare(
+        "SELECT sum(event='grab') grabs,sum(event='import') imports,sum(event='hard_failure') failures,sum(event='grab_failure') grabFailures,sum(event='replacement') replacements,sum(event='unavailable') unavailable FROM source_outcomes WHERE (indexer_id=? OR lower(replace(indexer_name,' (Prowlarr)',''))=lower(?)) AND created_at>=datetime('now','-7 days')",
+      )
+      .get(item.id, item.name) as Outcomes;
+    const score = outcomeScore(outcome, latency),
+      priority = score > 0.7 ? 10 : score > 0.35 ? 25 : 40;
+    // Save health and priority together. A later priority update using the old
+    // snapshot used to undo a disable/recovery and lose recovery ownership.
+    if (
+      apply &&
+      (enable !== item.enable ||
+        (updatePriorities && item.priority !== priority))
+    )
+      await call(`/indexer/${item.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          ...item,
+          enable,
+          priority: updatePriorities ? priority : item.priority,
+        }),
+      });
+    stateSet(key, JSON.stringify(next));
+    scores.push({
+      indexerId: item.id,
+      name: item.name,
+      score,
+      priority,
+      hardFailures: next.failures,
+    });
+  }
+  if (apply && updatePriorities)
+    stateSet("source_priority_at", String(Date.now()));
+  stateSet("source_scores", JSON.stringify(scores));
+  return scores;
+}

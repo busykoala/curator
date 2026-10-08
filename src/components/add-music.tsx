@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   Music2,
   Search,
+  ListMusic,
   UserRound,
 } from "lucide-react";
 
@@ -113,7 +114,13 @@ export function AddMusic() {
       <BackLink href="/library">Library</BackLink>
       <PageHeader
         title="Add music"
-        description="Search for an album outside your library."
+        description="Find an album and add it to the download queue."
+        actions={
+          <Link className="secondary-button" href="/requests">
+            <ListMusic />
+            Your requests
+          </Link>
+        }
       />
       <form className="music-search-box" role="search" onSubmit={submit}>
         <Search aria-hidden="true" />
@@ -276,9 +283,6 @@ export function AddMusic() {
           )}
         </>
       )}
-      <Link className="text-link section" href="/requests">
-        Your requests
-      </Link>
     </div>
   );
 }

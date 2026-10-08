@@ -53,7 +53,15 @@ export function PersonalizedHome() {
   }, [load]);
   return (
     <>
-      <PageHeader title="Home" />
+      <PageHeader
+        title="Home"
+        actions={
+          <Link className="secondary-button" href="/add">
+            <Plus />
+            Add music
+          </Link>
+        }
+      />
       {error && (
         <Notice error>
           {error}
