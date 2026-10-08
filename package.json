@@ -9,6 +9,7 @@
     "start": "node scripts/start.mjs",
     "web": "next start -H 0.0.0.0 -p 3000",
     "worker": "tsx src/worker.ts",
+    "test": "tsx --test src/features/**/*.test.ts",
     "sample": "tsx src/cli/sample.ts",
     "audit:categorization": "tsx src/cli/audit-categorization.ts"
     ,"audit:acquisition": "tsx scripts/audit-acquisition.ts && tsx scripts/audit-acquisition-search.ts && tsx scripts/audit-manual-import.ts && tsx scripts/audit-discovery-identity.ts"
