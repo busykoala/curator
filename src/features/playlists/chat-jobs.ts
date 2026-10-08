@@ -3,7 +3,7 @@ import { db } from "@/features/db/client";
 import { aiConfigured } from "@/features/ai/client";
 import { chatState, releaseChatLease } from "./chat-state";
 import { chatSubmissionSchema } from "./chat-request";
-import { getPlaylist } from "./repository";
+import { createPlaylist, getPlaylist } from "./repository";
 
 export type ChatJob = {
   id: string; playlistId: number; message: string; targetTracks: number; revision: number;
@@ -57,6 +57,19 @@ export function enqueuePlaylistMessage(id: number, raw: unknown) {
     db().prepare("INSERT INTO playlist_chat_jobs(id,playlist_id,message,target_tracks,base_revision,sync_required,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)")
       .run(requestId, id, request.message, request.targetTracks, request.revision, definition.navidromePlaylistId ? 1 : 0, now, now);
     return playlistChatView(id);
+  })();
+}
+export function createPlaylistChat(ownerUserId: number, raw: unknown) {
+  const request = chatSubmissionSchema.parse(raw), requestId = request.requestId ?? randomUUID();
+  if (request.revision !== 0) throw new Error("A new conversation must start at revision zero.");
+  return db().transaction(() => {
+    const existing = db().prepare("SELECT playlist_id FROM playlist_chat_jobs WHERE id=?").get(requestId) as {playlist_id:number}|undefined;
+    if (existing) {
+      if (getPlaylist(existing.playlist_id)?.ownerUserId !== ownerUserId) throw new Error("This request ID has already been used for a different message.");
+      return enqueuePlaylistMessage(existing.playlist_id, {...request,requestId});
+    }
+    const playlist = createPlaylist({name:`Chat playlist ${requestId}`,category:"chat",enabled:false,ownerUserId,config:{targetTracks:request.targetTracks}});
+    return enqueuePlaylistMessage(playlist.id,{...request,requestId});
   })();
 }
 const LEASE_MS = 90_000;

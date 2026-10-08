@@ -15,7 +15,7 @@ test("durable chat jobs deduplicate retries, fence workers, and resume saved rep
   const { provisionUser } = await import("../auth/navidrome");
   const { createPlaylist } = await import("./repository");
   const { chatState, acquireChatLease, releaseChatLease } = await import("./chat-state");
-  const { enqueuePlaylistMessage, claimChatJob, checkpointChatJob, heartbeatChatJob, latestChatJob } = await import("./chat-jobs");
+  const { createPlaylistChat, enqueuePlaylistMessage, claimChatJob, checkpointChatJob, heartbeatChatJob, latestChatJob } = await import("./chat-jobs");
   const { runNextChatJob } = await import("./chat-job-runner");
   const { sendPlaylistMessage } = await import("./chat");
   const database = db(), user = provisionUser({ token: "test", navidromeUserId: "one", username: "one", displayName: "One" });
@@ -29,6 +29,13 @@ test("durable chat jobs deduplicate retries, fence workers, and resume saved rep
   };
   database.prepare("INSERT INTO files(id,path,album_key,artist_name,album_name,format,inode,link_count,size,mtime_ms,tags_json,properties_json,artwork_json,status) VALUES (1,'/music/song.flac','one','Artist','Album','flac',1,1,1,1,'{\"title\":[\"Song\"]}','{}','{}','written')").run();
   try {
+    const first={requestId:randomUUID(),message:"Start a new chat",targetTracks:1,revision:0};
+    const created=createPlaylistChat(user.id,first),retried=createPlaylistChat(user.id,first);
+    assert.equal(created.definition.id,retried.definition.id);assert.equal(created.job?.id,retried.job?.id);
+    assert.throws(()=>createPlaylistChat(user.id,{...first,message:"Different"}),/already been used/);
+    assert.throws(()=>createPlaylistChat(user.id,{...first,requestId:randomUUID(),targetTracks:0}));
+    assert.equal((database.prepare("SELECT count(*) n FROM smart_playlists").get() as {n:number}).n,1);
+    await runNextChatJob();assert.equal(calls,1);calls=0;
     const playlist = createPlaylist({ name: "Draft one", category: "chat", ownerUserId: user.id, config: { targetTracks: 1 } });
     const request = { requestId: randomUUID(), message: "A calm mix", targetTracks: 1, revision: 0 };
     const queued = enqueuePlaylistMessage(playlist.id, request);

@@ -51,13 +51,17 @@ export function PlaylistChat({ initial, ownerUserId, close, changed }: Props) {
   useEffect(() => { mounted.current=true;return()=>{mounted.current=false;}; }, []);
   useEffect(() => {
     const id=definition?.id;
-    if(!id)return;
     let active=true,inFlight=false;
-    const key=`curator-chat-pending:${ownerUserId}:${id}`;
+    const key=id?`curator-chat-pending:${ownerUserId}:${id}`:`curator-chat-new:${ownerUserId}`;
     const refresh=async()=>{
       if(!active||inFlight||sending.current||document.visibilityState!=="visible")return;
       inFlight=true;
       try{
+        if(!id){
+          const pending=cachedSubmission(key);if(!pending)return;
+          const created=await readJson<State>(await fetch("/api/playlists/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(pending),keepalive:true}));
+          cacheSubmission(key,null);if(active){apply(created);setMessage("");changedRef.current();}return;
+        }
         let next=await readJson<State>(await fetch(`/api/playlists/${id}/chat`,{cache:"no-store"}),"Conversation could not be loaded");
         if(!active)return;
         const pending=cachedSubmission(key);
@@ -100,15 +104,11 @@ export function PlaylistChat({ initial, ownerUserId, close, changed }: Props) {
     if(!text.trim()||busy||working||sending.current)return;
     sending.current=true;setBusy("submit");setError("");setNotice("");
     try{
-      let playlist=definition;
-      if(!playlist?.id){
-        const created=await readJson<{playlist:PlaylistDefinition}>(await fetch("/api/playlists",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({name:"Chat playlist "+crypto.randomUUID().slice(0,8),category:"chat",enabled:false,intent:"",config:{targetTracks:count}}),keepalive:true}));
-        playlist=created.playlist;if(mounted.current)setDefinition(playlist);changedRef.current();
-      }
-      const key=`curator-chat-pending:${ownerUserId}:${playlist.id}`;
+      const key=definition?.id?`curator-chat-pending:${ownerUserId}:${definition.id}`:`curator-chat-new:${ownerUserId}`;
       const pending=cachedSubmission(key)??{requestId:crypto.randomUUID(),message:text.trim(),targetTracks:count,revision:stateRef.current?.revision??0};
       cacheSubmission(key,pending);
-      const result=await readJson<State>(await fetch(`/api/playlists/${playlist.id}/chat`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(pending),keepalive:true}),"Your message could not be submitted");
+      const path=definition?.id?`/api/playlists/${definition.id}/chat`:"/api/playlists/chat";
+      const result=await readJson<State>(await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(pending),keepalive:true}),"Your message could not be submitted");
       cacheSubmission(key,null);if(mounted.current){apply(result);setMessage("");}changedRef.current();
     }catch(error){if(mounted.current)setError(error instanceof Error?error.message:String(error));}
     finally{sending.current=false;if(mounted.current)setBusy("");}
