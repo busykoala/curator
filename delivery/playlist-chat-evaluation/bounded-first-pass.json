@@ -1,0 +1,3350 @@
+{
+  "generatedAt": "2026-10-08T07:00:54.029Z",
+  "model": "curator",
+  "libraryTracks": 14256,
+  "runs": [
+    {
+      "scenario": "late-night",
+      "stage": "initial",
+      "message": "Make a late-night mix: atmospheric electronic music and trip-hop, a little dark and spacious, no rock or festival EDM.",
+      "name": "Late-Night Static",
+      "reply": "Here is a dark, spacious late-night mix built from the library’s atmospheric electronic and trip-hop tracks. I opened with Massive Attack’s ambient remix to set a reverb-heavy, hypnotic tone, then moved through Portishead’s somber half-time groove and Jamie xx’s free-time ambient piece to deepen the darkness. Moby and Morcheeba add wistful, intimate vocals, while Nightmares on Wax and Emancipator keep the Bristol-style warmth and spaciousness. Daft Punk’s “Night Vision” closes with a serene, airy downtempo feel. All selections are low-energy, late-night-tagged, and avoid rock and festival EDM.",
+      "guidance": "Prefers late-night atmospheric electronic and trip-hop; wants dark, spacious, low-energy textures; explicitly excludes rock and festival EDM.",
+      "items": [
+        {
+          "fileId": 2318,
+          "title": "Inertia Creeps (State Of Bengal Mix)",
+          "artist": "Massive Attack",
+          "album": "Singles 90-98 (CD11)",
+          "year": 1998,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "trip_hop",
+              "ambient",
+              "downtempo"
+            ],
+            "mood": [
+              "dark",
+              "mysterious",
+              "hypnotic",
+              "eerie"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 50,
+            "tempoFeel": "very_slow",
+            "groove": [
+              "free_time",
+              "syncopated"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "ambient",
+              "evolving"
+            ],
+            "timbre": [
+              "dark",
+              "airy",
+              "warm"
+            ],
+            "production": [
+              "spacious",
+              "reverb_heavy",
+              "sample_based"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "sparse_vocals",
+              "processed"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer",
+              "samples"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "introspection",
+              "surrealism"
+            ],
+            "listeningContexts": [
+              "late_night",
+              "meditation",
+              "headphones"
+            ],
+            "scenes": [
+              "bristol_trip_hop"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "remix",
+              "studio_recording"
+            ],
+            "summary": "A slower, more ambient remix with a BPM of 50. The track emphasizes mystery and eeriness, utilizing spacious production and evolving textures to create a hypnotic, dark atmosphere.",
+            "evidenceNotes": [
+              "Title indicates 'State Of Bengal Mix'.",
+              "BPM 50 is significantly slower than the original, suggesting a half-time or ambient interpretation.",
+              "Moods 'Mysterious', 'Eerie' align with the slower tempo and lower energy (0.583).",
+              "High dynamic range (10.7) suggests a more open, less compressed mix."
+            ]
+          },
+          "score": 0,
+          "reason": "A 50 BPM ambient trip-hop remix with dark, mysterious, hypnotic moods and spacious, reverb-heavy production, ideal for opening the mix.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 7941,
+          "title": "Wandering Star",
+          "artist": "Portishead",
+          "album": "Dummy",
+          "year": 1994,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "trip_hop",
+              "downtempo"
+            ],
+            "mood": [
+              "dark",
+              "somber",
+              "lonely",
+              "mysterious"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 53,
+            "tempoFeel": "slow",
+            "groove": [
+              "syncopated",
+              "half_time"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "layered"
+            ],
+            "timbre": [
+              "dark",
+              "warm",
+              "gritty"
+            ],
+            "production": [
+              "lo_fi",
+              "sample_based",
+              "vintage"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "sparse_vocals",
+              "processed"
+            ],
+            "instrumentation": [
+              "drum_machine",
+              "synthesizer",
+              "bass_synthesizer",
+              "samples"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "loneliness",
+              "introspection"
+            ],
+            "listeningContexts": [
+              "late_night",
+              "headphones",
+              "relaxation"
+            ],
+            "scenes": [
+              "bristol_trip_hop"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "compressed"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, somber trip-hop track with a lonely and mysterious atmosphere, characterized by sparse yet dense textural layers.",
+            "evidenceNotes": [
+              "BPM 53 from tags and audio analysis.",
+              "Moods Dark, Somber, Lonely, Mysterious from tags.",
+              "Genre Electronic and album context Trip-Hop/Downtempo.",
+              "Scene Bristol Trip Hop from album evidence."
+            ]
+          },
+          "score": 0,
+          "reason": "Classic Portishead trip-hop with a slow, somber, lonely atmosphere and sparse, layered textures that deepen the dark mood.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 1741,
+          "title": "The Rest Is Noise",
+          "artist": "Jamie xx",
+          "album": "In Colour",
+          "year": 2015,
+          "profile": {
+            "genre": [
+              "electronic",
+              "ambient"
+            ],
+            "style": [
+              "downtempo",
+              "ambient_electronic"
+            ],
+            "mood": [
+              "dark",
+              "mysterious",
+              "introspective",
+              "hypnotic"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 63,
+            "tempoFeel": "slow",
+            "groove": [
+              "free_time"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "ambient"
+            ],
+            "timbre": [
+              "dark",
+              "airy"
+            ],
+            "production": [
+              "polished",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "pads",
+              "drum_machine"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "late_night",
+              "meditation",
+              "headphones"
+            ],
+            "scenes": [
+              "uk_electronic_music_scene"
+            ],
+            "styleEra": [
+              "2010s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "steady"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, ambient electronic track with a dark, introspective mood, featuring sparse textures and a hypnotic, evolving structure.",
+            "evidenceNotes": [
+              "Genre tags include Electronic and Ambient; style inferred as downtempo/ambient electronic.",
+              "BPM 63 from tag; estimated BPM 62.8 supports slow tempo.",
+              "Mood tags 'Dark', 'Mysterious', 'Introspective', 'Hypnotic' mapped to stable terms.",
+              "Instrumental status inferred from lack of vocal tags and ambient genre characteristics.",
+              "Texture and production inferred from ambient genre conventions and dynamic range."
+            ]
+          },
+          "score": 0,
+          "reason": "A dark, introspective ambient-electronic piece with a free-time, evolving structure and spacious, airy timbre.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 2477,
+          "title": "Porcelain",
+          "artist": "Moby",
+          "album": "Play",
+          "year": 1999,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "downtempo",
+              "ambient",
+              "trip_hop"
+            ],
+            "mood": [
+              "melancholic",
+              "wistful",
+              "introspective",
+              "dreamy"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 96,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "straight",
+              "syncopated"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "layered"
+            ],
+            "timbre": [
+              "warm",
+              "soft",
+              "organic"
+            ],
+            "production": [
+              "polished",
+              "sample_based",
+              "vintage"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "sparse_vocals",
+              "processed"
+            ],
+            "instrumentation": [
+              "drum_machine",
+              "synthesizer",
+              "samples",
+              "piano"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "heartbreak",
+              "introspection"
+            ],
+            "listeningContexts": [
+              "background",
+              "reading",
+              "late_night"
+            ],
+            "scenes": [
+              "trip_hop"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "repetitive_loop"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A melancholic and dreamy downtempo track with a wistful atmosphere. The texture is sparse yet layered, featuring warm organic samples and soft synthetic elements. The mood is introspective, supported by a steady, syncopated rhythm.",
+            "evidenceNotes": [
+              "BPM 96 from tags aligns with tempo candidate 96.2 (approximate) or inferred from 56*2=112? No, 96 is standard. Candidate 56 is half-time. 96 is the conventional tempo.",
+              "Mood tags 'Melancholic', 'Wistful', 'Introspective', 'Dreamy' mapped to mood and valence.",
+              "Album evidence supports 'downtempo', 'ambient', and 'trip_hop' styles.",
+              "Language 'English' from tags."
+            ]
+          },
+          "score": 0,
+          "reason": "A melancholic, dreamy downtempo/trip-hop track with warm, organic samples and a wistful, introspective feel.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 2524,
+          "title": "The Sea",
+          "artist": "Morcheeba",
+          "album": "Big Calm",
+          "year": 1998,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "trip_hop",
+              "downtempo"
+            ],
+            "mood": [
+              "dreamy",
+              "mysterious",
+              "introspective"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 75,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "layered",
+              "ambient"
+            ],
+            "timbre": [
+              "warm",
+              "smooth"
+            ],
+            "production": [
+              "polished",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "clean_sung",
+              "intimate"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "introspection",
+              "nature"
+            ],
+            "listeningContexts": [
+              "background",
+              "relaxation",
+              "late_night"
+            ],
+            "scenes": [
+              "bristol_trip_hop"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "steady"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, atmospheric trip-hop track featuring smooth synthesizer textures and a steady, low-energy groove.",
+            "evidenceNotes": [
+              "BPM 75 confirmed by tag and audio analysis.",
+              "Moods 'Dreamy', 'Mysterious', 'Introspective' from tags.",
+              "Genre 'Electronic' and scene 'Bristol Trip Hop' from album evidence."
+            ]
+          },
+          "score": 0,
+          "reason": "A slow, atmospheric trip-hop track with smooth, spacious synthesizer textures and intimate vocals.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 2664,
+          "title": "Deepdown",
+          "artist": "Nightmares on Wax",
+          "album": "In a Space Outta Sound",
+          "year": 2006,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "downtempo",
+              "chillout"
+            ],
+            "mood": [
+              "serene",
+              "dreamy"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 55,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "layered",
+              "dense"
+            ],
+            "timbre": [
+              "warm",
+              "soft"
+            ],
+            "production": [
+              "polished",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "relaxation",
+              "background",
+              "late_night"
+            ],
+            "scenes": [
+              "bristol_trip_hop"
+            ],
+            "styleEra": [
+              "2000s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "steady"
+            ],
+            "structuralCharacter": [
+              "repetitive_loop"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, serene downtempo track featuring warm synthesizer pads and a steady, minimal drum machine groove, characteristic of the Bristol trip-hop scene.",
+            "evidenceNotes": [
+              "BPM 55 and 'Serene/Dreamy' tags support a slow, ambient-leaning downtempo feel.",
+              "Album tags 'downtempo' and 'chillout' confirm the stylistic category.",
+              "Instrumental nature inferred from lack of vocal tags and typical genre conventions."
+            ]
+          },
+          "score": 0,
+          "reason": "A serene, dreamy Bristol-style downtempo track with warm pads and a minimal, spacious groove.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 1019,
+          "title": "Ghost Pong",
+          "artist": "Emancipator",
+          "album": "Baralku",
+          "year": 2017,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "downtempo",
+              "ambient"
+            ],
+            "mood": [
+              "serene",
+              "mysterious",
+              "reflective"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 60,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "open"
+            ],
+            "timbre": [
+              "dark",
+              "warm"
+            ],
+            "production": [
+              "polished",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "pads",
+              "sub_bass"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "background",
+              "meditation",
+              "late_night"
+            ],
+            "scenes": [
+              "downtempo"
+            ],
+            "styleEra": [
+              "2010s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "steady"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, atmospheric downtempo piece with sparse textures and a mysterious, reflective quality, suitable for deep listening or relaxation.",
+            "evidenceNotes": [
+              "BPM 60 from tags and audio analysis.",
+              "Moods Serene, Mysterious, Reflective from tags.",
+              "Low energy and high dynamic range suggest a spacious, ambient feel."
+            ]
+          },
+          "score": 0,
+          "reason": "A slow, mysterious ambient/downtempo piece with sparse, open textures and a dark, warm timbre.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 799,
+          "title": "Night Vision",
+          "artist": "Daft Punk",
+          "album": "Discovery",
+          "year": 2001,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "french_house",
+              "progressive_house",
+              "downtempo"
+            ],
+            "mood": [
+              "serene",
+              "dreamy",
+              "introspective",
+              "mysterious"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 80,
+            "tempoFeel": "slow",
+            "groove": [
+              "four_on_floor"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "sparse",
+              "open",
+              "ambient"
+            ],
+            "timbre": [
+              "warm",
+              "airy",
+              "synthetic"
+            ],
+            "production": [
+              "polished",
+              "hi_fi",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "clean_sung",
+              "processed"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer",
+              "vocal_samples"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "introspection",
+              "nightlife",
+              "escapism"
+            ],
+            "listeningContexts": [
+              "late_night",
+              "relaxation",
+              "headphones",
+              "reading"
+            ],
+            "scenes": [
+              "french_electronic"
+            ],
+            "styleEra": [
+              "2000s"
+            ],
+            "musicalKey": "D minor",
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic",
+              "steady"
+            ],
+            "structuralCharacter": [
+              "verse_chorus",
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A serene and dreamy downtempo French house track with a mysterious, introspective atmosphere, featuring sparse, airy textures and spacious production.",
+            "evidenceNotes": [
+              "BPM 80 from tags; estimatedBpm 60 reconciled to double-time 80.",
+              "Moods Serene, Dreamy, Introspective, Mysterious from tags.",
+              "Genre Electronic and styles French house/Downtempo from album evidence.",
+              "Language English from tags."
+            ]
+          },
+          "score": 0,
+          "reason": "A serene, dreamy downtempo track with airy, spacious production and processed vocals, a fitting calm close.",
+          "origin": "catalog",
+          "retained": false
+        }
+      ],
+      "detail": {
+        "tracks": 8,
+        "pending": 0,
+        "durationMs": 28119,
+        "usage": {
+          "input_tokens": 35085,
+          "output_tokens": 1125,
+          "total_tokens": 36210
+        },
+        "tools": [
+          {
+            "name": "library_overview",
+            "args": {},
+            "durationMs": 45
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "atmospheric spacious dark",
+              "genres": [
+                "electronic",
+                "ambient"
+              ],
+              "moods": [
+                "dark",
+                "mysterious",
+                "dreamy",
+                "hypnotic",
+                "introspective"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "any",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 147,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "trip hop",
+              "genres": [
+                "electronic"
+              ],
+              "moods": [
+                "dark",
+                "mysterious",
+                "dreamy",
+                "hypnotic"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "any",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 110,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "spacious ambient electronic",
+              "genres": [
+                "ambient",
+                "electronic"
+              ],
+              "moods": [
+                "dark",
+                "mysterious",
+                "dreamy",
+                "hypnotic",
+                "serene"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "any",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 139,
+            "count": 16
+          },
+          {
+            "name": "inspect_tracks",
+            "args": {
+              "fileIds": [
+                2318,
+                7941,
+                1741,
+                2477,
+                2524,
+                2664,
+                1019,
+                799
+              ]
+            },
+            "durationMs": 3,
+            "count": 8
+          }
+        ]
+      },
+      "checks": [
+        {
+          "name": "requested song count",
+          "passed": true
+        },
+        {
+          "name": "real unique library recordings",
+          "passed": true
+        },
+        {
+          "name": "library tool use",
+          "passed": true
+        },
+        {
+          "name": "initial musical constraints",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "scenario": "late-night",
+      "stage": "correction",
+      "message": "Keep the first two songs exactly where they are. Replace the rest with calmer music. No more songs by Jamie xx.",
+      "durationMs": 26260,
+      "error": "Error: AI selected more songs than requested."
+    },
+    {
+      "scenario": "instrumental-focus",
+      "stage": "initial",
+      "message": "Instrumental jazz for focused work, warm and relaxed rather than hectic. No singing or spoken word.",
+      "name": "Warm Instrumental Jazz for Focused Work",
+      "reply": "I built this from the local library’s jazz and jazz-adjacent instrumental tracks, prioritizing low-to-medium energy, warm/serene/introspective moods, and focus or background contexts. I excluded tracks that are explicitly hectic, high-energy, or not primarily jazz (e.g., Zappa’s fast jazz-rock, Parov Stelar’s 180 BPM downtempo, BADBADNOTGOOD’s fast/dark track, and the Beach Boys pop backing track).",
+      "guidance": "Prefers instrumental jazz for focused work; wants warm and relaxed rather than hectic; no singing or spoken word.",
+      "items": [
+        {
+          "fileId": 9463,
+          "title": "Naima",
+          "artist": "John Coltrane",
+          "album": "Giant Steps",
+          "year": 1960,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "hard_bop",
+              "post_bop"
+            ],
+            "mood": [
+              "serene",
+              "peaceful"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 89,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "swing"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "open"
+            ],
+            "timbre": [
+              "warm",
+              "soft"
+            ],
+            "production": [
+              "vintage",
+              "live_feel"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "tenor_saxophone",
+              "piano",
+              "upright_bass",
+              "acoustic_drums"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "relaxation",
+              "meditation",
+              "sleep"
+            ],
+            "scenes": [
+              "hard_bop"
+            ],
+            "styleEra": [
+              "1960s"
+            ],
+            "musicalKey": "E-flat major",
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "through_composed"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A serene, peaceful hard bop instrumental with a sparse, open texture and gentle, flowing melody.",
+            "evidenceNotes": [
+              "BPM 89 and 'Serene'/'Peaceful' mood tags indicate a calm, low-energy mid-tempo feel.",
+              "Album evidence confirms Hard Bop/Post-Bop style.",
+              "Instrumentation inferred from standard Coltrane quartet lineup."
+            ]
+          },
+          "score": 0,
+          "reason": "John Coltrane’s 'Naima' is a serene, peaceful hard bop instrumental with a sparse, open texture and gentle melody, ideal for calm focus.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 3635,
+          "title": "Sambalero",
+          "artist": "Stan Getz",
+          "album": "Jazz Samba Encore!",
+          "year": 1963,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "bossa_nova",
+              "cool_jazz"
+            ],
+            "mood": [
+              "warm",
+              "serene",
+              "romantic"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 70,
+            "tempoFeel": "slow",
+            "groove": [
+              "latin_clave"
+            ],
+            "danceability": "low",
+            "texture": [
+              "intimate",
+              "layered"
+            ],
+            "timbre": [
+              "warm",
+              "smooth"
+            ],
+            "production": [
+              "vintage",
+              "analog_feel"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "saxophone",
+              "acoustic_guitar",
+              "upright_bass",
+              "acoustic_drums"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "background",
+              "relaxation",
+              "dinner"
+            ],
+            "scenes": [
+              "bossa_nova"
+            ],
+            "styleEra": [
+              "1960s"
+            ],
+            "musicalKey": null,
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "linear"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A serene and romantic bossa nova instrumental featuring smooth saxophone and acoustic guitar, with a warm, vintage production quality.",
+            "evidenceNotes": [
+              "Genre and style inferred from album tags (Jazz, Bossa Nova, Cool Jazz) and artist (Stan Getz).",
+              "Mood derived from track tags (Warm, Serene, Romantic).",
+              "BPM 70 taken from tag; tempoCandidates support ~70 BPM.",
+              "Instrumentation inferred from standard bossa nova ensemble for this era/artist.",
+              "No vocals detected in tags or audio features (instrumental)."
+            ]
+          },
+          "score": 0,
+          "reason": "Stan Getz’s 'Sambalero' is a warm, serene bossa nova instrumental with smooth saxophone and acoustic guitar, offering a relaxed vintage feel.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 12535,
+          "title": "Festival",
+          "artist": "Tom Misch",
+          "album": "What Kinda Music",
+          "year": 2020,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "contemporary_jazz",
+              "indietronica"
+            ],
+            "mood": [
+              "serene",
+              "introspective"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 60,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "open"
+            ],
+            "timbre": [
+              "warm",
+              "organic"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "electric_guitar",
+              "upright_bass",
+              "acoustic_drums",
+              "synthesizer"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "background",
+              "relaxation",
+              "reading"
+            ],
+            "scenes": [
+              "uk_contemporary_jazz"
+            ],
+            "styleEra": [
+              "2020s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "steady"
+            ],
+            "structuralCharacter": [
+              "linear"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "An instrumental contemporary jazz piece with a slow, serene tempo, featuring sparse textures and warm organic timbres.",
+            "evidenceNotes": [
+              "Genre tags 'Jazz' and 'Electronic' from file metadata.",
+              "BPM estimated at 60 based on tempo candidates 50.7 and 60.5.",
+              "Vocal profile set to instrumental as no vocal evidence is present in the audio features or tags."
+            ]
+          },
+          "score": 0,
+          "reason": "Tom Misch’s 'Festival' is a slow, serene contemporary jazz piece with sparse textures and warm organic timbres, well-suited for background focus.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 97,
+          "title": "Day Dream - Allen Toussaint",
+          "artist": "Allen Toussaint",
+          "album": "The Bright Mississippi",
+          "year": 2009,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "nu_jazz",
+              "instrumental_jazz"
+            ],
+            "mood": [
+              "dreamy",
+              "serene",
+              "introspective",
+              "wistful"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 104,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "open"
+            ],
+            "timbre": [
+              "warm",
+              "airy"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "piano",
+              "bass_guitar",
+              "acoustic_drums",
+              "saxophone"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "background",
+              "relaxation",
+              "reading"
+            ],
+            "scenes": [
+              "new_orleans_jazz"
+            ],
+            "styleEra": [
+              "2000s"
+            ],
+            "musicalKey": null,
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "through_composed"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A dreamy and serene instrumental jazz piece with a sparse, open texture. The warm, airy timbre and mid-tempo groove create an introspective and wistful atmosphere.",
+            "evidenceNotes": [
+              "BPM 104 from tags matches tempo candidate 104.2.",
+              "Moods Dreamy, Serene, Introspective, Wistful from tags.",
+              "Genre Jazz from tags.",
+              "No language tag, title 'Day Dream' suggests instrumental or abstract theme.",
+              "Vocal profile set to instrumental due to lack of vocal evidence and title implication."
+            ]
+          },
+          "score": 0,
+          "reason": "Allen Toussaint’s 'Day Dream' is a dreamy, serene instrumental jazz piece with a warm, airy timbre and mid-tempo groove, fitting the relaxed brief.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 1466,
+          "title": "Late Night Jazz",
+          "artist": "Gramatik",
+          "album": "Coffee Shop Selection",
+          "year": 2015,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "jazz_fusion",
+              "instrumental_jazz"
+            ],
+            "mood": [
+              "reflective",
+              "intimate",
+              "nostalgic"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 59,
+            "tempoFeel": "slow",
+            "groove": [
+              "swing"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "intimate"
+            ],
+            "timbre": [
+              "warm",
+              "organic"
+            ],
+            "production": [
+              "polished",
+              "live_feel"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "piano",
+              "bass_guitar",
+              "acoustic_drums"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "late_night",
+              "dinner",
+              "reading"
+            ],
+            "scenes": [
+              "jazz"
+            ],
+            "styleEra": [
+              "2010s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "jam_improvised"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, reflective instrumental jazz track with a warm, organic feel and intimate texture, evoking a nostalgic late-night atmosphere.",
+            "evidenceNotes": [
+              "BPM 59 selected from tag and tempo candidate 59.4.",
+              "Moods 'Reflective', 'Intimate', and 'Nostalgic' taken from track tags.",
+              "Genre classified as jazz based on track tag and title 'Late Night Jazz'."
+            ]
+          },
+          "score": 0,
+          "reason": "Gramatik’s 'Late Night Jazz' is a slow, reflective instrumental with a warm, organic feel and intimate texture, evoking a nostalgic, unhurried atmosphere.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 4359,
+          "title": "Strange Meadow Lark",
+          "artist": "The Dave Brubeck Quartet",
+          "album": "Time Out",
+          "year": 1959,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "cool_jazz",
+              "hard_bop"
+            ],
+            "mood": [
+              "reflective",
+              "serene",
+              "dreamy",
+              "introspective"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 126,
+            "tempoFeel": "fast",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "sparse",
+              "open"
+            ],
+            "timbre": [
+              "warm",
+              "soft"
+            ],
+            "production": [
+              "vintage",
+              "studio_polished"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "piano",
+              "bass_guitar",
+              "acoustic_drums",
+              "saxophone"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "background",
+              "relaxation",
+              "reading"
+            ],
+            "scenes": [
+              "american_jazz"
+            ],
+            "styleEra": [
+              "1950s"
+            ],
+            "musicalKey": "E flat major",
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "through_composed"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A serene and introspective jazz ballad with a flowing, lyrical quality, characteristic of the cool jazz aesthetic.",
+            "evidenceNotes": [
+              "Mood tags 'Serene', 'Dreamy', 'Introspective' support low energy and sparse texture.",
+              "BPM 126 is consistent with a moderate swing tempo; estimated BPM 126.2 confirms this.",
+              "Instrumentation inferred from standard quartet lineup."
+            ]
+          },
+          "score": 0,
+          "reason": "The Dave Brubeck Quartet’s 'Strange Meadow Lark' is a serene, introspective jazz ballad with a flowing, lyrical quality, characteristic of cool jazz.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 7065,
+          "title": "Horizon",
+          "artist": "Glass Beams",
+          "album": "Mahal",
+          "year": 2024,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "contemporary_jazz",
+              "psychedelic_jazz"
+            ],
+            "mood": [
+              "dreamy",
+              "mysterious",
+              "hypnotic"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 80,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "layered",
+              "dense"
+            ],
+            "timbre": [
+              "warm",
+              "organic"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "jazz_piano",
+              "upright_bass",
+              "acoustic_drums",
+              "saxophone"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "focus",
+              "reading",
+              "late_night"
+            ],
+            "scenes": [
+              "contemporary_jazz"
+            ],
+            "styleEra": [
+              "contemporary"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "through_composed"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, atmospheric contemporary jazz piece with a dreamy and mysterious quality, featuring layered instrumentation and a hypnotic groove.",
+            "evidenceNotes": [
+              "Tagged as Jazz with moods Dreamy, Mysterious, Hypnotic, Tense.",
+              "Album tags include contemporary jazz, neo-psychedelia, folk.",
+              "BPM tag 80 aligns with tempo candidate 79.8.",
+              "Instrumentation inferred from genre and album style."
+            ]
+          },
+          "score": 0,
+          "reason": "Glass Beams’ 'Horizon' is a slow, atmospheric contemporary jazz piece with a dreamy quality and layered instrumentation, tagged for focus and reading.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 11411,
+          "title": "March For Mingus",
+          "artist": "Melody Gardot",
+          "album": "Currency of Man",
+          "year": 2015,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "instrumental_jazz",
+              "post_bop"
+            ],
+            "mood": [
+              "introspective",
+              "reflective",
+              "serene"
+            ],
+            "valence": "positive",
+            "energy": "medium",
+            "bpm": 102,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "swing"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "layered"
+            ],
+            "timbre": [
+              "warm",
+              "organic"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "piano",
+              "upright_bass",
+              "acoustic_drums",
+              "saxophone"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "focus",
+              "background",
+              "reading"
+            ],
+            "scenes": [
+              "modern_jazz_vocal"
+            ],
+            "styleEra": [
+              "2010s"
+            ],
+            "musicalKey": null,
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "highly_dynamic"
+            ],
+            "structuralCharacter": [
+              "through_composed"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "An instrumental jazz piece with a serene and reflective character, featuring a mid-tempo swing groove and dynamic interplay between acoustic instruments.",
+            "evidenceNotes": [
+              "Title 'March for Mingus' implies an instrumental tribute; no language tag present.",
+              "High dynamic range (22.1 dB) and low beat regularity suggest a live-feel, dynamic performance.",
+              "Mood tags indicate Introspective and Serene, contrasting with the vocal tracks."
+            ]
+          },
+          "score": 0,
+          "reason": "Melody Gardot’s 'March For Mingus' is an instrumental jazz piece with a serene, reflective character and mid-tempo swing groove, explicitly tagged for focus.",
+          "origin": "catalog",
+          "retained": false
+        }
+      ],
+      "detail": {
+        "tracks": 8,
+        "pending": 0,
+        "durationMs": 27712,
+        "usage": {
+          "input_tokens": 28156,
+          "output_tokens": 1196,
+          "total_tokens": 29352
+        },
+        "tools": [
+          {
+            "name": "library_overview",
+            "args": {},
+            "durationMs": 51
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "instrumental jazz",
+              "genres": [
+                "jazz"
+              ],
+              "moods": [
+                "warm",
+                "relaxed",
+                "serene",
+                "introspective",
+                "reflective"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "instrumental",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 133,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "jazz focus work",
+              "genres": [
+                "jazz"
+              ],
+              "moods": [
+                "warm",
+                "serene",
+                "introspective",
+                "reflective",
+                "dreamy"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "instrumental",
+              "energy": "medium",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 135,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "jazz",
+              "genres": [
+                "jazz"
+              ],
+              "moods": [
+                "warm",
+                "serene",
+                "introspective",
+                "reflective",
+                "dreamy"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "instrumental",
+              "energy": "any",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 133,
+            "count": 16
+          }
+        ]
+      },
+      "checks": [
+        {
+          "name": "requested song count",
+          "passed": true
+        },
+        {
+          "name": "real unique library recordings",
+          "passed": true
+        },
+        {
+          "name": "library tool use",
+          "passed": true
+        },
+        {
+          "name": "initial musical constraints",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "scenario": "instrumental-focus",
+      "stage": "correction",
+      "message": "Make it strictly instrumental piano jazz; no vocals, no electronic music. Keep it relaxed.",
+      "name": "Warm Instrumental Piano Jazz for Focus",
+      "reply": "I narrowed the current set to strictly instrumental, acoustic piano-led jazz and removed the saxophone-led, electronic, and vocal-adjacent tracks. The library search did not surface enough additional qualifying piano-jazz recordings, so I’m returning the 5 strongest matches rather than padding with unsuitable songs.",
+      "guidance": "Prefers strictly instrumental piano jazz for focused work; wants warm and relaxed rather than hectic; no singing, spoken word, or electronic music.",
+      "items": [
+        {
+          "fileId": 97,
+          "title": "Day Dream - Allen Toussaint",
+          "artist": "Allen Toussaint",
+          "album": "The Bright Mississippi",
+          "year": 2009,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "nu_jazz",
+              "instrumental_jazz"
+            ],
+            "mood": [
+              "dreamy",
+              "serene",
+              "introspective",
+              "wistful"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 104,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "open"
+            ],
+            "timbre": [
+              "warm",
+              "airy"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "piano",
+              "bass_guitar",
+              "acoustic_drums",
+              "saxophone"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "background",
+              "relaxation",
+              "reading"
+            ],
+            "scenes": [
+              "new_orleans_jazz"
+            ],
+            "styleEra": [
+              "2000s"
+            ],
+            "musicalKey": null,
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "through_composed"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A dreamy and serene instrumental jazz piece with a sparse, open texture. The warm, airy timbre and mid-tempo groove create an introspective and wistful atmosphere.",
+            "evidenceNotes": [
+              "BPM 104 from tags matches tempo candidate 104.2.",
+              "Moods Dreamy, Serene, Introspective, Wistful from tags.",
+              "Genre Jazz from tags.",
+              "No language tag, title 'Day Dream' suggests instrumental or abstract theme.",
+              "Vocal profile set to instrumental due to lack of vocal evidence and title implication."
+            ]
+          },
+          "score": 0,
+          "reason": "Instrumental jazz with piano, low energy, dreamy/serene, and background/relaxation contexts.",
+          "origin": "catalog",
+          "retained": true
+        },
+        {
+          "fileId": 1466,
+          "title": "Late Night Jazz",
+          "artist": "Gramatik",
+          "album": "Coffee Shop Selection",
+          "year": 2015,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "jazz_fusion",
+              "instrumental_jazz"
+            ],
+            "mood": [
+              "reflective",
+              "intimate",
+              "nostalgic"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 59,
+            "tempoFeel": "slow",
+            "groove": [
+              "swing"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "intimate"
+            ],
+            "timbre": [
+              "warm",
+              "organic"
+            ],
+            "production": [
+              "polished",
+              "live_feel"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "piano",
+              "bass_guitar",
+              "acoustic_drums"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "late_night",
+              "dinner",
+              "reading"
+            ],
+            "scenes": [
+              "jazz"
+            ],
+            "styleEra": [
+              "2010s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "jam_improvised"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, reflective instrumental jazz track with a warm, organic feel and intimate texture, evoking a nostalgic late-night atmosphere.",
+            "evidenceNotes": [
+              "BPM 59 selected from tag and tempo candidate 59.4.",
+              "Moods 'Reflective', 'Intimate', and 'Nostalgic' taken from track tags.",
+              "Genre classified as jazz based on track tag and title 'Late Night Jazz'."
+            ]
+          },
+          "score": 0,
+          "reason": "Slow instrumental jazz with piano, low energy, reflective/intimate, and a warm organic feel.",
+          "origin": "catalog",
+          "retained": true
+        },
+        {
+          "fileId": 4359,
+          "title": "Strange Meadow Lark",
+          "artist": "The Dave Brubeck Quartet",
+          "album": "Time Out",
+          "year": 1959,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "cool_jazz",
+              "hard_bop"
+            ],
+            "mood": [
+              "reflective",
+              "serene",
+              "dreamy",
+              "introspective"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 126,
+            "tempoFeel": "fast",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "sparse",
+              "open"
+            ],
+            "timbre": [
+              "warm",
+              "soft"
+            ],
+            "production": [
+              "vintage",
+              "studio_polished"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "piano",
+              "bass_guitar",
+              "acoustic_drums",
+              "saxophone"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "background",
+              "relaxation",
+              "reading"
+            ],
+            "scenes": [
+              "american_jazz"
+            ],
+            "styleEra": [
+              "1950s"
+            ],
+            "musicalKey": "E flat major",
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "through_composed"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A serene and introspective jazz ballad with a flowing, lyrical quality, characteristic of the cool jazz aesthetic.",
+            "evidenceNotes": [
+              "Mood tags 'Serene', 'Dreamy', 'Introspective' support low energy and sparse texture.",
+              "BPM 126 is consistent with a moderate swing tempo; estimated BPM 126.2 confirms this.",
+              "Instrumentation inferred from standard quartet lineup."
+            ]
+          },
+          "score": 0,
+          "reason": "Instrumental cool jazz with piano, low energy, serene/introspective, and reading/background contexts.",
+          "origin": "catalog",
+          "retained": true
+        },
+        {
+          "fileId": 7065,
+          "title": "Horizon",
+          "artist": "Glass Beams",
+          "album": "Mahal",
+          "year": 2024,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "contemporary_jazz",
+              "psychedelic_jazz"
+            ],
+            "mood": [
+              "dreamy",
+              "mysterious",
+              "hypnotic"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 80,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "layered",
+              "dense"
+            ],
+            "timbre": [
+              "warm",
+              "organic"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "jazz_piano",
+              "upright_bass",
+              "acoustic_drums",
+              "saxophone"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "focus",
+              "reading",
+              "late_night"
+            ],
+            "scenes": [
+              "contemporary_jazz"
+            ],
+            "styleEra": [
+              "contemporary"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "through_composed"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, atmospheric contemporary jazz piece with a dreamy and mysterious quality, featuring layered instrumentation and a hypnotic groove.",
+            "evidenceNotes": [
+              "Tagged as Jazz with moods Dreamy, Mysterious, Hypnotic, Tense.",
+              "Album tags include contemporary jazz, neo-psychedelia, folk.",
+              "BPM tag 80 aligns with tempo candidate 79.8.",
+              "Instrumentation inferred from genre and album style."
+            ]
+          },
+          "score": 0,
+          "reason": "Instrumental contemporary jazz with jazz piano, low energy, dreamy, and focus/late-night contexts.",
+          "origin": "catalog",
+          "retained": true
+        },
+        {
+          "fileId": 11411,
+          "title": "March For Mingus",
+          "artist": "Melody Gardot",
+          "album": "Currency of Man",
+          "year": 2015,
+          "profile": {
+            "genre": [
+              "jazz"
+            ],
+            "style": [
+              "instrumental_jazz",
+              "post_bop"
+            ],
+            "mood": [
+              "introspective",
+              "reflective",
+              "serene"
+            ],
+            "valence": "positive",
+            "energy": "medium",
+            "bpm": 102,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "swing"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "layered"
+            ],
+            "timbre": [
+              "warm",
+              "organic"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "piano",
+              "upright_bass",
+              "acoustic_drums",
+              "saxophone"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "focus",
+              "background",
+              "reading"
+            ],
+            "scenes": [
+              "modern_jazz_vocal"
+            ],
+            "styleEra": [
+              "2010s"
+            ],
+            "musicalKey": null,
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "highly_dynamic"
+            ],
+            "structuralCharacter": [
+              "through_composed"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "An instrumental jazz piece with a serene and reflective character, featuring a mid-tempo swing groove and dynamic interplay between acoustic instruments.",
+            "evidenceNotes": [
+              "Title 'March for Mingus' implies an instrumental tribute; no language tag present.",
+              "High dynamic range (22.1 dB) and low beat regularity suggest a live-feel, dynamic performance.",
+              "Mood tags indicate Introspective and Serene, contrasting with the vocal tracks."
+            ]
+          },
+          "score": 0,
+          "reason": "Instrumental post-bop with piano, medium energy but serene/reflective, and focus/background contexts.",
+          "origin": "catalog",
+          "retained": true
+        }
+      ],
+      "detail": {
+        "tracks": 5,
+        "pending": 3,
+        "durationMs": 33908,
+        "usage": {
+          "input_tokens": 41465,
+          "output_tokens": 1363,
+          "total_tokens": 42828
+        },
+        "tools": [
+          {
+            "name": "library_overview",
+            "args": {},
+            "durationMs": 58
+          },
+          {
+            "name": "inspect_tracks",
+            "args": {
+              "fileIds": [
+                9463,
+                3635,
+                12535,
+                97,
+                1466,
+                4359,
+                7065,
+                11411
+              ]
+            },
+            "durationMs": 1,
+            "count": 8
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "piano jazz",
+              "genres": [
+                "jazz"
+              ],
+              "moods": [
+                "warm",
+                "serene",
+                "introspective",
+                "reflective",
+                "dreamy",
+                "tender",
+                "nostalgic"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "instrumental",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 133,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "piano trio",
+              "genres": [
+                "jazz"
+              ],
+              "moods": [
+                "warm",
+                "serene",
+                "introspective",
+                "reflective",
+                "dreamy",
+                "tender",
+                "nostalgic",
+                "romantic",
+                "wistful"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "instrumental",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 136,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "piano solo",
+              "genres": [
+                "jazz"
+              ],
+              "moods": [
+                "warm",
+                "serene",
+                "introspective",
+                "reflective",
+                "dreamy",
+                "tender",
+                "nostalgic",
+                "romantic",
+                "wistful"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "instrumental",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 104,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "piano",
+              "genres": [
+                "jazz"
+              ],
+              "moods": [
+                "warm",
+                "serene",
+                "introspective",
+                "reflective",
+                "dreamy",
+                "tender",
+                "nostalgic",
+                "romantic",
+                "wistful"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "instrumental",
+              "energy": "medium",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 126,
+            "count": 7
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "ballad",
+              "genres": [
+                "jazz"
+              ],
+              "moods": [
+                "warm",
+                "serene",
+                "introspective",
+                "reflective",
+                "dreamy",
+                "tender",
+                "nostalgic",
+                "romantic",
+                "wistful"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "instrumental",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 0,
+            "error": "Error: Library context budget reached. Select from the songs already inspected."
+          }
+        ]
+      },
+      "checks": [
+        {
+          "name": "requested song count",
+          "passed": false
+        },
+        {
+          "name": "real unique library recordings",
+          "passed": true
+        },
+        {
+          "name": "library tool use",
+          "passed": true
+        },
+        {
+          "name": "initial musical constraints",
+          "passed": true
+        },
+        {
+          "name": "piano instrumentation",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "scenario": "guitar-road-trip",
+      "stage": "initial",
+      "message": "A guitar-based road-trip mix from the 1990s: alternative rock and punk, energetic but no metal. Include Green Day if available.",
+      "name": "1990s Guitar Road Trip",
+      "reply": "Here's an energetic, guitar-driven 1990s road-trip mix blending alternative rock and punk, with Green Day included. I kept it away from metal and leaned on bright, driving guitars and high-energy moods. I opened with a fast punk burst, moved through alt-rock and pop-punk variety, and closed on a soaring, euphoric anthem. Note: the library's Green Day catalog is from their 1991 debut, so I used 'Knowledge' (a melodic, uplifting cut) rather than a later hit.",
+      "guidance": "Prefers 1990s guitar-based road-trip music: alternative rock and punk, energetic, no metal. Wants Green Day included when available. Values variety across artists and a thoughtful sequence.",
+      "items": [
+        {
+          "fileId": 7103,
+          "title": "Knowledge",
+          "artist": "Green Day",
+          "album": "1,039/Smoothed Out Slappy Hours",
+          "year": 1991,
+          "profile": {
+            "genre": [
+              "punk_hardcore"
+            ],
+            "style": [
+              "punk_rock",
+              "pop_punk"
+            ],
+            "mood": [
+              "defiant",
+              "uplifting",
+              "urgent"
+            ],
+            "valence": "positive",
+            "energy": "high",
+            "bpm": 137,
+            "tempoFeel": "fast",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "layered"
+            ],
+            "timbre": [
+              "gritty",
+              "bright"
+            ],
+            "production": [
+              "raw",
+              "lo_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "powerful",
+              "clean_sung"
+            ],
+            "instrumentation": [
+              "electric_guitar",
+              "bass_guitar",
+              "acoustic_drums"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "rebellion",
+              "empowerment"
+            ],
+            "listeningContexts": [
+              "driving",
+              "workout"
+            ],
+            "scenes": [
+              "american_punk_scene"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A mid-tempo punk track with a more melodic, uplifting feel compared to the album's faster cuts, retaining the raw production and defiant vocal delivery.",
+            "evidenceNotes": [
+              "BPM 137 is moderate for punk, allowing for more melodic phrasing.",
+              "Higher dynamic range (17.5 dB) suggests a less compressed, more dynamic mix than other tracks.",
+              "Mood tags 'Uplifting' and 'Defiant' suggest a positive, energetic tone."
+            ]
+          },
+          "score": 0,
+          "reason": "Green Day's melodic, uplifting 1991 punk cut (137 BPM, driving context) — a strong, energetic opener that satisfies the Green Day request.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 4563,
+          "title": "Pay The Man",
+          "artist": "The Offspring",
+          "album": "Americana",
+          "year": 1998,
+          "profile": {
+            "genre": [
+              "punk_hardcore"
+            ],
+            "style": [
+              "pop_punk",
+              "punk_rock"
+            ],
+            "mood": [
+              "defiant",
+              "playful",
+              "urgent"
+            ],
+            "valence": "positive",
+            "energy": "high",
+            "bpm": 125,
+            "tempoFeel": "fast",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "dense",
+              "layered"
+            ],
+            "timbre": [
+              "bright",
+              "gritty",
+              "crisp"
+            ],
+            "production": [
+              "polished",
+              "hi_fi",
+              "compressed"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "clean_sung",
+              "powerful"
+            ],
+            "instrumentation": [
+              "electric_guitar",
+              "bass_guitar",
+              "acoustic_drums",
+              "vocals"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "rebellion",
+              "humor",
+              "social_commentary"
+            ],
+            "listeningContexts": [
+              "driving",
+              "workout",
+              "social"
+            ],
+            "scenes": [
+              "pop_punk"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "compressed",
+              "steady"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "standard_track"
+            ],
+            "summary": "A high-energy pop-punk track featuring bright, distorted electric guitars, a driving straight-eighth drum pattern, and powerful, clean vocals. The mood is defiant and playful, with a polished, compressed production typical of late-90s alternative rock. The tempo is fast at 125 BPM, supporting an urgent and rebellious atmosphere.",
+            "evidenceNotes": [
+              "Genre and style inferred from album evidence (Punk Rock/Pop Punk) and track tags (Punk Hardcore).",
+              "Mood terms 'defiant', 'playful', and 'urgent' taken directly from track tags.",
+              "BPM set to 125 based on track tag and tempo candidate, aligning with the fast tempo of pop-punk.",
+              "Instrumentation inferred from genre conventions (electric guitar, bass, drums) and acoustic/electronic hybrid character.",
+              "Lyrical themes inferred from the 'defiant' and 'playful' mood tags and typical pop-punk subject matter, as specific lyrics are not provided.",
+              "Production described as polished and compressed based on the high RMS level and low dynamic range in audio features, consistent with 90s rock production."
+            ]
+          },
+          "score": 0,
+          "reason": "The Offspring's bright, distorted pop-punk (125 BPM, driving) keeps the punk energy and adds a different band.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 2748,
+          "title": "Hello",
+          "artist": "Oasis",
+          "album": "(What’s the Story) Morning Glory?",
+          "year": 1995,
+          "profile": {
+            "genre": [
+              "rock"
+            ],
+            "style": [
+              "britpop",
+              "indie_rock"
+            ],
+            "mood": [
+              "uplifting",
+              "playful",
+              "hopeful"
+            ],
+            "valence": "positive",
+            "energy": "high",
+            "bpm": 132,
+            "tempoFeel": "fast",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "high",
+            "texture": [
+              "layered",
+              "dense"
+            ],
+            "timbre": [
+              "bright",
+              "warm"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "clean_sung",
+              "powerful"
+            ],
+            "instrumentation": [
+              "electric_guitar",
+              "bass_guitar",
+              "acoustic_drums",
+              "vocals"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "celebration",
+              "hope"
+            ],
+            "listeningContexts": [
+              "driving",
+              "social",
+              "party"
+            ],
+            "scenes": [
+              "britpop"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A high-energy Britpop track featuring bright, layered electric guitars and a driving straight rhythm. The mood is uplifting and playful, supported by powerful clean vocals and a polished production style typical of mid-90s alternative rock.",
+            "evidenceNotes": [
+              "BPM 132 and high energy (0.82) support a fast, driving tempo.",
+              "Tags explicitly list 'Uplifting', 'Playful', and 'Hopeful' moods.",
+              "Album context identifies the style as Britpop/Indie Rock from the 1990s.",
+              "High danceability (0.796) and beat regularity suggest a straight, danceable groove."
+            ]
+          },
+          "score": 0,
+          "reason": "Oasis 'Hello' — bright, layered Britpop guitars (132 BPM, driving) for an uplifting alt-rock lift.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 3062,
+          "title": "Ignoreland",
+          "artist": "R.E.M.",
+          "album": "Automatic for the People",
+          "year": 1992,
+          "profile": {
+            "genre": [
+              "rock"
+            ],
+            "style": [
+              "jangle_pop",
+              "acoustic_rock",
+              "alternative_rock"
+            ],
+            "mood": [
+              "urgent",
+              "tense",
+              "defiant"
+            ],
+            "valence": "negative",
+            "energy": "high",
+            "bpm": 121,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "dense"
+            ],
+            "timbre": [
+              "bright",
+              "gritty"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "clean_sung"
+            ],
+            "instrumentation": [
+              "electric_guitar",
+              "acoustic_guitar",
+              "bass_guitar",
+              "acoustic_drums"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "social_commentary",
+              "rebellion"
+            ],
+            "listeningContexts": [
+              "driving",
+              "focus"
+            ],
+            "scenes": [
+              "90s_alternative_rock"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": "G major",
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A driving, mid-tempo rock track with a dense texture and urgent, tense mood. The bright, slightly gritty timbre of the guitars supports a defiant vocal delivery. The production is polished, maintaining a clear separation of instruments while sustaining a high-energy rhythmic pulse.",
+            "evidenceNotes": [
+              "BPM 121 selected from tempo candidates [61.5, 121, 125, 81.5] as the conventional tempo.",
+              "Mood 'urgent', 'tense', 'defiant' taken from track tags.",
+              "Energy 'high' inferred from audio energy 0.735 and mood tags.",
+              "Style 'jangle_pop' and 'acoustic_rock' derived from album tags."
+            ]
+          },
+          "score": 0,
+          "reason": "R.E.M. 'Ignoreland' — driving, urgent jangle/alt-rock (121 BPM, driving) with prominent guitar texture.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 7580,
+          "title": "Degenerate",
+          "artist": "blink‐182",
+          "album": "Dude Ranch",
+          "year": 1997,
+          "profile": {
+            "genre": [
+              "punk_hardcore"
+            ],
+            "style": [
+              "pop_punk",
+              "skate_punk"
+            ],
+            "mood": [
+              "playful",
+              "defiant"
+            ],
+            "valence": "positive",
+            "energy": "high",
+            "bpm": 129,
+            "tempoFeel": "fast",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "dense"
+            ],
+            "timbre": [
+              "bright",
+              "gritty"
+            ],
+            "production": [
+              "raw",
+              "lo_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "clean_sung",
+              "powerful"
+            ],
+            "instrumentation": [
+              "electric_guitar",
+              "bass_guitar",
+              "acoustic_drums",
+              "vocals"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "rebellion",
+              "humor"
+            ],
+            "listeningContexts": [
+              "driving",
+              "workout",
+              "social"
+            ],
+            "scenes": [
+              "american_punk_scene"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "compressed"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A high-energy pop-punk track characterized by bright, gritty guitar tones and a fast, straight rhythmic drive. The production retains a raw, lo-fi aesthetic typical of mid-90s punk recordings, supporting a playful yet defiant vocal delivery.",
+            "evidenceNotes": [
+              "Tag BPM 129 aligns with tempo candidate 129.3, confirming fast tempo.",
+              "Audio features show high energy (0.748) and low danceability (0.424), consistent with punk rock.",
+              "Dynamic range of 3.2 dB indicates a compressed, raw production style.",
+              "Album context confirms 1997 release and American punk scene association."
+            ]
+          },
+          "score": 0,
+          "reason": "blink-182 'Degenerate' — fast, playful skate-punk (129 BPM, driving) for a punk burst.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 9596,
+          "title": "The Good Life",
+          "artist": "Weezer",
+          "album": "The Good Life",
+          "year": 1996,
+          "profile": {
+            "genre": [
+              "rock"
+            ],
+            "style": [
+              "alternative_rock",
+              "power_pop"
+            ],
+            "mood": [
+              "joyful",
+              "uplifting"
+            ],
+            "valence": "positive",
+            "energy": "high",
+            "bpm": 136,
+            "tempoFeel": "fast",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "high",
+            "texture": [
+              "layered"
+            ],
+            "timbre": [
+              "bright",
+              "clean"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "clean_sung"
+            ],
+            "instrumentation": [
+              "electric_guitar",
+              "bass_guitar",
+              "acoustic_drums",
+              "vocals"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "love",
+              "celebration"
+            ],
+            "listeningContexts": [
+              "daytime",
+              "driving",
+              "social"
+            ],
+            "scenes": [
+              "90s_alternative_rock"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A high-energy, bright alternative rock track with a driving rhythm and clean, polished production, characterized by uplifting melodies and a straightforward verse-chorus structure.",
+            "evidenceNotes": [
+              "BPM 136 and high energy/danceability scores support a fast, upbeat tempo.",
+              "Tags and album context identify the style as alternative rock/power pop.",
+              "Mood tags 'Joyful' and 'Uplifting' align with the positive valence and bright timbre."
+            ]
+          },
+          "score": 0,
+          "reason": "Weezer 'The Good Life' — joyful, bright alt-rock (136 BPM, daytime/driving) for a sunny mid-trip moment.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 12996,
+          "title": "Superman",
+          "artist": "Goldfinger",
+          "album": "Hang-Ups",
+          "year": 1997,
+          "profile": {
+            "genre": [
+              "rock"
+            ],
+            "style": [
+              "pop_punk",
+              "ska_punk",
+              "alternative_rock"
+            ],
+            "mood": [
+              "uplifting"
+            ],
+            "valence": "positive",
+            "energy": "high",
+            "bpm": 97,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "layered",
+              "dense"
+            ],
+            "timbre": [
+              "bright",
+              "gritty"
+            ],
+            "production": [
+              "polished",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "clean_sung",
+              "powerful"
+            ],
+            "instrumentation": [
+              "electric_guitar",
+              "bass_guitar",
+              "acoustic_drums",
+              "trumpet"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "empowerment",
+              "rebellion"
+            ],
+            "listeningContexts": [
+              "driving",
+              "workout",
+              "social"
+            ],
+            "scenes": [
+              "american_punk_rock"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "major",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A high-energy pop-punk track with ska influences, featuring bright, gritty guitars and a driving rhythm.",
+            "evidenceNotes": [
+              "Genre tags indicate Punk Rock and Pop Punk; style tags include Ska.",
+              "Audio features show high energy (0.737) and estimated BPM of 97.3.",
+              "Album context confirms 1997 release and American rock scene association."
+            ]
+          },
+          "score": 0,
+          "reason": "Goldfinger 'Superman' — uplifting ska-punk with bright guitars (97 BPM, driving) for rhythmic variety.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 5683,
+          "title": "The Rolling People (Remastered 2016)",
+          "artist": "The Verve",
+          "album": "Urban Hymns",
+          "year": 1997,
+          "profile": {
+            "genre": [
+              "rock"
+            ],
+            "style": [
+              "britpop",
+              "alternative_rock",
+              "neo_psychedelia"
+            ],
+            "mood": [
+              "euphoric",
+              "triumphant",
+              "hypnotic",
+              "urgent"
+            ],
+            "valence": "positive",
+            "energy": "high",
+            "bpm": 80,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "dense",
+              "wall_of_sound"
+            ],
+            "timbre": [
+              "bright",
+              "distorted"
+            ],
+            "production": [
+              "polished",
+              "hi_fi",
+              "compressed"
+            ],
+            "acousticElectronicCharacter": "acoustic_electronic_hybrid",
+            "vocalProfile": [
+              "clean_sung",
+              "powerful"
+            ],
+            "instrumentation": [
+              "electric_guitar",
+              "bass_guitar",
+              "acoustic_drums",
+              "synthesizer"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "celebration",
+              "empowerment",
+              "escapism"
+            ],
+            "listeningContexts": [
+              "driving",
+              "social",
+              "workout"
+            ],
+            "scenes": [
+              "british_alternative_rock"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": "E minor",
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "highly_dynamic"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "standard_track",
+              "studio_recording"
+            ],
+            "summary": "A high-energy, euphoric alternative rock track with a dense wall-of-sound texture and hypnotic rhythmic drive, featuring powerful vocal delivery.",
+            "evidenceNotes": [
+              "BPM 80 confirmed by tag and audio analysis.",
+              "High energy score (0.756) supports high energy classification.",
+              "Mood tags indicate euphoric and triumphant character."
+            ]
+          },
+          "score": 0,
+          "reason": "The Verve 'The Rolling People' — euphoric, hypnotic alt-rock (80 BPM, driving) as a soaring, anthemic closer.",
+          "origin": "catalog",
+          "retained": false
+        }
+      ],
+      "detail": {
+        "tracks": 8,
+        "pending": 0,
+        "durationMs": 34070,
+        "usage": {
+          "input_tokens": 40119,
+          "output_tokens": 1381,
+          "total_tokens": 41500
+        },
+        "tools": [
+          {
+            "name": "library_overview",
+            "args": {},
+            "durationMs": 42
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "Green Day",
+              "genres": [
+                "rock",
+                "punk_hardcore"
+              ],
+              "moods": [],
+              "artists": [
+                "Green Day"
+              ],
+              "excludeArtists": [],
+              "vocal": "any",
+              "energy": "high",
+              "minYear": 1990,
+              "maxYear": 1999,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 136,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "guitar road trip driving",
+              "genres": [
+                "rock",
+                "punk_hardcore"
+              ],
+              "moods": [
+                "uplifting",
+                "urgent",
+                "joyful",
+                "defiant"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "any",
+              "energy": "high",
+              "minYear": 1990,
+              "maxYear": 1999,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 106,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "alternative rock guitar",
+              "genres": [
+                "rock"
+              ],
+              "moods": [
+                "uplifting",
+                "urgent",
+                "joyful",
+                "defiant"
+              ],
+              "artists": [],
+              "excludeArtists": [
+                "Green Day"
+              ],
+              "vocal": "any",
+              "energy": "high",
+              "minYear": 1990,
+              "maxYear": 1999,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 137,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "punk rock",
+              "genres": [
+                "punk_hardcore"
+              ],
+              "moods": [
+                "uplifting",
+                "urgent",
+                "joyful",
+                "defiant",
+                "playful"
+              ],
+              "artists": [],
+              "excludeArtists": [
+                "Green Day"
+              ],
+              "vocal": "any",
+              "energy": "high",
+              "minYear": 1990,
+              "maxYear": 1999,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 102,
+            "count": 16
+          },
+          {
+            "name": "inspect_tracks",
+            "args": {
+              "fileIds": [
+                7103,
+                4563,
+                7580,
+                2748,
+                3062,
+                9596,
+                12996,
+                8882,
+                3128,
+                2894
+              ]
+            },
+            "durationMs": 3,
+            "count": 1
+          }
+        ]
+      },
+      "checks": [
+        {
+          "name": "requested song count",
+          "passed": true
+        },
+        {
+          "name": "real unique library recordings",
+          "passed": true
+        },
+        {
+          "name": "library tool use",
+          "passed": true
+        },
+        {
+          "name": "initial musical constraints",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "scenario": "guitar-road-trip",
+      "stage": "correction",
+      "message": "Make it all Green Day, from the 1990s, and put Basket Case first if you have it. No other artists.",
+      "durationMs": 33250,
+      "error": "Error: AI selected a duplicate recording."
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import {
   Compass,
+  MessageCircle,
   History,
   MoonStar,
   Route,
@@ -12,6 +13,7 @@ export type PlaylistDefinition = {
   name: string;
   category: string;
   enabled: boolean;
+  automatic?: boolean;
   intent: string;
   config: Record<string, unknown>;
   ownerUserId?: number;
@@ -62,9 +64,11 @@ export const categoryOrder = [
   "mood",
   "journey",
   "rediscovery",
+  "chat",
 ] as const;
 
 export const categoryMeta: Record<string, CategoryMeta> = {
+  chat: { label: "AI Chat", shortLabel: "Talk it through", description: "Describe a mix and refine it in conversation.", icon: MessageCircle },
   discovery: {
     label: "Discovery",
     shortLabel: "New music",

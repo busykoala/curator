@@ -66,7 +66,7 @@ export function PlaylistEditor({ initial, users, close, save }: Props) {
       ? "Add a mood or occasion"
       : value.category === "discovery"
         ? "Add a discovery lane"
-        : "Build a progressive journey";
+        : value.category === "rediscovery" ? "Rediscover your favorites" : value.category === "depth" ? "Explore your collection" : "Build a progressive journey";
 
   useEffect(() => {
     let active = true;
@@ -180,9 +180,9 @@ export function PlaylistEditor({ initial, users, close, save }: Props) {
             )}
 
             {(value.category === "discovery" ||
-              value.category === "journey") && (
+              value.category === "journey" || value.category === "depth" || value.category === "rediscovery") && (
               <TagCombobox
-                label="Genre, subgenre, or theme"
+                label={value.category === "rediscovery" ? "Genre or style to rediscover" : "Genre, subgenre, or theme"}
                 hint="Suggestions come from your actual tags and technical profiles."
                 placeholder={
                   value.category === "discovery"
@@ -201,7 +201,7 @@ export function PlaylistEditor({ initial, users, close, save }: Props) {
                   ? "Extra guidance"
                   : value.category === "discovery"
                     ? "What should Curator look for?"
-                    : "Describe the musical progression"}
+                    : value.category === "journey" ? "Describe the musical progression" : "Extra guidance"}
               </span>
               <textarea
                 value={value.intent}

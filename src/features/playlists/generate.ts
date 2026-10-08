@@ -1,3 +1,4 @@
+import { acquireChatLease, currentChatItems, releaseChatLease } from "./chat-state";
 import { createHash } from "node:crypto";
 import { db } from "@/features/db/client";
 import {
@@ -207,9 +208,19 @@ function addable(
 const hash = (value: string) =>
   parseInt(createHash("sha1").update(value).digest("hex").slice(0, 8), 16);
 
-export async function generatePlaylist(id: number, preview = false) {
+export async function generatePlaylist(id: number, preview = false, heldChatLease?: string) {
   const definition = getPlaylist(id);
   if (!definition) throw new Error("Playlist not found");
+  const lease = definition.category === "chat" && !heldChatLease ? acquireChatLease(id) : undefined;
+  try {
+    return await generatePlaylistRun(definition, preview);
+  } finally {
+    if (lease) releaseChatLease(id, lease);
+  }
+}
+
+async function generatePlaylistRun(definition: PlaylistDefinition, preview: boolean) {
+  const id = definition.id;
   const configHash = createHash("sha256")
     .update(JSON.stringify(definition))
     .digest("hex");
@@ -220,8 +231,13 @@ export async function generatePlaylist(id: number, preview = false) {
     .get(id, preview ? 1 : 0, configHash, definition.ownerUserId) as { id: number };
 
   try {
-    const listening = (await navidromeListeningProfile(definition.ownerUserId).catch(() => ({ frequent: [], starred: [] }))) as ListeningProfile;
-    let items = select(definition, listening);
+    const listening = definition.category === "chat" ? undefined : (await navidromeListeningProfile(definition.ownerUserId).catch(() => ({ frequent: [], starred: [] }))) as ListeningProfile;
+    let items = definition.category === "chat" ? currentChatItems(id) : select(definition, listening);
+    if (definition.category === "chat") {
+      const feedback=activeFeedback(id);
+      const available=new Set((db().prepare("SELECT id FROM files WHERE status='written'").all() as Array<{id:number}>).map(row=>row.id));
+      if(items.some(item=>!available.has(item.fileId)||feedback.excluded.has(item.fileId)||feedback.artists.has(norm(item.artist))))throw new Error("Some selected songs are unavailable or excluded. Ask the chat to replace them first.");
+    }
     let navidromeId = definition.navidromePlaylistId;
     let songIds = new Map<number, string>();
     if (!preview) {
@@ -233,6 +249,7 @@ export async function generatePlaylist(id: number, preview = false) {
       ) {
         const unresolved = await unresolvedNavidromeCandidates(items, definition.ownerUserId);
         if (!unresolved.length) break;
+        if(definition.category === "chat")break;
         const ignoredBefore = ignored.size;
         unresolved.forEach((item) => ignored.add(item.fileId));
         items = select(definition, listening, ignored);

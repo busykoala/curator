@@ -1,0 +1,1593 @@
+{
+  "generatedAt": "2026-10-08T07:10:39.110Z",
+  "checks": {
+    "countChanged": true,
+    "openerPreserved": true,
+    "excludedArtistRemoved": true,
+    "revisionAdvanced": true,
+    "historyPersisted": true,
+    "songsPersisted": true,
+    "mobileHasNoOverflow": true
+  },
+  "errors": [],
+  "initial": {
+    "definition": {
+      "id": 3,
+      "name": "Dark, Spacious Late-Night Electronic & Trip-Hop",
+      "category": "chat",
+      "enabled": false,
+      "automatic": false,
+      "intent": "",
+      "config": {
+        "tasteLanes": [],
+        "genres": [],
+        "moods": [],
+        "contexts": [],
+        "exclusions": [],
+        "sourceDomains": [],
+        "targetTracks": 8,
+        "rotationPercent": 30,
+        "maxTracksPerArtist": 2,
+        "maxTracksPerAlbum": 1,
+        "energyCurve": "steady",
+        "explorationPercent": 35,
+        "externalDiscovery": false,
+        "noveltyDays": 30
+      },
+      "ownerUserId": 1,
+      "ownerDisplayName": "Test listener",
+      "ownerTokenStatus": "missing",
+      "navidromePlaylistId": null,
+      "lastRunAt": null,
+      "nextRunAt": null,
+      "createdAt": "2026-10-08 07:09:42",
+      "updatedAt": "2026-10-08 07:10:10"
+    },
+    "revision": 1,
+    "messages": [
+      {
+        "role": "user",
+        "content": "A dark, spacious late-night electronic and trip-hop mix. No rock or festival EDM."
+      },
+      {
+        "role": "assistant",
+        "content": "Here's a dark, spacious late-night mix built from the library's electronic, trip-hop, and ambient tracks. I excluded rock, punk, and metal, and steered clear of festival-style EDM by choosing low-energy, spacious, reverb-heavy productions. The sequence opens with a slow, hypnotic ambient trip-hop piece, moves through classic 90s trip-hop, dips into darker ambient/downtempo, and closes on a spacious, evolving ambient track."
+      }
+    ],
+    "result": {
+      "name": "Dark, Spacious Late-Night Electronic & Trip-Hop",
+      "reply": "Here's a dark, spacious late-night mix built from the library's electronic, trip-hop, and ambient tracks. I excluded rock, punk, and metal, and steered clear of festival-style EDM by choosing low-energy, spacious, reverb-heavy productions. The sequence opens with a slow, hypnotic ambient trip-hop piece, moves through classic 90s trip-hop, dips into darker ambient/downtempo, and closes on a spacious, evolving ambient track.",
+      "guidance": "Prefers dark, spacious, low-energy late-night electronic and trip-hop. Explicitly excludes rock and festival EDM. Favors spacious/reverb-heavy production, hypnotic and mysterious moods, and a mix of instrumental and sparse-vocal tracks.",
+      "items": [
+        {
+          "fileId": 2318,
+          "title": "Inertia Creeps (State Of Bengal Mix)",
+          "artist": "Massive Attack",
+          "album": "Singles 90-98 (CD11)",
+          "year": 1998,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "trip_hop",
+              "ambient",
+              "downtempo"
+            ],
+            "mood": [
+              "dark",
+              "mysterious",
+              "hypnotic",
+              "eerie"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 50,
+            "tempoFeel": "very_slow",
+            "groove": [
+              "free_time",
+              "syncopated"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "ambient",
+              "evolving"
+            ],
+            "timbre": [
+              "dark",
+              "airy",
+              "warm"
+            ],
+            "production": [
+              "spacious",
+              "reverb_heavy",
+              "sample_based"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "sparse_vocals",
+              "processed"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer",
+              "samples"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "introspection",
+              "surrealism"
+            ],
+            "listeningContexts": [
+              "late_night",
+              "meditation",
+              "headphones"
+            ],
+            "scenes": [
+              "bristol_trip_hop"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "remix",
+              "studio_recording"
+            ],
+            "summary": "A slower, more ambient remix with a BPM of 50. The track emphasizes mystery and eeriness, utilizing spacious production and evolving textures to create a hypnotic, dark atmosphere.",
+            "evidenceNotes": [
+              "Title indicates 'State Of Bengal Mix'.",
+              "BPM 50 is significantly slower than the original, suggesting a half-time or ambient interpretation.",
+              "Moods 'Mysterious', 'Eerie' align with the slower tempo and lower energy (0.583).",
+              "High dynamic range (10.7) suggests a more open, less compressed mix."
+            ]
+          },
+          "score": 0,
+          "reason": "Massive Attack's ambient remix (50 BPM, spacious, reverb-heavy, dark/eerie) is a perfect dark, spacious opener and a trip-hop anchor.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 7941,
+          "title": "Wandering Star",
+          "artist": "Portishead",
+          "album": "Dummy",
+          "year": 1994,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "trip_hop",
+              "downtempo"
+            ],
+            "mood": [
+              "dark",
+              "somber",
+              "lonely",
+              "mysterious"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 53,
+            "tempoFeel": "slow",
+            "groove": [
+              "syncopated",
+              "half_time"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "layered"
+            ],
+            "timbre": [
+              "dark",
+              "warm",
+              "gritty"
+            ],
+            "production": [
+              "lo_fi",
+              "sample_based",
+              "vintage"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "sparse_vocals",
+              "processed"
+            ],
+            "instrumentation": [
+              "drum_machine",
+              "synthesizer",
+              "bass_synthesizer",
+              "samples"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "loneliness",
+              "introspection"
+            ],
+            "listeningContexts": [
+              "late_night",
+              "headphones",
+              "relaxation"
+            ],
+            "scenes": [
+              "bristol_trip_hop"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "compressed"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, somber trip-hop track with a lonely and mysterious atmosphere, characterized by sparse yet dense textural layers.",
+            "evidenceNotes": [
+              "BPM 53 from tags and audio analysis.",
+              "Moods Dark, Somber, Lonely, Mysterious from tags.",
+              "Genre Electronic and album context Trip-Hop/Downtempo.",
+              "Scene Bristol Trip Hop from album evidence."
+            ]
+          },
+          "score": 0,
+          "reason": "Portishead's 'Wandering Star' (53 BPM, half-time, lo-fi, lonely/mysterious) deepens the classic trip-hop feel with a slow, somber pulse.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 7997,
+          "title": "Nursery Rhyme , Breather",
+          "artist": "UNKLE",
+          "album": "Psyence Fiction",
+          "year": 1998,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "trip_hop",
+              "downtempo"
+            ],
+            "mood": [
+              "mysterious",
+              "eerie",
+              "introspective"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 67,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "layered",
+              "dense"
+            ],
+            "timbre": [
+              "dark",
+              "warm"
+            ],
+            "production": [
+              "polished",
+              "sample_based"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "sparse_vocals"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "introspection",
+              "surrealism"
+            ],
+            "listeningContexts": [
+              "late_night",
+              "headphones",
+              "focus"
+            ],
+            "scenes": [
+              "bristol_trip_hop"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "build_drop"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, atmospheric trip-hop track featuring dark, layered synthesizer textures and a steady, hypnotic beat. The mood is mysterious and introspective, with sparse vocal elements contributing to an eerie, cinematic atmosphere typical of the Bristol scene.",
+            "evidenceNotes": [
+              "BPM 67 confirmed by tag and audio analysis.",
+              "Moods 'Mysterious', 'Eerie', 'Introspective' from tags.",
+              "Genre 'Electronic' and album context 'Bristol Trip Hop' support trip_hop/downtempo style.",
+              "Language 'English' from tags."
+            ]
+          },
+          "score": 0,
+          "reason": "UNKLE's 'Nursery Rhyme, Breather' (67 BPM, eerie, cinematic, sparse vocals) keeps the dark, hypnotic momentum with a steady beat.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 8560,
+          "title": "Inspection (Check One)",
+          "artist": "Leftfield",
+          "album": "Leftism",
+          "year": 1995,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "downtempo",
+              "ambient",
+              "trip_hop"
+            ],
+            "mood": [
+              "tense",
+              "mysterious",
+              "hypnotic"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 50,
+            "tempoFeel": "very_slow",
+            "groove": [
+              "free_time"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "dense"
+            ],
+            "timbre": [
+              "dark",
+              "warm"
+            ],
+            "production": [
+              "hi_fi",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "late_night",
+              "focus",
+              "headphones"
+            ],
+            "scenes": [
+              "uk_electronica"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A very slow, tense, and hypnotic instrumental with a dark, spacious atmosphere and minimal rhythmic drive.",
+            "evidenceNotes": [
+              "Tagged mood: Tense, Mysterious, Hypnotic.",
+              "Audio BPM 50, low energy, low high-frequency ratio suggests a dark, low-end focused sound.",
+              "Album context: Leftism (1995), associated with Trip Hop and Downtempo."
+            ]
+          },
+          "score": 0,
+          "reason": "Leftfield's 'Inspection (Check One)' (50 BPM, tense, spacious, minimal drive) adds a darker, more instrumental ambient-trip-hop texture.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 1741,
+          "title": "The Rest Is Noise",
+          "artist": "Jamie xx",
+          "album": "In Colour",
+          "year": 2015,
+          "profile": {
+            "genre": [
+              "electronic",
+              "ambient"
+            ],
+            "style": [
+              "downtempo",
+              "ambient_electronic"
+            ],
+            "mood": [
+              "dark",
+              "mysterious",
+              "introspective",
+              "hypnotic"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 63,
+            "tempoFeel": "slow",
+            "groove": [
+              "free_time"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "ambient"
+            ],
+            "timbre": [
+              "dark",
+              "airy"
+            ],
+            "production": [
+              "polished",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "pads",
+              "drum_machine"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "late_night",
+              "meditation",
+              "headphones"
+            ],
+            "scenes": [
+              "uk_electronic_music_scene"
+            ],
+            "styleEra": [
+              "2010s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "steady"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, ambient electronic track with a dark, introspective mood, featuring sparse textures and a hypnotic, evolving structure.",
+            "evidenceNotes": [
+              "Genre tags include Electronic and Ambient; style inferred as downtempo/ambient electronic.",
+              "BPM 63 from tag; estimated BPM 62.8 supports slow tempo.",
+              "Mood tags 'Dark', 'Mysterious', 'Introspective', 'Hypnotic' mapped to stable terms.",
+              "Instrumental status inferred from lack of vocal tags and ambient genre characteristics.",
+              "Texture and production inferred from ambient genre conventions and dynamic range."
+            ]
+          },
+          "score": 0,
+          "reason": "Jamie xx's 'The Rest Is Noise' (63 BPM, dark, airy, spacious) shifts into a more ambient, introspective register.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 7033,
+          "title": "Over the Horizon Radar",
+          "artist": "Boards of Canada",
+          "album": "Geogaddi",
+          "year": 2002,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "idm",
+              "downtempo"
+            ],
+            "mood": [
+              "mysterious",
+              "dark",
+              "hypnotic",
+              "eerie",
+              "serene"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 93,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "open"
+            ],
+            "timbre": [
+              "dark",
+              "airy",
+              "synthetic"
+            ],
+            "production": [
+              "lo_fi",
+              "sample_based",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "samples"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "late_night",
+              "headphones",
+              "relaxation"
+            ],
+            "scenes": [
+              "uk_idm"
+            ],
+            "styleEra": [
+              "2000s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "linear"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A serene yet eerie downtempo track with a spacious, open texture and a steady mid-tempo pulse.",
+            "evidenceNotes": [
+              "BPM 93 selected from tag, though tempo candidates (197.4, 187.5, etc.) suggest a double-time feel; 93 is the conventional half-time interpretation.",
+              "Moods Mysterious, Dark, Hypnotic, Eerie, Serene taken from track tags.",
+              "Low high-frequency ratio and low zero-crossing rate suggest a darker, less bright timbre."
+            ]
+          },
+          "score": 0,
+          "reason": "Boards of Canada's 'Over the Horizon Radar' (93 BPM, eerie, lo-fi, spacious) brings a steady mid-tempo pulse while staying dark and open.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 7926,
+          "title": "Darkness",
+          "artist": "Lamb",
+          "album": "Between Darkness and Wonder",
+          "year": 2003,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "trip_hop",
+              "downtempo"
+            ],
+            "mood": [
+              "dark",
+              "dreamy",
+              "introspective"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 90,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "layered",
+              "dense"
+            ],
+            "timbre": [
+              "dark",
+              "warm",
+              "synthetic"
+            ],
+            "production": [
+              "polished",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "sparse_vocals",
+              "intimate"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "introspection",
+              "existential"
+            ],
+            "listeningContexts": [
+              "late_night",
+              "headphones",
+              "focus"
+            ],
+            "scenes": [
+              "bristol_trip_hop"
+            ],
+            "styleEra": [
+              "2000s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "verse_chorus"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A moody, atmospheric trip-hop track featuring dark, layered synthesizer textures and a steady, low-energy pulse. The production is spacious and polished, creating an introspective and dreamy soundscape typical of the early 2000s electronic scene.",
+            "evidenceNotes": [
+              "Genre and style inferred from album tags (Electronic, Trip-Hop) and artist context (Lamb).",
+              "BPM 90 taken from tag data; audio estimatedBpm 90.4 supports this.",
+              "Mood terms 'Dark', 'Dreamy', 'Introspective' taken directly from track tags.",
+              "Language 'English' taken from track tags.",
+              "Scene 'bristol_trip_hop' inferred from artist Lamb's association with the Bristol trip-hop scene.",
+              "Texture and timbre inferred from genre conventions and low energy/high frequency ratio audio features."
+            ]
+          },
+          "score": 0,
+          "reason": "Lamb's 'Darkness' (90 BPM, dark, dreamy, spacious, intimate vocals) re-introduces a vocal trip-hop element with a steady low-energy groove.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 249,
+          "title": "Vespa",
+          "artist": "Bicep",
+          "album": "Bicep",
+          "year": 2017,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "ambient",
+              "downtempo"
+            ],
+            "mood": [
+              "mysterious",
+              "hypnotic",
+              "reflective"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 105,
+            "tempoFeel": "midtempo",
+            "groove": [
+              "free_time"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "sparse",
+              "open"
+            ],
+            "timbre": [
+              "dark",
+              "airy"
+            ],
+            "production": [
+              "spacious",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "field_recording"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "background",
+              "meditation",
+              "late_night"
+            ],
+            "scenes": [
+              "belfast_electronic"
+            ],
+            "styleEra": [
+              "2010s"
+            ],
+            "musicalKey": null,
+            "mode": null,
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "highly_dynamic"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A mysterious and hypnotic ambient/downtempo track with sparse, open textures and a spacious, evolving structure.",
+            "evidenceNotes": [
+              "High dynamic range (24.9 dB) and low beat regularity (0.352) suggest an ambient or free-time structure rather than a strict groove.",
+              "Moods 'Mysterious' and 'Hypnotic' taken from track tags.",
+              "Sparse texture inferred from low energy (0.54) and high dynamic range."
+            ]
+          },
+          "score": 0,
+          "reason": "Bicep's 'Vespa' (105 BPM, open, airy, spacious, evolving) provides a spacious, hypnotic ambient close to wind the mix down.",
+          "origin": "catalog",
+          "retained": false
+        }
+      ],
+      "detail": {
+        "tracks": 8,
+        "pending": 0,
+        "durationMs": 27301,
+        "usage": {
+          "input_tokens": 29455,
+          "output_tokens": 1147,
+          "total_tokens": 30602
+        },
+        "tools": [
+          {
+            "name": "library_overview",
+            "args": {},
+            "durationMs": 26
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "dark spacious late night",
+              "genres": [
+                "electronic",
+                "trip_hop",
+                "ambient"
+              ],
+              "excludeGenres": [
+                "rock",
+                "punk_hardcore",
+                "metal"
+              ],
+              "instruments": [],
+              "moods": [
+                "dark",
+                "mysterious",
+                "introspective",
+                "dreamy",
+                "hypnotic"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "any",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 142,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "trip hop dark",
+              "genres": [
+                "electronic"
+              ],
+              "excludeGenres": [
+                "rock",
+                "punk_hardcore",
+                "metal"
+              ],
+              "instruments": [],
+              "moods": [
+                "dark",
+                "mysterious",
+                "introspective",
+                "hypnotic"
+              ],
+              "artists": [],
+              "excludeArtists": [],
+              "vocal": "any",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 134,
+            "count": 16
+          },
+          {
+            "name": "inspect_tracks",
+            "args": {
+              "fileIds": [
+                2318,
+                7941,
+                7997,
+                8560,
+                1741,
+                7033,
+                249,
+                7926,
+                5519,
+                2486,
+                2532,
+                8018,
+                1031,
+                784,
+                468,
+                8068
+              ]
+            },
+            "durationMs": 0,
+            "count": 16
+          }
+        ]
+      }
+    },
+    "synced": false,
+    "syncError": ""
+  },
+  "correction": "Keep the first song exactly in place. Make the rest calmer and more instrumental. Exclude Portishead.",
+  "updated": {
+    "definition": {
+      "id": 3,
+      "name": "Dark, Spacious Late-Night Electronic & Trip-Hop",
+      "category": "chat",
+      "enabled": false,
+      "automatic": false,
+      "intent": "",
+      "config": {
+        "tasteLanes": [],
+        "genres": [],
+        "moods": [],
+        "contexts": [],
+        "exclusions": [],
+        "sourceDomains": [],
+        "targetTracks": 5,
+        "rotationPercent": 30,
+        "maxTracksPerArtist": 2,
+        "maxTracksPerAlbum": 1,
+        "energyCurve": "steady",
+        "explorationPercent": 35,
+        "externalDiscovery": false,
+        "noveltyDays": 30
+      },
+      "ownerUserId": 1,
+      "ownerDisplayName": "Test listener",
+      "ownerTokenStatus": "missing",
+      "navidromePlaylistId": null,
+      "lastRunAt": null,
+      "nextRunAt": null,
+      "createdAt": "2026-10-08 07:09:42",
+      "updatedAt": "2026-10-08 07:10:38"
+    },
+    "revision": 2,
+    "messages": [
+      {
+        "role": "user",
+        "content": "A dark, spacious late-night electronic and trip-hop mix. No rock or festival EDM."
+      },
+      {
+        "role": "assistant",
+        "content": "Here's a dark, spacious late-night mix built from the library's electronic, trip-hop, and ambient tracks. I excluded rock, punk, and metal, and steered clear of festival-style EDM by choosing low-energy, spacious, reverb-heavy productions. The sequence opens with a slow, hypnotic ambient trip-hop piece, moves through classic 90s trip-hop, dips into darker ambient/downtempo, and closes on a spacious, evolving ambient track."
+      },
+      {
+        "role": "user",
+        "content": "Keep the first song exactly in place. Make the rest calmer and more instrumental. Exclude Portishead."
+      },
+      {
+        "role": "assistant",
+        "content": "I kept Massive Attack's 'Inertia Creeps' exactly in place and rebuilt the rest to be calmer and more instrumental, removing Portishead. The new four are all low-energy, spacious, reverb-heavy pieces: two fully instrumental (Leftfield, Emancipator) and two with only sparse/processed vocals (iamamiwhoami, Air), keeping the dark, hypnotic late-night feel without rock or festival EDM."
+      }
+    ],
+    "result": {
+      "name": "Dark, Spacious Late-Night Electronic & Trip-Hop",
+      "reply": "I kept Massive Attack's 'Inertia Creeps' exactly in place and rebuilt the rest to be calmer and more instrumental, removing Portishead. The new four are all low-energy, spacious, reverb-heavy pieces: two fully instrumental (Leftfield, Emancipator) and two with only sparse/processed vocals (iamamiwhoami, Air), keeping the dark, hypnotic late-night feel without rock or festival EDM.",
+      "guidance": "Prefers dark, spacious, low-energy late-night electronic and trip-hop. Explicitly excludes rock and festival EDM. Favors spacious/reverb-heavy production, hypnotic and mysterious moods, and a mix of instrumental and sparse-vocal tracks. Latest correction: keep the first song fixed, make the rest calmer and more instrumental, and exclude Portishead.",
+      "items": [
+        {
+          "fileId": 2318,
+          "title": "Inertia Creeps (State Of Bengal Mix)",
+          "artist": "Massive Attack",
+          "album": "Singles 90-98 (CD11)",
+          "year": 1998,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "trip_hop",
+              "ambient",
+              "downtempo"
+            ],
+            "mood": [
+              "dark",
+              "mysterious",
+              "hypnotic",
+              "eerie"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 50,
+            "tempoFeel": "very_slow",
+            "groove": [
+              "free_time",
+              "syncopated"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "ambient",
+              "evolving"
+            ],
+            "timbre": [
+              "dark",
+              "airy",
+              "warm"
+            ],
+            "production": [
+              "spacious",
+              "reverb_heavy",
+              "sample_based"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "sparse_vocals",
+              "processed"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer",
+              "samples"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "introspection",
+              "surrealism"
+            ],
+            "listeningContexts": [
+              "late_night",
+              "meditation",
+              "headphones"
+            ],
+            "scenes": [
+              "bristol_trip_hop"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "remix",
+              "studio_recording"
+            ],
+            "summary": "A slower, more ambient remix with a BPM of 50. The track emphasizes mystery and eeriness, utilizing spacious production and evolving textures to create a hypnotic, dark atmosphere.",
+            "evidenceNotes": [
+              "Title indicates 'State Of Bengal Mix'.",
+              "BPM 50 is significantly slower than the original, suggesting a half-time or ambient interpretation.",
+              "Moods 'Mysterious', 'Eerie' align with the slower tempo and lower energy (0.583).",
+              "High dynamic range (10.7) suggests a more open, less compressed mix."
+            ]
+          },
+          "score": 0,
+          "reason": "Kept in place as requested. A 50 BPM ambient trip-hop remix with reverb-heavy, spacious production and only sparse processed vocals — a dark, hypnotic opener.",
+          "origin": "catalog",
+          "retained": true
+        },
+        {
+          "fileId": 8560,
+          "title": "Inspection (Check One)",
+          "artist": "Leftfield",
+          "album": "Leftism",
+          "year": 1995,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "downtempo",
+              "ambient",
+              "trip_hop"
+            ],
+            "mood": [
+              "tense",
+              "mysterious",
+              "hypnotic"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 50,
+            "tempoFeel": "very_slow",
+            "groove": [
+              "free_time"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "dense"
+            ],
+            "timbre": [
+              "dark",
+              "warm"
+            ],
+            "production": [
+              "hi_fi",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "late_night",
+              "focus",
+              "headphones"
+            ],
+            "scenes": [
+              "uk_electronica"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A very slow, tense, and hypnotic instrumental with a dark, spacious atmosphere and minimal rhythmic drive.",
+            "evidenceNotes": [
+              "Tagged mood: Tense, Mysterious, Hypnotic.",
+              "Audio BPM 50, low energy, low high-frequency ratio suggests a dark, low-end focused sound.",
+              "Album context: Leftism (1995), associated with Trip Hop and Downtempo."
+            ]
+          },
+          "score": 0,
+          "reason": "Instrumental, 50 BPM, free-time and spacious; a tense, hypnotic downtempo/trip-hop piece that lowers the energy and removes vocals.",
+          "origin": "catalog",
+          "retained": true
+        },
+        {
+          "fileId": 1019,
+          "title": "Ghost Pong",
+          "artist": "Emancipator",
+          "album": "Baralku",
+          "year": 2017,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "downtempo",
+              "ambient"
+            ],
+            "mood": [
+              "serene",
+              "mysterious",
+              "reflective"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 60,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "sparse",
+              "open"
+            ],
+            "timbre": [
+              "dark",
+              "warm"
+            ],
+            "production": [
+              "polished",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "pads",
+              "sub_bass"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "background",
+              "meditation",
+              "late_night"
+            ],
+            "scenes": [
+              "downtempo"
+            ],
+            "styleEra": [
+              "2010s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "steady"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, atmospheric downtempo piece with sparse textures and a mysterious, reflective quality, suitable for deep listening or relaxation.",
+            "evidenceNotes": [
+              "BPM 60 from tags and audio analysis.",
+              "Moods Serene, Mysterious, Reflective from tags.",
+              "Low energy and high dynamic range suggest a spacious, ambient feel."
+            ]
+          },
+          "score": 0,
+          "reason": "Fully instrumental, 60 BPM ambient/downtempo with sparse, open textures and a dark, warm, spacious production — calm and meditative.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 8360,
+          "title": "Y",
+          "artist": "iamamiwhoami",
+          "album": "Bounty",
+          "year": 2010,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "downtempo",
+              "ambient_electronic"
+            ],
+            "mood": [
+              "mysterious",
+              "hypnotic",
+              "dreamy",
+              "introspective"
+            ],
+            "valence": "negative",
+            "energy": "low",
+            "bpm": 80,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "medium",
+            "texture": [
+              "layered",
+              "sparse"
+            ],
+            "timbre": [
+              "dark",
+              "warm",
+              "synthetic"
+            ],
+            "production": [
+              "polished",
+              "spacious"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "instrumental"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer"
+            ],
+            "languages": [],
+            "lyricalThemes": [],
+            "listeningContexts": [
+              "late_night",
+              "headphones",
+              "focus"
+            ],
+            "scenes": [
+              "uk_downtempo"
+            ],
+            "styleEra": [
+              "2010s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "moderately_dynamic"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A slow, hypnotic downtempo track featuring layered synthetic textures and a dark, mysterious atmosphere. The production is spacious and polished, with a steady, straight groove suitable for late-night listening.",
+            "evidenceNotes": [
+              "BPM 80 confirmed by tag and audio analysis.",
+              "Moods 'Mysterious', 'Hypnotic', 'Dreamy', 'Introspective' from tags.",
+              "Genre 'Electronic' and styles 'Downtempo' from album evidence.",
+              "Instrumental nature inferred from lack of vocal tags and typical genre characteristics."
+            ]
+          },
+          "score": 0,
+          "reason": "Instrumental, 80 BPM downtempo with layered-but-sparse synthetic textures and a dark, mysterious, spacious atmosphere.",
+          "origin": "catalog",
+          "retained": false
+        },
+        {
+          "fileId": 10241,
+          "title": "Talisman",
+          "artist": "Air",
+          "album": "Moon Safari",
+          "year": 1998,
+          "profile": {
+            "genre": [
+              "electronic"
+            ],
+            "style": [
+              "downtempo",
+              "ambient"
+            ],
+            "mood": [
+              "dreamy",
+              "mysterious",
+              "hypnotic"
+            ],
+            "valence": "positive",
+            "energy": "low",
+            "bpm": 66,
+            "tempoFeel": "slow",
+            "groove": [
+              "straight"
+            ],
+            "danceability": "low",
+            "texture": [
+              "layered",
+              "evolving"
+            ],
+            "timbre": [
+              "dark",
+              "soft",
+              "synthetic"
+            ],
+            "production": [
+              "polished",
+              "spacious",
+              "hi_fi"
+            ],
+            "acousticElectronicCharacter": "fully_electronic",
+            "vocalProfile": [
+              "sparse_vocals",
+              "processed"
+            ],
+            "instrumentation": [
+              "synthesizer",
+              "drum_machine",
+              "bass_synthesizer"
+            ],
+            "languages": [
+              "English"
+            ],
+            "lyricalThemes": [
+              "introspection"
+            ],
+            "listeningContexts": [
+              "background",
+              "focus",
+              "late_night",
+              "headphones"
+            ],
+            "scenes": [
+              "french_electronic"
+            ],
+            "styleEra": [
+              "1990s"
+            ],
+            "musicalKey": null,
+            "mode": "minor",
+            "meter": [
+              "4_4"
+            ],
+            "dynamicCharacter": [
+              "steady"
+            ],
+            "structuralCharacter": [
+              "ambient_evolving"
+            ],
+            "recordingTypes": [
+              "studio_recording"
+            ],
+            "summary": "A mysterious, hypnotic downtempo track with evolving synthetic textures and processed vocals in English, creating a dark and dreamy atmosphere.",
+            "evidenceNotes": [
+              "Tagged BPM 66 aligns with estimatedBpm 132.6 (half-time interpretation).",
+              "Language explicitly tagged as English.",
+              "Moods Dreamy, Mysterious, Hypnotic from tags.",
+              "Low highFrequencyRatio (0.012) supports darker, softer timbre."
+            ]
+          },
+          "score": 0,
+          "reason": "Closes the set with a 66 BPM dreamy, hypnotic downtempo track; only sparse processed vocals over evolving, spacious synth textures.",
+          "origin": "catalog",
+          "retained": false
+        }
+      ],
+      "detail": {
+        "tracks": 5,
+        "pending": 0,
+        "durationMs": 28047,
+        "usage": {
+          "input_tokens": 33580,
+          "output_tokens": 1199,
+          "total_tokens": 34779
+        },
+        "tools": [
+          {
+            "name": "library_overview",
+            "args": {},
+            "durationMs": 24
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "dark spacious ambient downtempo",
+              "genres": [
+                "trip-hop",
+                "ambient",
+                "downtempo",
+                "electronic"
+              ],
+              "excludeGenres": [
+                "rock",
+                "punk",
+                "metal",
+                "edm",
+                "dance"
+              ],
+              "instruments": [],
+              "moods": [
+                "dark",
+                "mysterious",
+                "hypnotic",
+                "spacious"
+              ],
+              "artists": [],
+              "excludeArtists": [
+                "Portishead"
+              ],
+              "vocal": "instrumental",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 139,
+            "count": 16
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "trip-hop dark spacious",
+              "genres": [
+                "electronic"
+              ],
+              "excludeGenres": [
+                "rock",
+                "punk",
+                "metal",
+                "dance"
+              ],
+              "instruments": [],
+              "moods": [
+                "dark",
+                "mysterious",
+                "hypnotic"
+              ],
+              "artists": [],
+              "excludeArtists": [
+                "Portishead"
+              ],
+              "vocal": "sparse_vocals",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 1,
+            "error": "[\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"any\",\n      \"instrumental\",\n      \"vocals\"\n    ],\n    \"path\": [\n      \"vocal\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"any\\\"|\\\"instrumental\\\"|\\\"vocals\\\"\"\n  }\n]"
+          },
+          {
+            "name": "search_library",
+            "args": {
+              "offset": 0,
+              "query": "trip-hop dark spacious",
+              "genres": [
+                "electronic"
+              ],
+              "excludeGenres": [
+                "rock",
+                "punk",
+                "metal",
+                "dance"
+              ],
+              "instruments": [],
+              "moods": [
+                "dark",
+                "mysterious",
+                "hypnotic"
+              ],
+              "artists": [],
+              "excludeArtists": [
+                "Portishead"
+              ],
+              "vocal": "vocals",
+              "energy": "low",
+              "minYear": 0,
+              "maxYear": 0,
+              "minBpm": 0,
+              "maxBpm": 0
+            },
+            "durationMs": 140,
+            "count": 16
+          },
+          {
+            "name": "inspect_tracks",
+            "args": {
+              "fileIds": [
+                2318,
+                2312,
+                8560,
+                1019,
+                8360,
+                13933,
+                10241,
+                7997,
+                7926
+              ]
+            },
+            "durationMs": 1,
+            "count": 9
+          }
+        ]
+      }
+    },
+    "synced": false,
+    "syncError": ""
+  },
+  "productionBrowserErrors": [],
+  "productionBuildVerified": true
+}

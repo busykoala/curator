@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Ban,
+  History,
+  Telescope,
+  MessageCircle,
   Clock3,
   Compass,
   ExternalLink,
@@ -18,6 +21,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { PlaylistChat } from "./playlist-chat";
 import { PlaylistEditor } from "./playlist-editor";
 import { readJson } from "./http";
 import {
@@ -27,7 +31,7 @@ import {
   type PlaylistPreview,
 } from "./playlist-view-model";
 
-function template(category: "mood" | "discovery" | "journey", ownerUserId: number) {
+function template(category: "mood" | "discovery" | "journey" | "depth" | "rediscovery", ownerUserId: number) {
   return {
     name: "",
     category,
@@ -57,6 +61,7 @@ function template(category: "mood" | "discovery" | "journey", ownerUserId: numbe
 export function PlaylistStudio() {
   const [data, setData] = useState<PlaylistData>();
   const [editor, setEditor] = useState<PlaylistDefinition>();
+  const [chat, setChat] = useState<{initial?: PlaylistDefinition}>();
   const [preview, setPreview] = useState<PlaylistPreview>();
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
@@ -83,7 +88,7 @@ export function PlaylistStudio() {
   }, []);
   useEffect(() => {
     if(!currentUserId)return;
-    setData(undefined);setEditor(undefined);setPreview(undefined);
+    setData(undefined);setEditor(undefined);setPreview(undefined);setChat(undefined);
     void load(currentUserId);
     const timer = window.setInterval(() => void load(currentUserId), 30_000);
     return () => window.clearInterval(timer);
@@ -126,6 +131,7 @@ export function PlaylistStudio() {
 
   async function run(item: PlaylistDefinition, previewOnly: boolean) {
     if (!item.id) return;
+    if(item.category === "chat" && previewOnly){setChat({initial:item});return;}
     setBusy((previewOnly ? "preview-" : "sync-") + item.id);
     try {
       const result = await readJson<PlaylistPreview>(
@@ -193,16 +199,16 @@ export function PlaylistStudio() {
   const enabled = data.definitions.filter((item) => item.enabled).length;
   const playlists = [...data.definitions].sort((left, right) => {
     const leftManaged =
-      left.category === "depth" || left.category === "rediscovery";
+      Boolean(left.automatic);
     const rightManaged =
-      right.category === "depth" || right.category === "rediscovery";
+      Boolean(right.automatic);
     return Number(rightManaged) - Number(leftManaged) ||
       left.name.localeCompare(right.name);
   });
 
   function row(item: PlaylistDefinition) {
     const managed =
-      item.category === "depth" || item.category === "rediscovery";
+      Boolean(item.automatic);
     const meta = getMeta(item.category);
     const Icon = meta.icon;
     const latest = item.runs?.[0];
@@ -230,8 +236,8 @@ export function PlaylistStudio() {
             tracks
           </span>
           <span>
-            <strong>{Number(item.config.rotationPercent ?? 30)}%</strong>
-            nightly change
+            <strong>{item.category === "chat" ? "Chat" : Number(item.config.rotationPercent ?? 30) + "%"}</strong>
+            {item.category === "chat" ? "updates" : "nightly change"}
           </span>
           <span>
             <strong>{latest?.status || "Ready"}</strong>
@@ -239,14 +245,15 @@ export function PlaylistStudio() {
           </span>
         </div>
         <div className="playlist-row-actions">
-          <button
+          {item.category !== "chat" && <button
             className={"playlist-toggle " + (item.enabled ? "on" : "")}
             onClick={() => void toggle(item)}
           >
             {item.enabled ? <Pause /> : <Play />}
             {item.enabled ? "On" : "Off"}
-          </button>
-          {!managed && (
+          </button>}
+          {item.category === "chat" && <button aria-label={`Chat about ${item.name}`} title="Continue playlist chat" onClick={() => setChat({initial:item})}><MessageCircle /></button>}
+          {!managed && item.category !== "chat" && (
             <button aria-label={`Edit ${item.name}`} title="Edit playlist" onClick={() => setEditor(item)}>
               <SlidersHorizontal />
             </button>
@@ -289,8 +296,7 @@ export function PlaylistStudio() {
           <span className="kicker">Automatic nightly playlists</span>
           <h2>Your library, kept in motion</h2>
           <p>
-            Curator handles the defaults. Add only the moods and directions
-            that are personal to you.
+            Explore your collection, rediscover favorites, or shape a mix in conversation.
           </p>
         </div>
         <div className="playlist-user-tools"><label><span>Playlists for</span><select value={currentUserId} onChange={event=>{const id=Number(event.target.value);setCurrentUserId(id);const url=new URL(window.location.href);url.searchParams.set("userId",String(id));window.history.replaceState({},"",url)} }>{users.map(user=><option key={user.id} value={user.id}>{user.displayName}</option>)}</select></label><a className="secondary-button" href="/api/navidrome/open" target="_blank"><ExternalLink />Navidrome</a></div>
@@ -344,6 +350,15 @@ export function PlaylistStudio() {
           </p>
         </header>
         <div>
+          <button onClick={() => setChat({})}>
+            <span><MessageCircle /></span><strong>AI chat playlist</strong><small>Describe your mix, then refine it as you go.</small>
+          </button>
+          <button onClick={() => setEditor(template("rediscovery",currentUserId))}>
+            <span><History /></span><strong>Rediscovery</strong><small>Bring back favorites in a genre you choose.</small>
+          </button>
+          <button onClick={() => setEditor(template("depth",currentUserId))}>
+            <span><Telescope /></span><strong>Deep dive</strong><small>Explore deep cuts in your collection.</small>
+          </button>
           <button onClick={() => setEditor(template("mood",currentUserId))}>
             <span><Plus /></span>
             <strong>Mood or occasion</strong>
@@ -476,6 +491,7 @@ export function PlaylistStudio() {
         </div>
       )}
 
+      {chat && <PlaylistChat initial={chat.initial} ownerUserId={currentUserId} close={() => setChat(undefined)} changed={() => void load(currentUserId)} />}
       {editor && (
         <PlaylistEditor
           initial={editor}

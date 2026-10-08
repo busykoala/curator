@@ -33,6 +33,11 @@ function migrate(instance: Database.Database) {
     instance.exec("DROP INDEX IF EXISTS smart_playlists_name");
     instance.exec("CREATE UNIQUE INDEX IF NOT EXISTS smart_playlists_owner_name ON smart_playlists(coalesce(owner_user_id,0),lower(name))");
   });
+  migration(7, () => {
+    addColumns(instance, "smart_playlists", [["automatic", "INTEGER NOT NULL DEFAULT 0"]]);
+    // The previous interface treated all depth and rediscovery playlists as automatic.
+    instance.exec("UPDATE smart_playlists SET automatic=1 WHERE category IN ('depth','rediscovery')");
+  });
   migration(6, () => {
     // Listening clusters are derived data. Rebuild them with per-user signals
     // after removing the old library-wide fallback scoring.
