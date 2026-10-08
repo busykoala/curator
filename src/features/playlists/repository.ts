@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { db } from "@/features/db/client";
 import {
   definitionInputSchema,
@@ -214,9 +215,11 @@ export function playlistSnapshot(id: number) {
   const definition = getPlaylist(id);
   const run = db()
     .prepare(
-      "SELECT id,preview,started_at FROM playlist_runs WHERE playlist_id=? AND status='complete' ORDER BY id DESC LIMIT 1",
+      "SELECT id,preview,started_at,config_hash FROM playlist_runs WHERE playlist_id=? AND status='complete' ORDER BY id DESC LIMIT 1",
     )
-    .get(id) as { id: number; preview: number; started_at: string } | undefined;
+    .get(id) as
+    | { id: number; preview: number; started_at: string; config_hash: string }
+    | undefined;
   const items = run
     ? db()
         .prepare(
@@ -236,7 +239,10 @@ export function playlistSnapshot(id: number) {
     preview: Boolean(run?.preview),
     runId: run?.id ?? null,
     stale: Boolean(
-      run && definition && String(definition.updatedAt) > run.started_at,
+      run?.preview &&
+        definition &&
+        run.config_hash !==
+          createHash("sha256").update(JSON.stringify(definition)).digest("hex"),
     ),
   };
 }

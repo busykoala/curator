@@ -39,6 +39,7 @@ type Snapshot = PlaylistPreview & {
   preview: boolean;
   runId: number | null;
   latestRun?: { status: string };
+  stale?: boolean;
 };
 export function PlaylistStudio({
   id,
@@ -401,14 +402,18 @@ export function PlaylistStudio({
                 {snapshot.preview && (
                   <div className="playlist-save">
                     <p className="muted small">
-                      {snapshot.items.length < Number(item?.config.targetTracks)
-                        ? "Fewer matching songs than requested. Broaden your settings or reduce the song count before saving."
-                        : "Review your selection, then save it to Navidrome."}
+                      {snapshot.stale
+                        ? "Settings changed. Preview a new mix before saving."
+                        : snapshot.items.length <
+                            Number(item?.config.targetTracks)
+                          ? "Fewer matching songs than requested. Broaden your settings or reduce the song count before saving."
+                          : "Review your selection, then save it to Navidrome."}
                     </p>
                     <button
                       className="primary-button"
                       disabled={
                         busy ||
+                        snapshot.stale ||
                         snapshot.items.length <
                           Number(item?.config.targetTracks) ||
                         item?.ownerTokenStatus !== "active"
