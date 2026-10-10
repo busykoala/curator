@@ -74,6 +74,8 @@ export function createPlaylistChat(ownerUserId: number, raw: unknown) {
 }
 const LEASE_MS = 90_000;
 export function claimChatJob(now = Date.now()) {
+  // Idle polling should not compete with the scanner for SQLite's writer lock.
+  if (!db().prepare("SELECT 1 FROM playlist_chat_jobs WHERE status='queued' OR (status='running' AND lease_until<?) LIMIT 1").get(now)) return null;
   return db().transaction(() => {
     const interrupted = db().prepare("SELECT * FROM playlist_chat_jobs WHERE status='running' AND lease_until<?").all(now) as Row[];
     for (const row of interrupted) {
@@ -85,7 +87,7 @@ export function claimChatJob(now = Date.now()) {
     const row = db().prepare(`UPDATE playlist_chat_jobs SET status='running',attempts=attempts+1,lease_token=?,lease_until=?,updated_at=?
       WHERE id=(SELECT id FROM playlist_chat_jobs WHERE status='queued' ORDER BY created_at,rowid LIMIT 1) RETURNING *`).get(token, now + LEASE_MS, now) as Row | undefined;
     return row ? { ...map(row), lease: token } : null;
-  })();
+  }).immediate();
 }
 export function heartbeatChatJob(id: string, lease: string) {
   return db().transaction(() => {

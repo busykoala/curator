@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
+import Database from "better-sqlite3";
 import type { StructuredRequest } from "../ai/client";
 
 test("durable chat jobs deduplicate retries, fence workers, and resume saved replies after interruption", async () => {
@@ -75,6 +76,15 @@ test("durable chat jobs deduplicate retries, fence workers, and resume saved rep
     assert.equal(latestChatJob(failed.id)?.status, "failed"); assert.match(latestChatJob(failed.id)!.error, /unavailable/);
     assert.equal(chatState(failed.id).revision, 0);
     assert.ok(acquireChatLease(failed.id));
+    // An idle chat worker must keep polling during a scanner write transaction.
+    const scanner = new Database(process.env.CURATOR_DB_PATH!);
+    try {
+      scanner.exec("BEGIN IMMEDIATE");
+      assert.equal(await runNextChatJob(), false);
+    } finally {
+      scanner.exec("ROLLBACK");
+      scanner.close();
+    }
   } finally {
     aiClient.structured = original; database.close(); delete (globalThis as { curatorDb?: unknown }).curatorDb; rmSync(directory, { recursive: true, force: true });
   }
