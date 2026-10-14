@@ -33,3 +33,4 @@ export function controlledValues(field:string,values:string[]):string[]{
 }
 
 export const canonicalPrompt=Object.entries(vocabularies).map(([field,values])=>`${field}: ${values.join(", ")}`).join("\n");
+export const canonicalOptions=(field:string):readonly string[]|undefined=>vocabularies[field];
