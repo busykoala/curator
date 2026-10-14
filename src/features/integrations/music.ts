@@ -3,6 +3,7 @@ import { upsertTarget } from "@/features/acquisition/repository";
 import type { TargetOrigin } from "@/features/acquisition/types";
 import { searchCatalogueReleaseGroups } from "@/features/sources/musicbrainz";
 import { searchMusicCatalogue } from "./music-search";
+import { metadataProfileForReleases, type MetadataProfile, type RequestedRelease } from "./music-defaults";
 
 class MusicServiceError extends Error {
   constructor(public status: number) { super(`Lidarr request failed (${status})`); }
@@ -38,7 +39,7 @@ async function lookupAlbums(term: string) {
   return json<Array<Record<string, unknown>>>(`/album/lookup?term=${encodeURIComponent(term.trim())}`);
 }
 
-type LidarrAlbum = Record<string, unknown> & {
+type LidarrAlbum = Record<string, unknown> & RequestedRelease & {
   id: number;
   foreignAlbumId?: string;
   monitored?: boolean;
@@ -88,32 +89,39 @@ export async function searchMusic(term: string): Promise<unknown> {
   });
 }
 
-async function defaults() {
-  const artists = await json<Array<{ rootFolderPath: string; qualityProfileId: number; metadataProfileId: number }>>("/artist");
-  if (artists.length) {
-    const frequency = <T extends string | number>(values: T[]) => [...new Set(values)].sort((a, b) => values.filter((value) => value === b).length - values.filter((value) => value === a).length)[0];
-    return { rootFolderPath: frequency(artists.map((item) => item.rootFolderPath)), qualityProfileId: frequency(artists.map((item) => item.qualityProfileId)), metadataProfileId: frequency(artists.map((item) => item.metadataProfileId)) };
-  }
-  const [roots, quality, metadata] = await Promise.all([json<Array<{ path: string }>>("/rootfolder"), json<Array<{ id: number }>>("/qualityprofile"), json<Array<{ id: number }>>("/metadataprofile")]);
-  return { rootFolderPath: roots.find((item) => item.path === "/data/library")?.path ?? roots[0].path, qualityProfileId: quality[0].id, metadataProfileId: metadata[0].id };
+async function defaults(releases: LidarrAlbum[], preferredMetadataId?: number) {
+  const [roots, quality, metadata] = await Promise.all([
+    json<Array<{ path: string; defaultQualityProfileId?: number; defaultMetadataProfileId?: number }>>("/rootfolder"),
+    json<Array<{ id: number }>>("/qualityprofile"), json<MetadataProfile[]>("/metadataprofile"),
+  ]);
+  const root = roots.find(item => item.path === "/data/library") ?? roots[0];
+  if (!root || !quality.length) throw new Error("A music folder and quality profile must be configured before adding music.");
+  return { rootFolderPath: root.path, qualityProfileId: root.defaultQualityProfileId ?? quality[0].id,
+    metadataProfileId: metadataProfileForReleases(metadata, preferredMetadataId ?? root.defaultMetadataProfileId, releases) };
 }
 
 export async function addMusic(foreignArtistId: string, albumForeignIds: string[], origin: TargetOrigin = "user") {
   if (!albumForeignIds.length) throw new Error("Choose at least one album");
-  const current = await json<Array<Record<string, unknown> & { id: number; foreignArtistId?: string; monitored?: boolean }>>("/artist");
+  const current = await json<Array<Record<string, unknown> & { id: number; foreignArtistId?: string; monitored?: boolean; metadataProfileId?: number }>>(`/artist?mbId=${encodeURIComponent(foreignArtistId)}`);
   const existing = current.find((item) => item.foreignArtistId === foreignArtistId);
+  const releases = await Promise.all([...new Set(albumForeignIds)].map(async id => {
+    const candidates = await lookupAlbums(`lidarr:${id}`);
+    const selected = candidates.find(album => album.foreignAlbumId === id && (album.artist as {foreignArtistId?:string}|undefined)?.foreignArtistId === foreignArtistId);
+    if (!selected) throw new Error("The selected release could not be found for this artist. Please search again.");
+    return selected as LidarrAlbum;
+  }));
+  const settings = await defaults(releases, existing?.metadataProfileId);
   let artistId = existing?.id;
   if (!artistId) {
     const found = await lookupArtists(`lidarr:${foreignArtistId}`);
     const candidate = found.find((item) => item.foreignArtistId === foreignArtistId);
     if (!candidate) throw new Error("Artist was not found in Lidarr lookup");
-    const settings = await defaults();
-    const added = await json<{id:number}>("/artist", { method: "POST", body: JSON.stringify({ ...candidate, ...settings, monitored: true, addOptions: { monitor: "none", searchForMissingAlbums: false } }) });
+    const added = await json<{id:number}>("/artist", { method: "POST", body: JSON.stringify({ ...candidate, ...settings, monitored: true, monitorNewItems: "none", addOptions: { monitor: "none", searchForMissingAlbums: false } }) });
     artistId = added.id;
-  } else if (existing && !existing.monitored) {
+  } else if (existing && (!existing.monitored || existing.metadataProfileId !== settings.metadataProfileId)) {
     await json(`/artist/${artistId}`, {
       method: "PUT",
-      body: JSON.stringify({ ...existing, monitored: true }),
+      body: JSON.stringify({ ...existing, monitored: true, metadataProfileId: settings.metadataProfileId }),
     });
   }
   let selected: LidarrAlbum[] = [];
