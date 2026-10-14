@@ -1,6 +1,6 @@
 import { authenticated } from "@/features/auth/session";
 import { db } from "@/features/db/client";
-import { searchMusic } from "@/features/integrations/music";
+import { searchMusic, musicRequestError } from "@/features/integrations/music";
 export async function GET(request: Request) {
   if (!(await authenticated()))
     return new Response("Unauthorized", { status: 401 });
@@ -24,6 +24,6 @@ export async function GET(request: Request) {
       })),
     });
   } catch (error) {
-    return Response.json({ error: String(error) }, { status: 502 });
+    return Response.json({ error: musicRequestError(error) }, { status: 502 });
   }
 }

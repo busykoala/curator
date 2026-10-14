@@ -1,5 +1,5 @@
 import { currentUser, sameOrigin } from "@/features/auth/session";
-import { addMusic } from "@/features/integrations/music";
+import { addMusic, musicRequestError } from "@/features/integrations/music";
 import { db } from "@/features/db/client";
 export async function POST(request: Request) {
   const user = await currentUser();
@@ -49,6 +49,6 @@ export async function POST(request: Request) {
       .get(user.id, body.albumForeignIds?.[0]) as { id: number } | undefined;
     return Response.json({ ...result, requestId: requestRow?.id });
   } catch (error) {
-    return Response.json({ error: String(error) }, { status: 502 });
+    return Response.json({ error: musicRequestError(error) }, { status: 502 });
   }
 }

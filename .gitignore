@@ -17,3 +17,5 @@ npm-debug.log*
 .DS_Store
 .idea/
 .vscode/
+# Local evaluation reports and browser screenshots.
+/delivery/

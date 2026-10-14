@@ -1,6 +1,18 @@
 import { config } from "@/config";
 import { upsertTarget } from "@/features/acquisition/repository";
 import type { TargetOrigin } from "@/features/acquisition/types";
+import { searchCatalogueReleaseGroups } from "@/features/sources/musicbrainz";
+import { searchMusicCatalogue } from "./music-search";
+
+class MusicServiceError extends Error {
+  constructor(public status: number) { super(`Lidarr request failed (${status})`); }
+}
+
+export function musicRequestError(error: unknown) {
+  if (error instanceof MusicServiceError || (error instanceof Error && ["TimeoutError", "AbortError", "TypeError"].includes(error.name)))
+    return "The music service is temporarily unavailable. Please try again shortly.";
+  return error instanceof Error ? error.message : "The music request could not be completed. Please try again.";
+}
 
 async function request(path: string, init: RequestInit = {}) {
   return fetch(`${config.LIDARR_URL}/api/v1${path}`, {
@@ -12,7 +24,7 @@ async function request(path: string, init: RequestInit = {}) {
 
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await request(path, init);
-  if (!response.ok) throw new Error(`Lidarr ${path} failed (${response.status}): ${await response.text()}`);
+  if (!response.ok) throw new MusicServiceError(response.status);
   if (response.status === 204) return undefined as T;
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -61,9 +73,19 @@ async function ensureAlbumMonitored(album: LidarrAlbum) {
 }
 
 export async function searchMusic(term: string): Promise<unknown> {
-  if (term.trim().length < 2) return { artists: [], albums: [] };
-  const [artists, albums] = await Promise.all([lookupArtists(term), lookupAlbums(term)]);
-  return { artists, albums };
+  return searchMusicCatalogue(term, {
+    artists: lookupArtists,
+    albums: lookupAlbums,
+    fallbackAlbums: async (query) => {
+      const candidates = (await searchCatalogueReleaseGroups(query))["release-groups"];
+      const lookups = await Promise.allSettled(candidates.map(candidate => lookupAlbums(`lidarr:${candidate.id}`)));
+      const albums = new Map<string, Record<string, unknown>>();
+      for (const result of lookups) if (result.status === "fulfilled") for (const album of result.value)
+        if (album.foreignAlbumId) albums.set(String(album.foreignAlbumId), album);
+      if (candidates.length && !albums.size) throw new Error("Exact album lookups are unavailable");
+      return [...albums.values()];
+    },
+  });
 }
 
 async function defaults() {
@@ -86,18 +108,24 @@ export async function addMusic(foreignArtistId: string, albumForeignIds: string[
     const candidate = found.find((item) => item.foreignArtistId === foreignArtistId);
     if (!candidate) throw new Error("Artist was not found in Lidarr lookup");
     const settings = await defaults();
-    const response = await request("/artist", { method: "POST", body: JSON.stringify({ ...candidate, ...settings, monitored: true, addOptions: { monitor: "none", searchForMissingAlbums: false } }) });
-    if (!response.ok) throw new Error(`Lidarr add failed (${response.status}): ${await response.text()}`);
-    artistId = (await response.json() as { id: number }).id;
+    const added = await json<{id:number}>("/artist", { method: "POST", body: JSON.stringify({ ...candidate, ...settings, monitored: true, addOptions: { monitor: "none", searchForMissingAlbums: false } }) });
+    artistId = added.id;
   } else if (existing && !existing.monitored) {
     await json(`/artist/${artistId}`, {
       method: "PUT",
       body: JSON.stringify({ ...existing, monitored: true }),
     });
   }
-  const albums = await json<LidarrAlbum[]>(`/album?artistId=${artistId}`);
-  const selected = albums.filter((album) => albumForeignIds.includes(String(album.foreignAlbumId)));
-  if (!selected.length) throw new Error("The selected album was not available after adding the artist");
+  let selected: LidarrAlbum[] = [];
+  // Artist creation returns before its initial catalogue refresh finishes.
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const albums = await json<LidarrAlbum[]>(`/album?artistId=${artistId}`);
+    selected = albums.filter((album) => albumForeignIds.includes(String(album.foreignAlbumId)));
+    if (new Set(selected.map(album => album.foreignAlbumId)).size === new Set(albumForeignIds).size) break;
+    await wait(1_000);
+  }
+  if (new Set(selected.map(album => album.foreignAlbumId)).size !== new Set(albumForeignIds).size)
+    throw new Error("The selected release is not available in the artist's catalogue yet. Please try again shortly.");
   const monitored = await Promise.all(selected.map(ensureAlbumMonitored));
   const artist = await json<Record<string, unknown> & { monitored?: boolean }>(`/artist/${artistId}`);
   if (!artist.monitored) {

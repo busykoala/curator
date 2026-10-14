@@ -51,3 +51,5 @@ Run the live suggestion/correction evaluation against a read-only cluster metada
     PLAYLIST_EVAL_KUBECONFIG=../server/kubeconfig npm run evaluate:playlist-chat
 
 The evaluator retrieves the AI key into memory and never writes credentials to its report. Override the public inference endpoint with `PLAYLIST_EVAL_AI_URL` if needed. Alternatively, `PLAYLIST_EVAL_INPUT` may point to a private directory containing `credentials.json` (`apiKey`, `baseURL`, `model`) and `library.json` (rows with `fileId`, `artist`, `album`, `tagsJson`, `profileJson`). Reports go to `delivery/playlist-chat-evaluation`, configurable with `PLAYLIST_EVAL_OUTPUT`. The fixed cases check song counts, inspected identities, genre/vocal/instrument/date constraints, retained positions, exclusions, and requested ordering. They do not measure audio quality or subjective musical taste.
+
+`delivery/` contains local evaluation reports, UI previews, and browser screenshots from development and deployment checks. The application does not use it. New output is ignored by Git, and the directory is excluded from Docker build contexts; the initial committed evaluation remains as historical evidence.

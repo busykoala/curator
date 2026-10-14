@@ -12,3 +12,4 @@ playwright-report
 test-results
 npm-debug.log*
 .DS_Store
+delivery

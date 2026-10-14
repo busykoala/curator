@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { catalogTitleVariants,cleanCatalogText } from "./musicbrainz";
+import { catalogueSearchQuery,catalogTitleVariants,cleanCatalogText } from "./musicbrainz";
+
+test("catalogue search matches artist collaborations and album titles without interpreting query operators",()=>{
+  assert.equal(catalogueSearchQuery("bleu soleil, luiza"),'(releasegroup:"bleu" OR artist:"bleu") AND (releasegroup:"soleil" OR artist:"soleil") AND (releasegroup:"luiza" OR artist:"luiza")');
+  assert.equal(catalogueSearchQuery('Björk: "Homogenic"'),'(releasegroup:"Björk" OR artist:"Björk") AND (releasegroup:"Homogenic" OR artist:"Homogenic")');
+  assert.equal(catalogueSearchQuery(" , \" : "),"");
+});
 
 test("removes catalog edition markers",()=>{
   assert.equal(cleanCatalogText("Genie In A Bottle (Maxi-Single)"),"Genie In A Bottle");

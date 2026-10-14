@@ -10,6 +10,15 @@ async function limited<T>(load:()=>Promise<T>):Promise<T>{if(cooldownUntil>Date.
 const headers={"User-Agent":"MusicCurator/2.0 (self-hosted; contact=local-admin)",Accept:"application/json"};
 async function details(candidate:MbCandidate,entityKey:string):Promise<MbCandidate>{const value=await cachedJson("musicbrainz",`release-group-details:${candidate.id}`,entityKey,90,()=>limited(()=>fetchJson<MbCandidate>(`https://musicbrainz.org/ws/2/release-group/${candidate.id}?inc=genres+tags+artist-credits&fmt=json`,{headers}))).catch(()=>candidate);return{...candidate,...value,score:candidate.score??value.score}}
 const searchTtlDays=1/24;
+export function catalogueSearchQuery(term:string):string{
+  const words=term.normalize("NFKC").match(/[\p{L}\p{N}]+/gu)?.slice(0,24)??[];
+  return words.map(word=>`(releasegroup:${JSON.stringify(word)} OR artist:${JSON.stringify(word)})`).join(" AND ");
+}
+export async function searchCatalogueReleaseGroups(term:string):Promise<SearchResult>{
+  const query=catalogueSearchQuery(term);
+  if(!query)return{"release-groups":[]};
+  return cachedJson("musicbrainz",`catalogue-search:v1:${query}`,`music-search:${normalized(term)}`,searchTtlDays,()=>limited(()=>fetchJson<SearchResult>(`https://musicbrainz.org/ws/2/release-group/?query=${encodeURIComponent(query)}&limit=8&fmt=json`,{headers})));
+}
 export async function searchReleaseGroups(artist:string,album:string,entityKey:string):Promise<SearchResult>{const query=`artist:${JSON.stringify(artist)} AND releasegroup:${JSON.stringify(album)}`,id=`release-group-search:v3:${normalized(artist)}|${normalized(album)}`;const found=await cachedJson("musicbrainz",id,entityKey,searchTtlDays,()=>limited(()=>fetchJson<SearchResult>(`https://musicbrainz.org/ws/2/release-group/?query=${encodeURIComponent(query)}&limit=8&fmt=json`,{headers})));const enriched:MbCandidate[]=[];for(const candidate of found["release-groups"].slice(0,5))enriched.push(await details(candidate,entityKey));return{"release-groups":enriched}}
 export async function searchReleaseGroupsByAlbum(album:string,entityKey:string):Promise<SearchResult>{const query=`releasegroup:${JSON.stringify(album)}`,id=`release-group-loose:v3:${normalized(album)}`;const found=await cachedJson("musicbrainz",id,entityKey,searchTtlDays,()=>limited(()=>fetchJson<SearchResult>(`https://musicbrainz.org/ws/2/release-group/?query=${encodeURIComponent(query)}&limit=12&fmt=json`,{headers})));const enriched:MbCandidate[]=[];for(const candidate of found["release-groups"].slice(0,8))enriched.push(await details(candidate,entityKey));return{"release-groups":enriched}}
 function withoutArticle(value:string):string{return normalized(value).replace(/^(?:a|an|the)\s+/,"")}

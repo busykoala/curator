@@ -61,6 +61,7 @@ export function AddMusic() {
     if (query.length < 2) return;
     setSearching(true);
     setNotice("");
+    setResults(null);
     try {
       const response = await fetch(
           `/api/music/search?q=${encodeURIComponent(query)}`,
@@ -69,8 +70,9 @@ export function AddMusic() {
         body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Search failed");
       setResults(body);
+      setNotice(body.warning ?? "");
     } catch (error) {
-      setNotice(String(error));
+      setNotice(error instanceof Error ? error.message : "Search failed. Please try again.");
     } finally {
       setSearching(false);
     }
@@ -96,7 +98,7 @@ export function AddMusic() {
       setNotice(`${album.title} was requested.`);
       if (body.requestId) router.push("/requests/" + body.requestId);
     } catch (error) {
-      setNotice(String(error));
+      setNotice(error instanceof Error ? error.message : "The album could not be requested. Please try again.");
     } finally {
       setAdding("");
     }
