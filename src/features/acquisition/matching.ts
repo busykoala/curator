@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 export type CatalogAlbum = {
   id: number; artistId: number; title: string; monitored: boolean;
   releaseDate?: string; secondaryTypes?: string[]; disambiguation?: string;
@@ -84,5 +85,17 @@ export function repairedTitle(item: Release, album: CatalogAlbum, artist: string
   const quality = releaseQuality(item);
   // Recording variants have already been checked against metadata. The original
   // title remains in the audit record; the download URL/hash is never changed.
-  return `${artist} - ${album.title} ${album.releaseDate ? `(${album.releaseDate.slice(0, 4)}) ` : ""}[${quality}]`;
+  const source=createHash('sha256').update(String(item.guid??item.downloadUrl??item.title)).digest('hex').slice(0,12);
+  return `${artist} - ${album.title} ${album.releaseDate ? `(${album.releaseDate.slice(0, 4)}) ` : ""}[${quality}] [src-${source}]`;
+}
+
+/** Do not turn an unparseable compilation or longer album name into this one. */
+export function conflictingAlbum(item:Release,album:CatalogAlbum,catalog:CatalogAlbum[],artist:string){
+  const artistPrefix=key(artist),raw=key(String(item.title??''));
+  const title=' '+(raw.startsWith(artistPrefix)?raw.slice(artistPrefix.length).trim():raw)+' ';
+  const expected=[album.title,...(album.releases??[]).map(r=>r.title)].map(key);
+  return catalog.some(other=>{
+    const phrase=key(other.title);
+    return other.id!==album.id&&phrase.length>=5&&!expected.some(t=>(' '+t+' ').includes(' '+phrase+' '))&&title.includes(' '+phrase+' ');
+  });
 }

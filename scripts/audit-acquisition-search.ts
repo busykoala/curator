@@ -21,6 +21,7 @@ globalThis.fetch=async(input,init)=>{
  if(url.includes('/blocklist?'))return Response.json({totalRecords:0,records:[]});
  if(/\/album\/[23]$/.test(url)){const id=Number(url.split('/').at(-1));return Response.json({id,artistId:7,title:id===2?'Second':'Third',monitored:true,statistics:{percentOfTracks:0}})}
  if(url.endsWith('/album/1'))return Response.json({id:1,artistId:1,title:'Album',monitored:true,statistics:{percentOfTracks:0}});
+ if(url.includes('/album?artistId='))return Response.json([]);
  if(url.endsWith('/indexer'))return Response.json(url.includes('9696')?[]:[{id:1,enableInteractiveSearch:true}]);
  assert.match(url,/\/api\/v1\/release/);
  if(init?.method==='POST'){

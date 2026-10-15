@@ -1,8 +1,8 @@
 import { db } from "@/features/db/client";
 import type { AcquisitionTarget } from "./types";
-import { album, parseRelease, pushRelease, releaseIsBlocked, SearchDeferred } from "./lidarr";
+import { album, albumCatalog, parseRelease, pushRelease, releaseIsBlocked, SearchDeferred } from "./lidarr";
 import { nativeAlbum, nativeArtist, directCandidates } from "./discovery";
-import { allowedQuality, decodeTitle, matchesAlbum, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
+import { allowedQuality, conflictingAlbum, decodeTitle, matchesAlbum, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
 import { releaseScore } from "./policy";
 import { sourceScores, withHybrid } from "./quality";
 import { qbitCapacity, releaseInfoHash } from "./qbittorrent";
@@ -32,6 +32,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
   }
   const day=new Date().toISOString().slice(0,10),attempts=target.attempts_day===day?target.attempts_today+1:1;
   const evidence:Record<string,number>={};
+  let catalog:Awaited<ReturnType<typeof albumCatalog>>|undefined;
   const work=async()=>{
     const scores=sourceScores(),seen=new Set<string>(),failedSources=new Set<string>();let tried=0;
     const submit=async(items:Release[])=>{
@@ -51,6 +52,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
         if(hash&&db().prepare("SELECT 1 FROM source_outcomes WHERE event IN ('replacement','unavailable') AND lower(json_extract(detail_json,'$.hash'))=? AND created_at>=datetime('now','-1 day') LIMIT 1").get(hash)){
           evidence['Recently failed torrent hash']=(evidence['Recently failed torrent hash']??0)+1;continue;
         }
+        if(db().prepare("SELECT 1 FROM source_outcomes WHERE event='replacement' AND json_extract(detail_json,'$.guid')=? AND created_at>=datetime('now','-1 day') LIMIT 1").get(String(item.guid))){evidence['Recently failed source release']=(evidence['Recently failed source release']??0)+1;continue}
         if(await releaseIsBlocked(item)){evidence['Previously blocklisted release']=(evidence['Previously blocklisted release']??0)+1;continue}
         if(tried>=3)return false;
         // Artist search results may be approved for a different album (including
@@ -62,7 +64,11 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
           evidence['Original title resolves to a different album']=(evidence['Original title resolves to a different album']??0)+1;continue;
         }
         const repair=Boolean(item.direct)||parserRejections(item)||!exact(original),title=repair?repairedTitle(item,metadata,target.artist):decodeTitle(String(item.title));
-        if(repair){const parsed=await parseRelease(title);if(parsed.artist?.id!==metadata.artistId||parsed.albums?.length!==1||parsed.albums[0].id!==metadata.id){evidence['Ambiguous normalized album identity']=(evidence['Ambiguous normalized album identity']??0)+1;continue}}
+        if(repair){
+          catalog??=await albumCatalog(metadata.artistId);
+          if(conflictingAlbum(item,metadata,catalog,target.artist)){evidence['Title names another catalogue album']=(evidence['Title names another catalogue album']??0)+1;continue}
+          const parsed=await parseRelease(title);if(parsed.artist?.id!==metadata.artistId||parsed.albums?.length!==1||parsed.albums[0].id!==metadata.id){evidence['Ambiguous normalized album identity']=(evidence['Ambiguous normalized album identity']??0)+1;continue}
+        }
         tried++;
         const capacity=await qbitCapacity(),size=Number(item.size)||0;
         if(size<=0){evidence['Unknown release size']=(evidence['Unknown release size']??0)+1;continue}
@@ -76,7 +82,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
         try{
           // Always re-evaluate the verified title. Cached manual grabs reuse a
           // RemoteAlbum which may resolve differently from the current parse.
-          const result=await pushRelease({...item,title,albumId:metadata.id,artistId:metadata.artistId,...(item.direct?{indexerId:0}:{})});
+          const result=await pushRelease({...item,title,albumId:metadata.id,artistId:metadata.artistId,...(hash?{infoHash:hash}:{}),...(item.direct?{indexerId:0}:{})});
           if(!result.approved||result.rejected){
             for(const reason of (result.rejections as string[]|undefined)??['Release push was not approved'])evidence[reason]=(evidence[reason]??0)+1;
             db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);continue;

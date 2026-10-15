@@ -210,7 +210,7 @@ async function replace(
     return;
   }
   await blocklistQueue(item);
-  recordSourceOutcomeOnce(target, "replacement",target.download_hash??item.downloadId??'', { reason });
+  recordSourceOutcomeOnce(target, "replacement",target.download_hash??item.downloadId??'', { reason, guid:target.last_release_guid });
   updateTarget(target.id, {
     status: "pending",
     download_hash: null,

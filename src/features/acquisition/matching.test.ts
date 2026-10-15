@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {matchesAlbum, type CatalogAlbum} from "./matching";
+import {conflictingAlbum,matchesAlbum,repairedTitle, type CatalogAlbum} from "./matching";
 const album=(title:string,releaseDate='1975-01-01'):CatalogAlbum=>({id:1,artistId:1,title,releaseDate,monitored:true});
 const item=(title:string,extra={})=>({title,...extra});
 test('recognizes actual parser failures without accepting similar recordings',()=>{
@@ -14,6 +14,13 @@ test('recognizes actual parser failures without accepting similar recordings',()
   assert.equal(matchesAlbum(item('The Beatles - Yellow Submarine (Instrumentals) FLAC'),album('Yellow Submarine'),'The Beatles'),false);
   assert.equal(matchesAlbum(item('Hidden-Orchestra--Archipelago-(Source-Materials)-(2022)-Mp3-320kbps',{albumTitle:'Archipelago'}),album('Archipelago','2012-01-01'),'Hidden Orchestra'),false);
   assert.ok(matchesAlbum(item('Hidden Orchestra - Archipelago (2012) FLAC'),album('Archipelago','2012-01-01'),'Hidden Orchestra'));
+});
+test('repairs retain source identity and reject other albums even when the parser cannot resolve them',()=>{
+  const target=album('Labyrinth','2020-01-01');
+  assert.equal(conflictingAlbum(item('Khatia Buniatishvili - Labyrinth Ephemera (2024) FLAC'),target,[{...album('Labyrinth Ephemera'),id:2}],'Khatia Buniatishvili'),true);
+  assert.equal(conflictingAlbum(item('Khatia Buniatishvili - Labyrinth (2020) FLAC'),target,[{...album('Labyrinth Ephemera'),id:2}],'Khatia Buniatishvili'),false);
+  const first=repairedTitle({title:'Khatia Buniatishvili Labyrinth',guid:'source-one'},target,'Khatia Buniatishvili');
+  assert.notEqual(first,repairedTitle({title:'Khatia Buniatishvili Labyrinth',guid:'source-two'},target,'Khatia Buniatishvili'));
 });
 test('does not confuse volumes, compilation fragments, or ambiguous generic titles',()=>{
   assert.equal(matchesAlbum(item('Queen - Greatest Hits I,II,III FLAC'),album('Greatest Hits I & II'),'Queen'),false);
