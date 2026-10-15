@@ -3,7 +3,7 @@ import { db } from "@/features/db/client";
 import type { AcquisitionTarget } from "./types";
 import { album, grabRelease, parseRelease, pushRelease, releaseIsBlocked, SearchDeferred } from "./lidarr";
 import { nativeAlbum, nativeArtist, directCandidates } from "./discovery";
-import { allowedQuality, matchesAlbum, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
+import { allowedQuality, decodeTitle, matchesAlbum, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
 import { releaseScore } from "./policy";
 import { sourceScores, withHybrid } from "./quality";
 import { qbitCapacity, qbitTorrent, releaseInfoHash, removeTorrent } from "./qbittorrent";
@@ -54,7 +54,15 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
         }
         if(await releaseIsBlocked(item)){evidence['Previously blocklisted release']=(evidence['Previously blocklisted release']??0)+1;continue}
         if(tried>=3)return false;
-        const repair=Boolean(item.direct)||parserRejections(item),title=repair?repairedTitle(item,metadata,target.artist):String(item.title);
+        // Artist search results may be approved for a different album (including
+        // an unmonitored EP). Validate every original title before using its
+        // cached grab handle; never rename a positively identified other album.
+        const original=await parseRelease(decodeTitle(String(item.title)));
+        const exact=(parsed:typeof original)=>parsed.artist?.id===metadata.artistId&&parsed.albums?.length===1&&parsed.albums[0].id===metadata.id;
+        if((original.artist&&original.artist.id!==metadata.artistId)||(original.albums?.length&&!exact(original))){
+          evidence['Original title resolves to a different album']=(evidence['Original title resolves to a different album']??0)+1;continue;
+        }
+        const repair=Boolean(item.direct)||parserRejections(item)||!exact(original),title=repair?repairedTitle(item,metadata,target.artist):String(item.title);
         if(repair){const parsed=await parseRelease(title);if(parsed.artist?.id!==metadata.artistId||parsed.albums?.length!==1||parsed.albums[0].id!==metadata.id){evidence['Ambiguous normalized album identity']=(evidence['Ambiguous normalized album identity']??0)+1;continue}}
         tried++;
         const capacity=await qbitCapacity(),size=Number(item.size)||0;

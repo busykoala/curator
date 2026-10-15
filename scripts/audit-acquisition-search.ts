@@ -17,7 +17,7 @@ globalThis.fetch=async(input,init)=>{
  const url=String(input);
  if(url.includes('/api/v2/auth/login'))return new Response('Ok.',{headers:{'set-cookie':'SID=test-cookie'}});
  if(url.includes('/api/v2/sync/maindata'))return Response.json({torrents:{},server_state:{free_space_on_disk:mode==='capacity'?1:1024**4}});
- if(url.includes('/parse?'))return Response.json({artist:{id:1},albums:[{id:1}]});
+ if(url.includes('/parse?')){const title=new URL(url).searchParams.get('title')??'';return Response.json({artist:{id:mode==='shared'?7:1},albums:[{id:mode==='wrong-album'?99:mode==='shared'?(title.includes('Second')?2:3):1}]})}
  if(url.includes('/blocklist?'))return Response.json({totalRecords:0,records:[]});
  if(/\/album\/[23]$/.test(url)){const id=Number(url.split('/').at(-1));return Response.json({id,artistId:7,title:id===2?'Second':'Third',monitored:true,statistics:{percentOfTracks:0}})}
  if(url.endsWith('/album/1'))return Response.json({id:1,artistId:1,title:'Album',monitored:true,statistics:{percentOfTracks:0}});
@@ -42,6 +42,7 @@ assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,false);assert.
 reset();posts=[];mode='repair';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,true);assert.deepEqual(posts,['Good']);
 reset();posts=[];mode='repair-rejected';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,false);assert.equal(db().prepare('SELECT * FROM acquisition_submissions').all().length,0);
 reset();posts=[];mode='capacity';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,false);assert.deepEqual(posts,[]);
+reset();posts=[];mode='wrong-album';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,false);assert.deepEqual(posts,[]);
 reset();posts=[];mode='shared';
 upsertTarget({albumId:2,artistId:7,origin:'migration',artist:'Test',title:'Second'});
 upsertTarget({albumId:3,artistId:7,origin:'migration',artist:'Test',title:'Third'});
