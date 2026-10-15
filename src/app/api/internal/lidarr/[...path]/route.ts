@@ -15,6 +15,15 @@ export async function GET(request:Request,context:Context){
     const folder=query.get('folder');
     if(folder&&(!folder.startsWith('/data/downloads/')||folder.split('/').includes('..')))return new Response('Invalid import path',{status:400});
     query.set('filterExistingFiles','true');
+    if(folder){
+      // Unpackerr supplies a folder without artist context. Preserve the
+      // authoritative queued identity when scanning extracted siblings.
+      const queued=await upstream('queue?pageSize=1000&includeUnknownArtistItems=true');
+      if(!queued.ok)return new Response('Import validation unavailable',{status:503});
+      const items=(await queued.json()).records;
+      const item=items.find((q:{outputPath?:string;status?:string;sizeleft?:number})=>q.status==='completed'&&Number(q.sizeleft)===0&&helperFolders(q.outputPath??'').includes(folder));
+      if(item?.artistId){query.set('artistId',String(item.artistId));query.set('downloadId',String(item.downloadId))}
+    }
   }
   const response=await upstream(endpoint+'?'+query);
   if(endpoint==='manualimport'&&response.ok){
