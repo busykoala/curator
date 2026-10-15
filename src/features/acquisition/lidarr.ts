@@ -66,6 +66,7 @@ export const profiles=()=>call<Array<Record<string,unknown>&{id:number;name:stri
 export const createProfile=(value:Record<string,unknown>)=>call<Record<string,unknown>&{id:number}>("/qualityprofile",{method:"POST",body:JSON.stringify(value)});
 export const manualImport=(downloadId:string)=>call<Array<Record<string,unknown>>>(`/manualimport?downloadId=${encodeURIComponent(downloadId)}&filterExistingFiles=true`);
 export const manualImportFolder=(folder:string,artistId?:number)=>call<Array<Record<string,unknown>>>('/manualimport?'+new URLSearchParams({folder,...(artistId?{artistId:String(artistId)}:{}),filterExistingFiles:'true'}));
+export const recheckManualImport=(items:Record<string,unknown>[])=>call<Array<Record<string,unknown>>>('/manualimport',{method:'POST',body:JSON.stringify(items)});
 type Command={id:number;status?:string;message?:string;body?:{message?:string}};
 export async function importFiles(files:Record<string,unknown>[]){
   const started=await call<Command>("/command",{method:"POST",body:JSON.stringify({name:"ManualImport",files,importMode:"auto"})});

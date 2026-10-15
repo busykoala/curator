@@ -1,7 +1,7 @@
 import {timingSafeEqual} from 'node:crypto';
 import {dirname} from 'node:path';
 import {config} from '@/config';
-import {helperFolders,validateHelperImport} from '@/features/acquisition/import-guard';
+import {helperFolders,validateHelperImport,unmatchedTrackSubset,manualImportUpdates} from '@/features/acquisition/import-guard';
 export const runtime='nodejs';
 type Context={params:Promise<{path:string[]}>};
 function authorized(request:Request){const supplied=Buffer.from(request.headers.get('x-api-key')??''),expected=Buffer.from(config.LIDARR_API_KEY);return expected.length>0&&supplied.length===expected.length&&timingSafeEqual(supplied,expected)}
@@ -63,7 +63,10 @@ export async function POST(request:Request,context:Context){
   if(!folder)return new Response('Files do not belong to download folder',{status:422});
   const r=await upstream('manualimport?'+new URLSearchParams({folder,artistId:String(item?.artistId??''),filterExistingFiles:'true'}));
   if(!r.ok)return new Response('Import validation unavailable',{status:503});
-  if(!validateHelperImport(body,items,await r.json()))return new Response('Import mapping is rejected or ambiguous',{status:422});
+  let rows=await r.json();
+  const subset=unmatchedTrackSubset(rows,item??{});
+  if(subset){const checked=await upstream('manualimport',{method:'POST',body:JSON.stringify(manualImportUpdates(subset))});if(!checked.ok)return new Response('Import validation unavailable',{status:503});rows=await checked.json()}
+  if(!validateHelperImport(body,items,rows))return new Response('Import mapping is rejected or ambiguous',{status:422});
   const response=await upstream('command',{method:'POST',body:JSON.stringify({...body,replaceExistingFiles:false,importMode:'copy'})});
   return new Response(response.body,{status:response.status,headers:{'Content-Type':'application/json'}});
 }

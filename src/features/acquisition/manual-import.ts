@@ -1,5 +1,5 @@
-import { importFiles,manualImport,manualImportFolder,type QueueItem } from "./lidarr";
-import {helperFolders} from './import-guard';
+import { importFiles,manualImport,manualImportFolder,recheckManualImport,type QueueItem } from "./lidarr";
+import {helperFolders,unmatchedTrackSubset,manualImportUpdates} from './import-guard';
 
 export type ExactManualImport={albumId:number;artistId?:number;artist?:string;album?:string};
 
@@ -14,6 +14,8 @@ export async function exactManualImport(item:QueueItem):Promise<ExactManualImpor
   // downloaded one (e.g. 19 deluxe tracks versus 11 standard tracks). Fresh
   // release IDs, unique tracks and rejection checks below decide the mapping.
   if(!rows.length)return false;
+  const subset=unmatchedTrackSubset(rows,item);
+  if(subset)rows=await recheckManualImport(manualImportUpdates(subset));
   const albumIds=new Set<number>(),artistIds=new Set<number>(),trackIds=new Set<number>(),releaseIds=new Set<number>();
   for(const row of rows){
     const rejections=row.rejections as unknown[]|undefined,tracks=row.tracks as Array<{id?:number}>|undefined,album=row.album as{id?:number}|undefined,artist=row.artist as{id?:number}|undefined,albumReleaseId=Number(row.albumReleaseId);

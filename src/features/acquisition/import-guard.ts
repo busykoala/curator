@@ -1,4 +1,18 @@
 type Row=Record<string,unknown>;
+/** An unsplit image can contaminate the group rejection of valid split tracks. */
+export function unmatchedTrackSubset(rows:Row[],item:{albumId?:number;artistId?:number}){
+  if(!item.albumId||!rows.some(r=>Array.isArray(r.tracks)&&r.tracks.length===0))return;
+  const selected=rows.filter(r=>(r.album as {id?:number})?.id===item.albumId&&Array.isArray(r.tracks)&&r.tracks.length===1);
+  if(!selected.length||rows.filter(r=>!selected.includes(r)).some(r=>!Array.isArray(r.tracks)||r.tracks.length!==0))return;
+  const tracks=new Set<number>(),releases=new Set<number>();
+  for(const r of selected){
+    if((item.artistId&&(r.artist as {id?:number})?.id!==item.artistId)||!Array.isArray(r.rejections)||r.rejections.some(x=>(x as {reason?:string}).reason!=='Has unmatched tracks'))return;
+    const id=(r.tracks as {id:number}[])[0].id;if(!id||tracks.has(id)||Number(r.albumReleaseId)<=0)return;
+    tracks.add(id);releases.add(Number(r.albumReleaseId));
+  }
+  return releases.size===1?selected:undefined;
+}
+export function manualImportUpdates(rows:Row[]){return rows.map(r=>({id:r.id,path:r.path,name:r.name,artistId:(r.artist as {id?:number})?.id,albumId:(r.album as {id?:number})?.id,albumReleaseId:r.albumReleaseId,quality:r.quality,releaseGroup:r.releaseGroup,indexerFlags:r.indexerFlags,additionalFile:false,replaceExistingFiles:false,disableReleaseSwitching:true}))}
 export function helperFolders(folder:string){
   if(!folder.startsWith('/data/downloads/')||folder.split('/').includes('..'))return [];
   const original=folder.replace(/\/$/,'');
