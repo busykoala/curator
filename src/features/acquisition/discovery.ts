@@ -5,6 +5,7 @@ import type { Release } from "./matching";
 
 const cache=new Map<string,{expires:number;work:Promise<Release[]>}>();
 export function clearDiscoveryCache(){cache.clear();sources=undefined}
+export function hasArtistCache(id:number){return (cache.get(`artist:${id}`)?.expires??0)>Date.now()}
 async function cached(key:string,work:()=>Promise<Release[]>) {
   const saved=cache.get(key);
   if(saved&&saved.expires>Date.now())return saved.work;

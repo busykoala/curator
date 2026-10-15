@@ -43,6 +43,7 @@ import {
 } from "./repository";
 import { recoverQualityProfiles } from "./quality";
 import { findRelease } from "./search";
+import { hasArtistCache } from "./discovery";
 import { maintainSources } from "./prowlarr";
 import { exactManualImport } from "./manual-import";
 import type { AcquisitionTarget, DownloadObservation } from "./types";
@@ -521,10 +522,21 @@ async function searchWork(
       status: apply ? "applied" : "proposed",
       evidence: { mode, fallback, priority: priorityTarget, strategyVersion:2 },
     });
-    if (apply)
+    if (apply){
       await findRelease(target, fallback).catch((error) =>
         updateTarget(target.id, failedSearchPatch(target, error)),
       );
+      // Drain useful artist results while their native release handles are live.
+      // Unmatched siblings retain their own normal search/retry schedule.
+      if(target.lidarr_artist_id&&hasArtistCache(target.lidarr_artist_id)&&Date.now()<deadline){
+        const siblings=targets().filter(t=>t.id!==target.id&&t.lidarr_artist_id===target.lidarr_artist_id&&['pending','staged'].includes(t.status)&&currentWanted.has(t.lidarr_album_id)&&!active.has(t.lidarr_album_id)).slice(0,6);
+        for(const sibling of siblings){
+          if(Date.now()>deadline)break;
+          const result=await findRelease(sibling,fallback,true).catch(()=>null);
+          if(result?.grabbed)intervene({targetId:sibling.id,action:'cache-match',status:'applied',evidence:{artistId:target.lidarr_artist_id,strategyVersion:2}});
+        }
+      }
+    }
   };
   const deadline=Date.now()+90_000;
   for (let index = 0; index < selected.length; index += 2) {

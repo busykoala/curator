@@ -20,7 +20,7 @@ export function confirmedCandidateFailure(error:unknown){
   );
 }
 
-export async function findRelease(target:AcquisitionTarget,fallback:boolean) {
+export async function findRelease(target:AcquisitionTarget,fallback:boolean,cachedArtistOnly=false) {
   const unresolved=db().prepare("SELECT status FROM acquisition_submissions WHERE target_id=?").get(target.id) as {status:string}|undefined;
   if(unresolved?.status==='submitting'||unresolved?.status==='accepted') {
     updateTarget(target.id,{status:'queued',detail_json:JSON.stringify({reason:'Awaiting confirmed download outcome',strategyVersion:2})});
@@ -87,6 +87,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean) {
       return false;
     };
     const sameArtist=(db().prepare("SELECT count(*) n FROM acquisition_targets WHERE lidarr_artist_id=? AND status IN ('pending','staged')").get(target.lidarr_artist_id) as {n:number}).n;
+    if(cachedArtistOnly){return {grabbed:Boolean(target.lidarr_artist_id&&await submit(await nativeArtist(target.lidarr_artist_id)))}}
     const artistFirst=Boolean(target.lidarr_artist_id)&&(sameArtist>1||Boolean(metadata.disambiguation));
     if(artistFirst&&await submit(await nativeArtist(target.lidarr_artist_id!)))return {grabbed:true};
     if(await submit(await nativeAlbum(metadata.id)))return {grabbed:true};

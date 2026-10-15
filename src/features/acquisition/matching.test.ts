@@ -12,6 +12,8 @@ test('recognizes actual parser failures without accepting similar recordings',()
   assert.equal(matchesAlbum(item('Fleetwood Mac - Fleetwood Mac Live 1975 FLAC',{albumTitle:'Fleetwood Mac'}),album('Fleetwood Mac'),'Fleetwood Mac'),false);
   assert.equal(matchesAlbum(item('Delores Keane - The Best of FLAC'),album('The Best of Keane'),'Keane'),false);
   assert.equal(matchesAlbum(item('The Beatles - Yellow Submarine (Instrumentals) FLAC'),album('Yellow Submarine'),'The Beatles'),false);
+  assert.equal(matchesAlbum(item('Hidden-Orchestra--Archipelago-(Source-Materials)-(2022)-Mp3-320kbps',{albumTitle:'Archipelago'}),album('Archipelago','2012-01-01'),'Hidden Orchestra'),false);
+  assert.ok(matchesAlbum(item('Hidden Orchestra - Archipelago (2012) FLAC'),album('Archipelago','2012-01-01'),'Hidden Orchestra'));
 });
 test('does not confuse volumes, compilation fragments, or ambiguous generic titles',()=>{
   assert.equal(matchesAlbum(item('Queen - Greatest Hits I,II,III FLAC'),album('Greatest Hits I & II'),'Queen'),false);

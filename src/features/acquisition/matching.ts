@@ -42,6 +42,15 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string)
   const prefix = significant(raw).slice(0, artistWords.length).join(" ");
   if (!artistWords.length || prefix !== artistWords.join(" ")) return false;
   const metadata = `${album.title} ${(album.secondaryTypes ?? []).join(" ")}`;
+  const knownTitles=[album.title,album.disambiguation??'',...(album.releases??[]).map(r=>r.title)];
+  const technical=new Set(('remaster remastered deluxe expanded anniversary edition version original mono stereo cd lp vinyl japan japanese uk us eu digital flac alac mp3 bit kbps khz hz studio masters rock pop jazz reggae blues folk classical metal electronic elettronica alternative indie dance soul rnb country').split(' '));
+  for(const part of raw.matchAll(/\(([^)]*)\)/g)){
+    const content=key(part[1]);
+    if(knownTitles.some(t=>key(t).includes(content)))continue;
+    // Parentheses often carry a different release identity, not harmless
+    // formatting. Only known edition/format/year descriptors can be discarded.
+    if(significant(part[1]).some(w=>!technical.has(w)&&!/^\d+(?:st|nd|rd|th|bit|kbps|khz)?$/.test(w)))return false;
+  }
   for (const variant of ["instrumental", "karaoke", "tribute", "live", "remix", "acoustic"])
     if (new RegExp(`\\b${variant}s?\\b`, "i").test(raw) && !new RegExp(`\\b${variant}s?\\b`, "i").test(metadata)) return false;
   if (/\b(discography|complete collection|complete albums|reimagined|revisited|return to)\b/i.test(raw)) return false;
