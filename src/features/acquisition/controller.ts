@@ -36,6 +36,7 @@ import {
   destructiveAllowed,
   intervene,
   observe,
+  pruneAcquisitionTelemetry,
   targetByAlbum,
   targets,
   updateTarget,
@@ -96,7 +97,7 @@ function recordTorrent(item: Torrent, target: AcquisitionTarget | null) {
       availability: item.availability,
       tracker: item.tracker,
     };
-  observe(value);
+  if(item.progress<1||(target&&!['imported','inactive'].includes(target.status)))observe(value);
   if (target && target.status !== "imported" && target.status !== "inactive") {
     const patch: Record<string, unknown> = {
       download_hash: item.hash,
@@ -610,6 +611,7 @@ export async function runAcquisitionCycle() {
       observeOnly = Date.now() < observationUntil(),
       apply = settings.acquisitionAutomation && !paused && !observeOnly;
     stateSet("acquisition_phase", "observing");
+    if(apply)pruneAcquisitionTelemetry();
     const [wanted, queueItems, torrents, transfer] = await Promise.all([
       wantedMissing(),
       queue(),

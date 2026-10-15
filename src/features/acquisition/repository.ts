@@ -14,6 +14,14 @@ export function targets():AcquisitionTarget[]{return db().prepare("SELECT * FROM
 export function targetByAlbum(albumId:number){return db().prepare("SELECT * FROM acquisition_targets WHERE lidarr_album_id=?").get(albumId) as AcquisitionTarget|undefined}
 export function updateTarget(id:number,patch:Record<string,unknown>){const keys=Object.keys(patch);if(!keys.length)return;db().prepare(`UPDATE acquisition_targets SET ${keys.map(key=>`${key}=?`).join(",")},updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(...keys.map(key=>patch[key]),id)}
 export function observe(value:DownloadObservation){db().prepare(`INSERT INTO download_observations(target_id,torrent_hash,state,downloaded,amount_left,progress,download_speed,connected_seeds,reported_seeds,availability,tracker) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(value.targetId,value.hash,value.state,value.downloaded,value.amountLeft,value.progress,value.speed,value.connectedSeeds,value.reportedSeeds,value.availability,value.tracker??null)}
+export function pruneAcquisitionTelemetry(){
+  if(Date.now()-Number(stateGet('acquisition_maintenance_at','0'))<5*60_000)return;
+  db().transaction(()=>{
+    db().prepare("DELETE FROM download_observations WHERE id IN (SELECT id FROM download_observations WHERE observed_at<datetime('now','-14 days') ORDER BY id LIMIT 5000)").run();
+    db().prepare("DELETE FROM acquisition_requests WHERE id IN (SELECT id FROM acquisition_requests WHERE created_at<datetime('now','-7 days') ORDER BY id LIMIT 5000)").run();
+    stateSet('acquisition_maintenance_at',String(Date.now()));
+  })();
+}
 export function intervene(decision:{targetId?:number;hash?:string;action:string;status:string;evidence?:unknown}){db().prepare("INSERT INTO download_interventions(target_id,torrent_hash,action,status,evidence_json) VALUES(?,?,?,?,?)").run(decision.targetId??null,decision.hash??null,decision.action,decision.status,JSON.stringify(decision.evidence??{}))}
 export function destructiveAllowed(){const row=db().prepare("SELECT sum(created_at>=datetime('now','-15 minutes')) short,sum(created_at>=datetime('now','-1 hour')) hourly FROM download_interventions WHERE status='applied' AND action IN ('replace','cleanup','disable-source')").get() as{short:number|null;hourly:number|null};return Number(row.short??0)<5&&Number(row.hourly??0)<20}
 export function acquireControllerLease(){return db().transaction(()=>{const until=Number(stateGet("acquisition_lease","0"));if(until>Date.now())return false;stateSet("acquisition_lease",String(Date.now()+4*60_000));return true}).immediate()}
