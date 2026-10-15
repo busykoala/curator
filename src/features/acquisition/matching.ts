@@ -25,8 +25,18 @@ function volumes(s: string) {
   return match ? words(match[1]).filter(w => w !== "and").map(number).sort().join(",") : "";
 }
 export function releaseQuality(item: Release) {
-  return String((item.quality as {quality?: {name?: string}})?.quality?.name ?? "");
+  const current=String((item.quality as {quality?: {name?: string}})?.quality?.name ?? "");
+  if(current!=='FLAC')return current;
+  const evidence=[String(item.title??'')];
+  // Some indexers truncate their displayed title but preserve the full name
+  // in the magnet's dn field or source slug. Only explicit bit depth counts.
+  for(const value of [item.guid,item.magnetUrl])if(typeof value==='string')try{
+    const url=new URL(decodeTitle(value).replace(/^\d+_/,''));
+    evidence.push(decodeURIComponent(url.searchParams.get('dn')??url.pathname));
+  }catch{/* No additional format evidence. */}
+  return evidence.some(s=>/\bflac[\s_\-[\]()]*24\b|\b24[\s-]*bit\b/i.test(s))?'FLAC 24bit':current;
 }
+export function needsQualityRepair(item:Release){return releaseQuality(item)!==String((item.quality as {quality?:{name?:string}})?.quality?.name??'')}
 export function allowedQuality(item: Release, fallback: boolean) {
   return /^(FLAC(?: 24bit)?)$/i.test(releaseQuality(item)) ||
     (fallback && /^(MP3-320|MP3-VBR-V0)$/i.test(releaseQuality(item)));

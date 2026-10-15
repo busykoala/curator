@@ -1,8 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {conflictingAlbum,matchesAlbum,repairedTitle, type CatalogAlbum} from "./matching";
+import {conflictingAlbum,matchesAlbum,releaseQuality,repairedTitle, type CatalogAlbum} from "./matching";
 const album=(title:string,releaseDate='1975-01-01'):CatalogAlbum=>({id:1,artistId:1,title,releaseDate,monitored:true});
 const item=(title:string,extra={})=>({title,...extra});
+test('explicit 24-bit evidence survives truncated indexer titles without inferring quality from file size',()=>{
+  const quality={quality:{name:'FLAC'}};
+  assert.equal(releaseQuality({title:'Artist - Album [Flac 24 96 LP]',quality}),'FLAC 24bit');
+  assert.equal(releaseQuality({title:'Artist - Album [Flac 2..',quality,guid:'1_magnet:?xt=urn:btih:abc&dn=Artist+-+Album+[FLAC+24-96]'}),'FLAC 24bit');
+  assert.equal(releaseQuality({title:'Artist - 24 Carat Gold [FLAC]',quality,size:3e9}),'FLAC');
+  assert.equal(releaseQuality({title:'Artist - Album [24bit]',quality:{quality:{name:'MP3-320'}}}),'MP3-320');
+});
 test('recognizes actual parser failures without accepting similar recordings',()=>{
   assert.ok(matchesAlbum(item('Green Day  ¡Uno   (2012) [FLAC] 88'),album('¡Uno!','2012-01-01'),'Green Day'));
   assert.ok(matchesAlbum(item('Bob-Marley- -The-Wailers--Rastaman-Vibration-(UHQR)-PBTHAL-(1976-Reggae)-[Flac-2..'),album('Rastaman Vibration','1976-01-01'),'Bob Marley & The Wailers'));

@@ -2,7 +2,7 @@ import { db } from "@/features/db/client";
 import type { AcquisitionTarget } from "./types";
 import { album, albumCatalog, parseRelease, pushRelease, releaseIsBlocked, SearchDeferred } from "./lidarr";
 import { nativeAlbum, nativeArtist, directCandidates } from "./discovery";
-import { allowedQuality, conflictingAlbum, decodeTitle, matchesAlbum, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
+import { allowedQuality, conflictingAlbum, decodeTitle, matchesAlbum, needsQualityRepair, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
 import { releaseScore } from "./policy";
 import { sourceScores, withHybrid } from "./quality";
 import { qbitCapacity, releaseInfoHash } from "./qbittorrent";
@@ -41,7 +41,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
         if(seen.has(id))return false;seen.add(id);
         for(const reason of (item.rejections as string[]|undefined)??[])evidence[reason]=(evidence[reason]??0)+1;
         return allowedQuality(item,fallback)&&Number(item.seeders??0)>=2&&String(item.protocol??'torrent')==='torrent'&&matchesAlbum(item,metadata,target.artist)&&
-          (viable(item,fallback)||parserRejections(item)||Boolean(item.direct));
+          (viable(item,fallback)||parserRejections(item)||needsQualityRepair(item)||Boolean(item.direct));
       }).map(item=>{
         const source=String(item.indexer??'unknown'),sourceScore=scores.find(s=>s.name===source.replace(/ \(Prowlarr\)$/i,''))?.score??.5;
         return {item,source,score:releaseScore({seeders:Number(item.seeders),size:Number(item.size),trackCount:10,quality:releaseQuality(item),sourceScore,importRate:sourceScore})};
@@ -63,7 +63,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
         if((original.artist&&original.artist.id!==metadata.artistId)||(original.albums?.length&&!exact(original))){
           evidence['Original title resolves to a different album']=(evidence['Original title resolves to a different album']??0)+1;continue;
         }
-        const repair=Boolean(item.direct)||parserRejections(item)||!exact(original),title=repair?repairedTitle(item,metadata,target.artist):decodeTitle(String(item.title));
+        const repair=Boolean(item.direct)||parserRejections(item)||needsQualityRepair(item)||!exact(original),title=repair?repairedTitle(item,metadata,target.artist):decodeTitle(String(item.title));
         if(repair){
           catalog??=await albumCatalog(metadata.artistId);
           if(conflictingAlbum(item,metadata,catalog,target.artist)){evidence['Title names another catalogue album']=(evidence['Title names another catalogue album']??0)+1;continue}

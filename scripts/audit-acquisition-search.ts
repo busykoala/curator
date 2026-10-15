@@ -27,13 +27,13 @@ globalThis.fetch=async(input,init)=>{
  if(init?.method==='POST'){
   const release=JSON.parse(String(init.body));posts.push(release.indexer);
   assert.match(url,/release\/push/);
-  if(mode.startsWith('repair')){assert.match(url,/release\/push/);assert.equal(release.albumId,1);return Response.json({approved:mode==='repair',rejected:mode!=='repair',rejections:mode==='repair'?[]:['Too large']})}
+  if(mode.startsWith('repair')){assert.match(url,/release\/push/);assert.equal(release.albumId,1);if(mode==='repair-quality')assert.match(release.title,/FLAC 24bit/);const approved=mode==='repair'||mode==='repair-quality';return Response.json({approved,rejected:!approved,rejections:approved?[]:['Too large']})}
   if(mode==='timeout')throw new DOMException('Timed out','TimeoutError');
   if(release.indexer==='Bad')return new Response(mode==='download-failure'?'Downloading torrent failed via Prowlarr /download':'Unavailable',{status:mode==='download-failure'?500:409});
   return Response.json({approved:true,rejected:false});
  }
  if(url.includes('/release?artistId=7')){artistSearches++;return Response.json(['Second','Third'].map((title,i)=>({guid:'shared-'+i,title:'Test - '+title+' FLAC',indexer:'Good',quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:5,size:300000000,rejected:false,rejections:[]})))}
- const items=mode.startsWith('repair')?[{guid:'repair',title:'Test  Album FLAC',indexer:'Good',quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10,size:300000000,rejected:true,rejections:['Unable to parse release']}]:mode==='empty'?[]:['Bad','Bad','Good'].map((source,i)=>({guid:String(i),title:'Test - Album FLAC',indexer:source,quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10-i,size:300000000,rejected:false,rejections:[]}));
+ const items=mode.startsWith('repair')?[{guid:'repair',title:mode==='repair-quality'?'Test - Album (24bit-96kHz) FLAC':'Test  Album FLAC',indexer:'Good',quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10,size:300000000,rejected:true,rejections:mode==='repair-quality'?['400 MB is larger than maximum allowed 300 MB']:['Unable to parse release']}]:mode==='empty'?[]:['Bad','Bad','Good'].map((source,i)=>({guid:String(i),title:'Test - Album FLAC',indexer:source,quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10-i,size:300000000,rejected:false,rejections:[]}));
  return Response.json(items);
 };
 assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,false);assert.deepEqual(posts,[]);
@@ -42,6 +42,7 @@ posts=[];reset();mode='download-failure';assert.equal((await findRelease({...tar
 posts=[];reset();mode='timeout';await assert.rejects(findRelease({...targetByAlbum(1)!,last_release_guid:null},false),/Timed out/);assert.deepEqual(posts,['Bad']);
 assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,false);assert.deepEqual(posts,['Bad']);
 reset();posts=[];mode='repair';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,true);assert.deepEqual(posts,['Good']);
+reset();posts=[];mode='repair-quality';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,true);assert.deepEqual(posts,['Good']);
 reset();posts=[];mode='repair-rejected';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,false);assert.equal(db().prepare('SELECT * FROM acquisition_submissions').all().length,0);
 reset();posts=[];mode='capacity';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,false);assert.deepEqual(posts,[]);
 reset();posts=[];mode='wrong-album';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,false);assert.deepEqual(posts,[]);
