@@ -229,6 +229,7 @@ async function repairImports(items: QueueItem[], apply: boolean) {
   for (const item of items
     .filter((value) =>
       value.trackedDownloadState === "importFailed" ||
+      (value.status === 'completed' && value.trackedDownloadState === 'importPending' && Number(value.sizeleft??0)===0) ||
       (value.status === "completed" && value.trackedDownloadStatus === "warning" && Number(value.sizeleft ?? 0) === 0 &&
         value.statusMessages?.some((status) => status.messages?.some((message) => /unable to import automatically/i.test(message))))
     )

@@ -4,9 +4,13 @@ import { exactManualImport } from "../src/features/acquisition/manual-import";
 const original = globalThis.fetch;
 let albums = [42, 42];
 let submitted: Record<string, unknown> | undefined;
+let archive=false;
 globalThis.fetch = async (input, init) => {
   const url = String(input);
-  if (url.includes("/manualimport?")) return Response.json(albums.map((albumId, index) => ({
+  if (url.includes("/manualimport?")) {
+    const query=new URL(url).searchParams;
+    if(archive&&(query.has('downloadId')||query.get('folder')!=='/data/downloads/test'))return Response.json([]);
+    return Response.json(albums.map((albumId, index) => ({
     path: `/data/downloads/test/${index + 1}.flac`,
     artist: { id: 7, artistName: "Artist" },
     album: { id: albumId, title: "Album" },
@@ -14,7 +18,7 @@ globalThis.fetch = async (input, init) => {
     rejections: [],
     quality: { quality: { id: 6, name: "FLAC" } },
     albumReleaseId: 9,
-  })));
+  })));}
   if (url.endsWith("/command") && init?.method === "POST") {
     submitted = JSON.parse(String(init.body)) as Record<string, unknown>;
     return Response.json({ id: 1, status: "started" });
@@ -33,6 +37,9 @@ async function main() { try {
   submitted = undefined;
   assert.equal(await exactManualImport({ id: 2, downloadId: "other" }), false);
   assert.equal(submitted, undefined);
+  albums=[42,42];archive=true;
+  assert.notEqual(await exactManualImport({id:3,albumId:42,artistId:7,downloadId:'archive',outputPath:'/data/downloads/test.7z'}),false);
+  assert.equal(((submitted as Record<string,unknown>|undefined)?.files as unknown[]).length,2);
   console.log("Manual import audit passed: unique album identities are recovered and ambiguous mappings are rejected.");
 } finally {
   globalThis.fetch = original;

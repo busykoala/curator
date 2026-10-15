@@ -8,7 +8,7 @@ async function call<T>(path:string,init:RequestInit={}){
   const text=await response.text();return(text?JSON.parse(text):undefined)as T;
 }
 export type Wanted={id:number;artistId:number;title:string;albumType?:string;artist?:{artistName?:string};statistics?:{trackFileCount?:number;totalTrackCount?:number;percentOfTracks?:number}};
-export type QueueItem={id:number;albumId?:number;artistId?:number;title?:string;status?:string;trackedDownloadStatus?:string;trackedDownloadState?:string;size?:number;sizeleft?:number;errorMessage?:string;statusMessages?:Array<{title?:string;messages?:string[]}>;downloadId?:string;indexer?:string;trackFileCount?:number;added?:string};
+export type QueueItem={id:number;albumId?:number;artistId?:number;title?:string;status?:string;trackedDownloadStatus?:string;trackedDownloadState?:string;size?:number;sizeleft?:number;errorMessage?:string;statusMessages?:Array<{title?:string;messages?:string[]}>;downloadId?:string;indexer?:string;trackFileCount?:number;added?:string;outputPath?:string};
 // Keep each request below the timeout while Lidarr processes a cold import backlog.
 export const wantedMissing=async()=>{const size=100,first=await call<{totalRecords:number;records:Wanted[]}>(`/wanted/missing?page=1&pageSize=${size}&sortKey=title&sortDirection=ascending&monitored=true`),records=[...first.records];for(let page=2;page<=Math.ceil(first.totalRecords/size);page++)records.push(...(await call<{records:Wanted[]}>(`/wanted/missing?page=${page}&pageSize=${size}&sortKey=title&sortDirection=ascending&monitored=true`)).records);return records};
 export const queue=()=>call<{records:QueueItem[]}>("/queue?page=1&pageSize=1000&includeUnknownArtistItems=true").then(value=>value.records??[]);
@@ -63,6 +63,7 @@ export const updateArtist=(value:Record<string,unknown>&{id:number})=>call(`/art
 export const profiles=()=>call<Array<Record<string,unknown>&{id:number;name:string}>>("/qualityprofile");
 export const createProfile=(value:Record<string,unknown>)=>call<Record<string,unknown>&{id:number}>("/qualityprofile",{method:"POST",body:JSON.stringify(value)});
 export const manualImport=(downloadId:string)=>call<Array<Record<string,unknown>>>(`/manualimport?downloadId=${encodeURIComponent(downloadId)}&filterExistingFiles=true`);
+export const manualImportFolder=(folder:string,artistId?:number)=>call<Array<Record<string,unknown>>>('/manualimport?'+new URLSearchParams({folder,...(artistId?{artistId:String(artistId)}:{}),filterExistingFiles:'true'}));
 type Command={id:number;status?:string;message?:string;body?:{message?:string}};
 export async function importFiles(files:Record<string,unknown>[]){
   const started=await call<Command>("/command",{method:"POST",body:JSON.stringify({name:"ManualImport",files,importMode:"auto"})});
