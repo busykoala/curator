@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 export type CatalogAlbum = {
   id: number; artistId: number; title: string; monitored: boolean;
-  releaseDate?: string; secondaryTypes?: string[]; disambiguation?: string;
+  releaseDate?: string; albumType?:string; secondaryTypes?: string[]; disambiguation?: string;
   releases?: Array<{ title: string }>;
   statistics?: { trackFileCount?: number; percentOfTracks?: number };
 };
@@ -52,8 +52,11 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string)
     // formatting. Only known edition/format/year descriptors can be discarded.
     if(significant(part[1]).some(w=>!technical.has(w)&&!/^\d+(?:st|nd|rd|th|bit|kbps|khz)?$/.test(w)))return false;
   }
-  for (const variant of ["instrumental", "karaoke", "tribute", "live", "remix", "acoustic"])
-    if (new RegExp(`\\b${variant}s?\\b`, "i").test(raw) && !new RegExp(`\\b${variant}s?\\b`, "i").test(metadata)) return false;
+  for (const variant of ["instrumental", "karaoke", "tribute", "live", "remix", "acoustic"]){
+    const suffix=variant==='remix'?'(?:es|ed)?':'s?';
+    if (new RegExp(`\\b${variant}${suffix}\\b`, "i").test(raw) && !new RegExp(`\\b${variant}${suffix}\\b`, "i").test(metadata)) return false;
+  }
+  if(/\bEP\b/.test(raw)&&album.albumType?.toLowerCase()!=='ep'&&!/\bEP\b/.test(album.title))return false;
   if (/\b(discography|complete collection|complete albums|reimagined|revisited|return to)\b/i.test(raw)) return false;
   if (/\b(BDRip|HDRip|HDTV|720p|1080p|2160p)\b|\.(mkv|mp4|avi)\b/i.test(raw)) return false;
   for (const range of raw.matchAll(/\b((?:19|20)\d{2})\s*(?:to|[-–—])\s*((?:19|20)\d{2})\b/gi))
