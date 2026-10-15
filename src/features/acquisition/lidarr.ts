@@ -1,6 +1,7 @@
 import { config } from "@/config";
 import { db } from "@/features/db/client";
 import type { CatalogAlbum, Release } from "./matching";
+import {releaseInfoHash} from './qbittorrent';
 async function call<T>(path:string,init:RequestInit={}){
   const response=await fetch(`${config.LIDARR_URL}/api/v1${path}`,{...init,headers:{"X-Api-Key":config.LIDARR_API_KEY,"Content-Type":"application/json",...init.headers},signal:AbortSignal.timeout(60_000)});
   if(response.status===429){const value=response.headers.get('retry-after')??'';const seconds=Number(value);const retry=seconds>0?Date.now()+seconds*1000:Date.parse(value);throw new SearchDeferred(new Date(Number.isFinite(retry)?retry:Date.now()+900_000).toISOString(),'Lidarr rate limited')}
@@ -19,15 +20,15 @@ export const album=(id:number)=>call<CatalogAlbum>(`/album/${id}`);
 export const parseRelease=(title:string)=>call<{artist?:{id:number};albums?:Array<{id:number}>}>(`/parse?title=${encodeURIComponent(title)}`);
 export const albumCatalog=(artistId:number)=>call<CatalogAlbum[]>(`/album?artistId=${artistId}`);
 export const artistReleases=(artistId:number)=>call<Release[]>(`/release?artistId=${artistId}`);
-let blockedCache:{expires:number;titles:Set<string>}|undefined;
+let blockedCache:{expires:number;titles:Set<string>;hashes:Set<string>}|undefined;
 const blockedKey=(title:string)=>title.replace(/&amp;/gi,'&').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
 export async function releaseIsBlocked(item:Release){
   if(!blockedCache||blockedCache.expires<Date.now()){
-    const titles=new Set<string>();let page=1,total=Infinity;
-    while((page-1)*100<total){const x=await call<{totalRecords:number;records:Array<{sourceTitle:string}>}>(`/blocklist?page=${page}&pageSize=100&sortKey=date&sortDirection=descending`);total=x.totalRecords;for(const r of x.records)titles.add(blockedKey(r.sourceTitle));page++}
-    blockedCache={expires:Date.now()+300_000,titles};
+    const titles=new Set<string>(),hashes=new Set<string>();let page=1,total=Infinity;
+    while((page-1)*100<total){const x=await call<{totalRecords:number;records:Array<{sourceTitle:string;torrentInfoHash?:string}>}>(`/blocklist?page=${page}&pageSize=100&sortKey=date&sortDirection=descending`);total=x.totalRecords;for(const r of x.records){titles.add(blockedKey(r.sourceTitle));if(r.torrentInfoHash)hashes.add(r.torrentInfoHash.toLowerCase())}page++}
+    blockedCache={expires:Date.now()+300_000,titles,hashes};
   }
-  return blockedCache.titles.has(blockedKey(String(item.title??'')));
+  return blockedCache.titles.has(blockedKey(String(item.title??'')))||blockedCache.hashes.has(releaseInfoHash(item));
 }
 export class SearchDeferred extends Error {
   constructor(public retryAt: string, message: string) { super(message); }
