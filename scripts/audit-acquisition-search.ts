@@ -25,10 +25,11 @@ globalThis.fetch=async(input,init)=>{
  assert.match(url,/\/api\/v1\/release/);
  if(init?.method==='POST'){
   const release=JSON.parse(String(init.body));posts.push(release.indexer);
+  assert.match(url,/release\/push/);
   if(mode.startsWith('repair')){assert.match(url,/release\/push/);assert.equal(release.albumId,1);return Response.json({approved:mode==='repair',rejected:mode!=='repair',rejections:mode==='repair'?[]:['Too large']})}
   if(mode==='timeout')throw new DOMException('Timed out','TimeoutError');
   if(release.indexer==='Bad')return new Response(mode==='download-failure'?'Downloading torrent failed via Prowlarr /download':'Unavailable',{status:mode==='download-failure'?500:409});
-  return new Response('{}',{status:200});
+  return Response.json({approved:true,rejected:false});
  }
  if(url.includes('/release?artistId=7')){artistSearches++;return Response.json(['Second','Third'].map((title,i)=>({guid:'shared-'+i,title:'Test - '+title+' FLAC',indexer:'Good',quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:5,size:300000000,rejected:false,rejections:[]})))}
  const items=mode.startsWith('repair')?[{guid:'repair',title:'Test  Album FLAC',indexer:'Good',quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10,size:300000000,rejected:true,rejections:['Unable to parse release']}]:mode==='empty'?[]:['Bad','Bad','Good'].map((source,i)=>({guid:String(i),title:'Test - Album FLAC',indexer:source,quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10-i,size:300000000,rejected:false,rejections:[]}));

@@ -1,13 +1,12 @@
-import { config } from "@/config";
 import { db } from "@/features/db/client";
 import type { AcquisitionTarget } from "./types";
-import { album, grabRelease, parseRelease, pushRelease, releaseIsBlocked, SearchDeferred } from "./lidarr";
+import { album, parseRelease, pushRelease, releaseIsBlocked, SearchDeferred } from "./lidarr";
 import { nativeAlbum, nativeArtist, directCandidates } from "./discovery";
 import { allowedQuality, decodeTitle, matchesAlbum, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
 import { releaseScore } from "./policy";
 import { sourceScores, withHybrid } from "./quality";
-import { qbitCapacity, qbitTorrent, releaseInfoHash, removeTorrent } from "./qbittorrent";
-import { destructiveAllowed, intervene, updateTarget } from "./repository";
+import { qbitCapacity, releaseInfoHash } from "./qbittorrent";
+import { updateTarget } from "./repository";
 
 export function viable(item:Release,fallback:boolean){return allowedQuality(item,fallback)&&String(item.protocol??"torrent")==="torrent"&&Number(item.seeders??0)>=2&&!(item.rejections as unknown[]|undefined)?.length&&!item.rejected}
 export function confirmedGrabConflict(error:unknown){const message=String(error);return/Lidarr \/release failed \(409\)/.test(message)||(/Lidarr \/release failed \(500\)/.test(message)&&/409:Conflict/.test(message)&&/qbittorrent|torrents\/add/i.test(message))}
@@ -15,7 +14,7 @@ export function confirmedCandidateFailure(error:unknown){
   const message=String(error);
   if(/Lidarr \/release\/push failed \((?:400|409)\)/.test(message))return true;
   return confirmedGrabConflict(error)||(
-    /Lidarr \/release failed \((?:429|5\d\d)\)/.test(message)&&
+    /Lidarr \/release(?:\/push)? failed \((?:429|5\d\d)\)/.test(message)&&
     /Downloading torrent failed|Download failed|ReleaseDownloadException|prowlarr.*\/download|\/download\?/i.test(message)
   );
 }
@@ -62,7 +61,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
         if((original.artist&&original.artist.id!==metadata.artistId)||(original.albums?.length&&!exact(original))){
           evidence['Original title resolves to a different album']=(evidence['Original title resolves to a different album']??0)+1;continue;
         }
-        const repair=Boolean(item.direct)||parserRejections(item)||!exact(original),title=repair?repairedTitle(item,metadata,target.artist):String(item.title);
+        const repair=Boolean(item.direct)||parserRejections(item)||!exact(original),title=repair?repairedTitle(item,metadata,target.artist):decodeTitle(String(item.title));
         if(repair){const parsed=await parseRelease(title);if(parsed.artist?.id!==metadata.artistId||parsed.albums?.length!==1||parsed.albums[0].id!==metadata.id){evidence['Ambiguous normalized album identity']=(evidence['Ambiguous normalized album identity']??0)+1;continue}}
         tried++;
         const capacity=await qbitCapacity(),size=Number(item.size)||0;
@@ -75,23 +74,12 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
           db().prepare("INSERT INTO acquisition_submissions(target_id,guid,status,detail_json) VALUES(?,?,'submitting',?) ON CONFLICT(target_id) DO UPDATE SET guid=excluded.guid,status='submitting',detail_json=excluded.detail_json,created_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP").run(target.id,String(item.guid),JSON.stringify({rawTitle:item.title,title,source,repair,size}));
         }).immediate();
         try{
-          if(repair){
-            // Re-run all Lidarr decision specifications; manual cached grabs
-            // would bypass size, quality, monitoring and blocklist checks.
-            const result=await pushRelease({...item,title,albumId:metadata.id,artistId:metadata.artistId,...(item.direct?{indexerId:0}:{})});
-            if(!result.approved||result.rejected){
-              for(const reason of (result.rejections as string[]|undefined)??['Release push was not approved'])evidence[reason]=(evidence[reason]??0)+1;
-              db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);continue;
-            }
-          }else{
-            try{await grabRelease(item)}catch(error){
-              if(!confirmedGrabConflict(error))throw error;
-              const hash=releaseInfoHash(item),torrent=hash?await qbitTorrent(hash):undefined;
-              if(!torrent||torrent.category!==config.QBITTORRENT_CATEGORY||torrent.progress<1||!destructiveAllowed())throw error;
-              await removeTorrent(hash,false);
-              intervene({targetId:target.id,hash,action:'cleanup',status:'applied',evidence:{reason:'Completed duplicate record removed; payload preserved'}});
-              await new Promise(r=>setTimeout(r,1000));await grabRelease(item);
-            }
+          // Always re-evaluate the verified title. Cached manual grabs reuse a
+          // RemoteAlbum which may resolve differently from the current parse.
+          const result=await pushRelease({...item,title,albumId:metadata.id,artistId:metadata.artistId,...(item.direct?{indexerId:0}:{})});
+          if(!result.approved||result.rejected){
+            for(const reason of (result.rejections as string[]|undefined)??['Release push was not approved'])evidence[reason]=(evidence[reason]??0)+1;
+            db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);continue;
           }
         }catch(error){
           if(error instanceof SearchDeferred){db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);throw error}
