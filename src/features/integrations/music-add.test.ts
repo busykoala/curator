@@ -48,6 +48,8 @@ test("adding a new single uses bounded lookups, waits for its catalogue, and mon
     assert.equal(release.monitored, true);
     assert.equal(catalogueReads, 2);
     assert.equal((db().prepare("SELECT origin FROM acquisition_targets WHERE lidarr_album_id=91").get() as {origin:string}).origin, "user");
+    assert.equal((db().prepare("SELECT value FROM state WHERE key='acquisition_requested_action'").get() as {value:string}).value,'run');
+    assert.ok((db().prepare('SELECT wanted_since FROM acquisition_targets WHERE lidarr_album_id=91').get() as {wanted_since:string}).wanted_since);
   } finally {
     globalThis.fetch = fetchBefore;
     db().close(); delete (globalThis as {curatorDb?:unknown}).curatorDb;

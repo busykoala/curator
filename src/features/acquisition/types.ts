@@ -9,6 +9,8 @@ export type AcquisitionTarget = {
   last_release_guid:string|null; detail_json?:string;
   search_count?:number;
   created_at:string;
+  wanted_since?:string|null;
+  album_type?:string;
 };
 export type DownloadObservation = {
   targetId:number|null; hash:string; state:string; downloaded:number; amountLeft:number;

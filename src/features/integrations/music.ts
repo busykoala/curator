@@ -1,5 +1,6 @@
 import { config } from "@/config";
 import { upsertTarget } from "@/features/acquisition/repository";
+import {db,stateSet} from '@/features/db/client';
 import type { TargetOrigin } from "@/features/acquisition/types";
 import { searchCatalogueReleaseGroups } from "@/features/sources/musicbrainz";
 import { searchMusicCatalogue } from "./music-search";
@@ -43,7 +44,7 @@ type LidarrAlbum = Record<string, unknown> & RequestedRelease & {
   id: number;
   foreignAlbumId?: string;
   monitored?: boolean;
-  statistics?: { trackCount?: number };
+  statistics?: { trackCount?: number; percentOfTracks?: number };
 };
 
 const wait = (milliseconds: number) =>
@@ -143,6 +144,9 @@ export async function addMusic(foreignArtistId: string, albumForeignIds: string[
     });
   }
   for (const album of monitored) upsertTarget({ albumId: album.id, artistId, origin, artist: String((album.artist as { artistName?: string } | undefined)?.artistName ?? ""), title: String(album.title ?? "") });
+  for(const album of monitored)if(Number(album.statistics?.percentOfTracks??0)<100)
+    db().prepare("UPDATE acquisition_targets SET status='pending',wanted_since=CURRENT_TIMESTAMP,next_retry_at=NULL,attempts_today=0,updated_at=CURRENT_TIMESTAMP WHERE lidarr_album_id=? AND status NOT IN ('queued','downloading','downloaded')").run(album.id);
+  stateSet('acquisition_requested_action','run');
   return { artistId, albumIds: monitored.map((album) => album.id), albums: monitored.map((album)=>({id:album.id,foreignAlbumId:String(album.foreignAlbumId??""),artist:String((album.artist as {artistName?:string}|undefined)?.artistName??""),title:String(album.title??"")})), selectedAlbums: monitored.length, alreadyPresent: Boolean(existing), searchQueued: false, controllerQueued: true };
 }
 

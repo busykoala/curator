@@ -160,6 +160,7 @@ function migrate(instance: Database.Database) {
       "CREATE TABLE IF NOT EXISTS listener_preferences(user_id INTEGER PRIMARY KEY REFERENCES curator_users(id) ON DELETE CASCADE,appearance TEXT NOT NULL DEFAULT 'system')",
     );
   });
+  migration(12,()=>addColumns(instance,"acquisition_targets",[["wanted_since","TEXT"]]));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

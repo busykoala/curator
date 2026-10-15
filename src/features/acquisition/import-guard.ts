@@ -1,4 +1,10 @@
 type Row=Record<string,unknown>;
+export function helperFolders(folder:string){
+  if(!folder.startsWith('/data/downloads/')||folder.split('/').includes('..'))return [];
+  const original=folder.replace(/\/$/,'');
+  const stripped=original.replace(/\.(?:tar\.gz|tgz|7z|rar|zip)$/i,'');
+  return [...new Set([original,...(stripped.length>'/data/downloads/'.length?[stripped]:[])])];
+}
 /** Validate a helper's proposed import against fresh, authoritative Lidarr rows. */
 export function validateHelperImport(body:Row,queue:Row[],rows:Row[]) {
   if(body.name!=='ManualImport'||!Array.isArray(body.files)||!body.files.length||body.files.length>500)return false;

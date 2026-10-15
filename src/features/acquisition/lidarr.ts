@@ -1,8 +1,13 @@
 import { config } from "@/config";
 import { db } from "@/features/db/client";
 import type { CatalogAlbum, Release } from "./matching";
-async function call<T>(path:string,init:RequestInit={}){const response=await fetch(`${config.LIDARR_URL}/api/v1${path}`,{...init,headers:{"X-Api-Key":config.LIDARR_API_KEY,"Content-Type":"application/json",...init.headers},signal:AbortSignal.timeout(60_000)});if(!response.ok)throw new Error(`Lidarr ${path} failed (${response.status}): ${await response.text()}`);const text=await response.text();return(text?JSON.parse(text):undefined)as T}
-export type Wanted={id:number;artistId:number;title:string;artist?:{artistName?:string};statistics?:{trackFileCount?:number;totalTrackCount?:number;percentOfTracks?:number}};
+async function call<T>(path:string,init:RequestInit={}){
+  const response=await fetch(`${config.LIDARR_URL}/api/v1${path}`,{...init,headers:{"X-Api-Key":config.LIDARR_API_KEY,"Content-Type":"application/json",...init.headers},signal:AbortSignal.timeout(60_000)});
+  if(response.status===429){const value=response.headers.get('retry-after')??'';const seconds=Number(value);const retry=seconds>0?Date.now()+seconds*1000:Date.parse(value);throw new SearchDeferred(new Date(Number.isFinite(retry)?retry:Date.now()+900_000).toISOString(),'Lidarr rate limited')}
+  if(!response.ok){const detail=(await response.text()).replace(/([?&]apikey=)[^&\s"<]+/gi,'$1[redacted]');throw new Error(`Lidarr ${path} failed (${response.status}): ${detail}`)}
+  const text=await response.text();return(text?JSON.parse(text):undefined)as T;
+}
+export type Wanted={id:number;artistId:number;title:string;albumType?:string;artist?:{artistName?:string};statistics?:{trackFileCount?:number;totalTrackCount?:number;percentOfTracks?:number}};
 export type QueueItem={id:number;albumId?:number;artistId?:number;title?:string;status?:string;trackedDownloadStatus?:string;trackedDownloadState?:string;size?:number;sizeleft?:number;errorMessage?:string;statusMessages?:Array<{title?:string;messages?:string[]}>;downloadId?:string;indexer?:string;trackFileCount?:number;added?:string};
 // Keep each request below the timeout while Lidarr processes a cold import backlog.
 export const wantedMissing=async()=>{const size=100,first=await call<{totalRecords:number;records:Wanted[]}>(`/wanted/missing?page=1&pageSize=${size}&sortKey=title&sortDirection=ascending&monitored=true`),records=[...first.records];for(let page=2;page<=Math.ceil(first.totalRecords/size);page++)records.push(...(await call<{records:Wanted[]}>(`/wanted/missing?page=${page}&pageSize=${size}&sortKey=title&sortDirection=ascending&monitored=true`)).records);return records};

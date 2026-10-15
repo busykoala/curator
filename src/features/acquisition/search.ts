@@ -6,7 +6,7 @@ import { nativeAlbum, nativeArtist, directCandidates } from "./discovery";
 import { allowedQuality, matchesAlbum, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
 import { releaseScore } from "./policy";
 import { sourceScores, withHybrid } from "./quality";
-import { qbitTorrent, releaseInfoHash, removeTorrent } from "./qbittorrent";
+import { qbitCapacity, qbitTorrent, releaseInfoHash, removeTorrent } from "./qbittorrent";
 import { destructiveAllowed, intervene, updateTarget } from "./repository";
 
 export function viable(item:Release,fallback:boolean){return allowedQuality(item,fallback)&&String(item.protocol??"torrent")==="torrent"&&Number(item.seeders??0)>=2&&!(item.rejections as unknown[]|undefined)?.length&&!item.rejected}
@@ -48,12 +48,24 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
       }).sort((a,b)=>b.score-a.score);
       for(const {item,source,score} of candidates) {
         if(failedSources.has(source))continue;
+        const hash=releaseInfoHash(item);
+        if(hash&&db().prepare("SELECT 1 FROM source_outcomes WHERE event IN ('replacement','unavailable') AND lower(json_extract(detail_json,'$.hash'))=? AND created_at>=datetime('now','-1 day') LIMIT 1").get(hash)){
+          evidence['Recently failed torrent hash']=(evidence['Recently failed torrent hash']??0)+1;continue;
+        }
         if(await releaseIsBlocked(item)){evidence['Previously blocklisted release']=(evidence['Previously blocklisted release']??0)+1;continue}
         if(tried>=3)return false;
         const repair=Boolean(item.direct)||parserRejections(item),title=repair?repairedTitle(item,metadata,target.artist):String(item.title);
         if(repair){const parsed=await parseRelease(title);if(parsed.artist?.id!==metadata.artistId||parsed.albums?.length!==1||parsed.albums[0].id!==metadata.id){evidence['Ambiguous normalized album identity']=(evidence['Ambiguous normalized album identity']??0)+1;continue}}
         tried++;
-        db().prepare("INSERT INTO acquisition_submissions(target_id,guid,status,detail_json) VALUES(?,?,'submitting',?) ON CONFLICT(target_id) DO UPDATE SET guid=excluded.guid,status='submitting',detail_json=excluded.detail_json,created_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP").run(target.id,String(item.guid),JSON.stringify({rawTitle:item.title,title,source,repair}));
+        const capacity=await qbitCapacity(),size=Number(item.size)||0;
+        if(size<=0){evidence['Unknown release size']=(evidence['Unknown release size']??0)+1;continue}
+        db().transaction(()=>{
+          const pending=db().prepare("SELECT count(*) n,coalesce(sum(json_extract(detail_json,'$.size')),0) bytes FROM acquisition_submissions WHERE status IN ('submitting','accepted')").get() as {n:number;bytes:number};
+          const required=capacity.bytesLeft+pending.bytes+size;
+          if(capacity.incomplete+pending.n>=96||required>100*1024**3||!Number.isFinite(capacity.freeBytes)||capacity.freeBytes<required+20*1024**3)
+            throw new SearchDeferred(new Date(Date.now()+60_000).toISOString(),'Waiting for download or storage capacity');
+          db().prepare("INSERT INTO acquisition_submissions(target_id,guid,status,detail_json) VALUES(?,?,'submitting',?) ON CONFLICT(target_id) DO UPDATE SET guid=excluded.guid,status='submitting',detail_json=excluded.detail_json,created_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP").run(target.id,String(item.guid),JSON.stringify({rawTitle:item.title,title,source,repair,size}));
+        }).immediate();
         try{
           if(repair){
             // Re-run all Lidarr decision specifications; manual cached grabs

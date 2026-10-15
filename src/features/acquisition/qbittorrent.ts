@@ -6,6 +6,11 @@ export type Torrent={hash:string;name:string;state:string;category:string;downlo
 export const qbitTorrents=()=>call(`/torrents/info?category=${encodeURIComponent(config.QBITTORRENT_CATEGORY)}`) as Promise<Torrent[]>;
 export const qbitTorrent=(hash:string)=>call(`/torrents/info?hashes=${encodeURIComponent(hash)}`).then(value=>(value as Torrent[])[0]);
 export const qbitTransfer=()=>call("/transfer/info") as Promise<{dl_info_speed:number;dl_info_data:number;connection_status:string}>;
+export async function qbitCapacity(){
+  const data=await call('/sync/maindata') as {server_state:{free_space_on_disk:number};torrents:Record<string,{progress:number;amount_left:number}>};
+  const incomplete=Object.values(data.torrents).filter(t=>t.progress<1);
+  return {incomplete:incomplete.length,bytesLeft:incomplete.reduce((n,t)=>n+Number(t.amount_left||0),0),freeBytes:Number(data.server_state.free_space_on_disk)};
+}
 export const qbitPreferences=()=>call("/app/preferences") as Promise<Record<string,unknown>>;
 export const setPreferences=(values:Record<string,unknown>)=>call("/app/setPreferences",{json:JSON.stringify(values)});
 export const reannounce=(hash:string)=>call("/torrents/reannounce",{hashes:hash});

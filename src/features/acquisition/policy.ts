@@ -85,6 +85,8 @@ export function orderSearchTargets(
   return [...values].sort((a, b) => {
     const difference = rank(a) - rank(b);
     if (difference) return difference;
+    const albumRank=(t:AcquisitionTarget)=>!t.album_type||t.album_type==='Album'?0:1;
+    if(rank(a)===3&&albumRank(a)!==albumRank(b))return albumRank(a)-albumRank(b);
     if (rank(a) < 3)
       return time(b.created_at) - time(a.created_at) || a.id - b.id;
     const unsearched =
@@ -176,9 +178,8 @@ export function stalledDecision(
   ageHours = 0,
 ): InterventionDecision | null {
   const progressed = Boolean(previous && now.downloaded > previous.downloaded);
-  if (progressed || now.speed > 0 || now.connectedSeeds > 0) return null;
   const metadata = now.progress === 0 && now.amountLeft === 0;
-  if (metadata && ageHours >= 2)
+  if (metadata && ageHours >= 1/3 && !progressed && now.speed===0)
     return {
       action: "replace",
       reason: "Magnet metadata remained unavailable after reannounces",
@@ -186,6 +187,7 @@ export function stalledDecision(
       targetId: target.id,
       hash: now.hash,
     };
+  if (progressed || now.speed > 0 || now.connectedSeeds > 0) return null;
   if (now.progress === 0 && now.availability === 0 && ageHours >= 2)
     return {
       action: "replace",

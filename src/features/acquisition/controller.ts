@@ -121,7 +121,7 @@ export async function synchronizeTargets(wanted: Wanted[], queueItems:QueueItem[
     if(missing.has(target.lidarr_album_id)){
       if(['imported','inactive'].includes(target.status)){
         db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);
-        updateTarget(target.id,{status:'pending',imported_at:null,download_hash:null,first_queued_at:null,last_progress_at:null,last_size_left:null,next_retry_at:null});
+        updateTarget(target.id,{status:'pending',wanted_since:iso(),attempts_today:0,attempts_day:null,imported_at:null,download_hash:null,first_queued_at:null,last_progress_at:null,last_size_left:null,next_retry_at:null});
       }else if(!active.has(target.lidarr_album_id)&&['queued','downloading','downloaded'].includes(target.status)){
         const pending=db().prepare("SELECT status FROM acquisition_submissions WHERE target_id=?").get(target.id) as {status:string}|undefined;
         if(!pending||pending.status==='confirmed'){
@@ -137,7 +137,7 @@ export async function synchronizeTargets(wanted: Wanted[], queueItems:QueueItem[
     const actual=await album(target.lidarr_album_id).catch(()=>null);
     if(!actual)continue;
     if((actual.statistics?.percentOfTracks??0)>=100&&(actual.statistics?.trackFileCount??0)>0){
-      recordSourceOutcomeOnce(target,'import',target.download_hash??`album:${target.lidarr_album_id}`);
+      if(target.download_hash)recordSourceOutcomeOnce(target,'import',target.download_hash);
       updateTarget(target.id,{status:'imported',imported_at:iso(),next_retry_at:null});
       db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);
     }else if(!actual.monitored){
@@ -210,7 +210,7 @@ async function replace(
     return;
   }
   await blocklistQueue(item);
-  recordSourceOutcome(target, "replacement", { reason });
+  recordSourceOutcomeOnce(target, "replacement",target.download_hash??item.downloadId??'', { reason });
   updateTarget(target.id, {
     status: "pending",
     download_hash: null,
@@ -467,9 +467,10 @@ async function searchWork(
   queueItems: QueueItem[],
   apply: boolean,
   incomplete: number,
-  currentWanted: Set<number>,
+  wanted: Wanted[],
 ) {
   if(incomplete>=96)return;
+  const currentWanted=new Set(wanted.map(a=>a.id)),wantedTypes=new Map(wanted.map(a=>[a.id,a.albumType]));
   const settings = runtimeSettings(),
     active = new Set(queueItems.map((item) => item.albumId)),
     now = Date.now(),
@@ -488,7 +489,7 @@ async function searchWork(
         )
         .all() as AcquisitionTarget[]
     ).filter((target) => !active.has(target.lidarr_album_id) && currentWanted.has(target.lidarr_album_id)),
-    ordered = orderSearchTargets(rows.map(target=>({...target,origin:
+    ordered = orderSearchTargets(rows.map(target=>({...target,created_at:target.wanted_since??target.created_at,album_type:wantedTypes.get(target.lidarr_album_id),origin:
       JSON.parse(target.detail_json??'{}').operatorRetry||db().prepare('SELECT 1 FROM music_requests WHERE lidarr_album_id=?').get(target.lidarr_album_id)?'user':target.origin==='playlist'?'playlist':'migration'})), now),
     quota = apply
       ? acquisitionQuota(recovering)
@@ -722,7 +723,7 @@ export async function runAcquisitionCycle() {
     await tune(torrents, apply);
     await cleanupImported(torrents, apply);
     stateSet("acquisition_phase", "searching");
-    await searchWork(mode, queueItems, apply, incomplete.length, new Set(wanted.map(a=>a.id)));
+    await searchWork(mode, queueItems, apply, incomplete.length, wanted);
     if (Date.now() - Number(stateGet("source_test_at", "0")) > 6 * 3_600_000) {
       await maintainSources(apply);
       stateSet("source_test_at", String(Date.now()));

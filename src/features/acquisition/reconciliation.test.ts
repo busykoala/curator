@@ -25,6 +25,6 @@ test('unmonitoring is not an import, actual completed files are confirmed once, 
     assert.equal(targetByAlbum(1)?.status,'inactive');assert.equal(targetByAlbum(2)?.status,'imported');
     await synchronizeTargets([]);
     assert.equal((db().prepare("SELECT count(*) n FROM source_outcomes WHERE event='import'").get() as {n:number}).n,1);
-    await synchronizeTargets([{id:1,artistId:10,title:'First'}]);assert.equal(targetByAlbum(1)?.status,'pending');
+    await synchronizeTargets([{id:1,artistId:10,title:'First'}]);assert.equal(targetByAlbum(1)?.status,'pending');assert.ok(targetByAlbum(1)?.wanted_since);
   }finally{globalThis.fetch=original}
 });

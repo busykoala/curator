@@ -9,6 +9,7 @@ export function hasArtistCache(id:number){return (cache.get(`artist:${id}`)?.exp
 async function cached(key:string,work:()=>Promise<Release[]>) {
   const saved=cache.get(key);
   if(saved&&saved.expires>Date.now())return saved.work;
+  if(cache.size>128)for(const [old,entry] of cache)if(entry.expires<Date.now())cache.delete(old);
   const promise=work();cache.set(key,{expires:Date.now()+10*60_000,work:promise});
   try{return await promise}catch(error){cache.delete(key);throw error}
 }
