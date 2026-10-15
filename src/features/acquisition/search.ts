@@ -49,10 +49,10 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
       for(const {item,source,score} of candidates) {
         if(failedSources.has(source))continue;
         const hash=releaseInfoHash(item);
-        if(hash&&db().prepare("SELECT 1 FROM source_outcomes WHERE event IN ('replacement','unavailable') AND lower(json_extract(detail_json,'$.hash'))=? AND created_at>=datetime('now','-1 day') LIMIT 1").get(hash)){
+        if(hash&&db().prepare("SELECT 1 FROM source_outcomes WHERE event IN ('replacement','unavailable','submission_failure') AND lower(json_extract(detail_json,'$.hash'))=? AND created_at>=datetime('now','-1 day') LIMIT 1").get(hash)){
           evidence['Recently failed torrent hash']=(evidence['Recently failed torrent hash']??0)+1;continue;
         }
-        if(db().prepare("SELECT 1 FROM source_outcomes WHERE event='replacement' AND json_extract(detail_json,'$.guid')=? AND created_at>=datetime('now','-1 day') LIMIT 1").get(String(item.guid))){evidence['Recently failed source release']=(evidence['Recently failed source release']??0)+1;continue}
+        if(db().prepare("SELECT 1 FROM source_outcomes WHERE event IN ('replacement','submission_failure') AND json_extract(detail_json,'$.guid')=? AND created_at>=datetime('now','-1 day') LIMIT 1").get(String(item.guid))){evidence['Recently failed source release']=(evidence['Recently failed source release']??0)+1;continue}
         if(await releaseIsBlocked(item)){evidence['Previously blocklisted release']=(evidence['Previously blocklisted release']??0)+1;continue}
         if(tried>=3)return false;
         // Artist search results may be approved for a different album (including
@@ -77,7 +77,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
           const required=capacity.bytesLeft+pending.bytes+size;
           if(capacity.incomplete+pending.n>=96||required>100*1024**3||!Number.isFinite(capacity.freeBytes)||capacity.freeBytes<required+20*1024**3)
             throw new SearchDeferred(new Date(Date.now()+60_000).toISOString(),'Waiting for download or storage capacity');
-          db().prepare("INSERT INTO acquisition_submissions(target_id,guid,status,detail_json) VALUES(?,?,'submitting',?) ON CONFLICT(target_id) DO UPDATE SET guid=excluded.guid,status='submitting',detail_json=excluded.detail_json,created_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP").run(target.id,String(item.guid),JSON.stringify({rawTitle:item.title,title,source,repair,size}));
+          db().prepare("INSERT INTO acquisition_submissions(target_id,guid,status,detail_json) VALUES(?,?,'submitting',?) ON CONFLICT(target_id) DO UPDATE SET guid=excluded.guid,status='submitting',detail_json=excluded.detail_json,created_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP").run(target.id,String(item.guid),JSON.stringify({rawTitle:item.title,title,source,repair,size,hash}));
         }).immediate();
         try{
           // Always re-evaluate the verified title. Cached manual grabs reuse a

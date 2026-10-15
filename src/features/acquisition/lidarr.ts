@@ -20,6 +20,7 @@ export const album=(id:number)=>call<CatalogAlbum>(`/album/${id}`);
 export const parseRelease=(title:string)=>call<{artist?:{id:number};albums?:Array<{id:number}>}>(`/parse?title=${encodeURIComponent(title)}`);
 export const albumCatalog=(artistId:number)=>call<CatalogAlbum[]>(`/album?artistId=${artistId}`);
 export const artistReleases=(artistId:number)=>call<Release[]>(`/release?artistId=${artistId}`);
+export const grabsSince=(date:string)=>call<Array<{sourceTitle:string;downloadId?:string;albumId?:number;data?:{torrentInfoHash?:string}}>>('/history/since?'+new URLSearchParams({date,eventType:'1'}));
 let blockedCache:{expires:number;titles:Set<string>;hashes:Set<string>}|undefined;
 const blockedKey=(title:string)=>title.replace(/&amp;/gi,'&').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
 export async function releaseIsBlocked(item:Release){

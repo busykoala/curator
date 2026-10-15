@@ -46,6 +46,7 @@ import { findRelease } from "./search";
 import { hasArtistCache } from "./discovery";
 import { maintainSources } from "./prowlarr";
 import { exactManualImport } from "./manual-import";
+import {reconcileSubmissions} from './submissions';
 import type { AcquisitionTarget, DownloadObservation } from "./types";
 
 let running = false,
@@ -628,6 +629,7 @@ export async function runAcquisitionCycle() {
       db().prepare("UPDATE acquisition_submissions SET status='confirmed',updated_at=CURRENT_TIMESTAMP WHERE target_id=?").run(target.id);
       recordSourceOutcomeOnce(target,'grab',item.downloadId.toLowerCase());
     }
+    if(apply)await reconcileSubmissions(queueItems).catch(error=>console.warn(JSON.stringify({event:'acquisition_confirmation_error',error:String(error)})));
     const observations = torrents.map((item) => {
       const queued = queueByHash.get(item.hash.toLowerCase()),
         target = queued?.albumId

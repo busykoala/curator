@@ -1,6 +1,6 @@
 import { z } from "zod";
 const schema = z.object({
-  MUSIC_ROOT: z.string().default("/music"), CURATOR_DB_PATH: z.string().optional(), DATABASE_PATH: z.string().optional(),
+  MUSIC_ROOT: z.string().default("/music"), LIDARR_MUSIC_ROOT:z.string().default('/data/library'), CURATOR_DB_PATH: z.string().optional(), DATABASE_PATH: z.string().optional(),
   LIDARR_URL: z.string().url().default("http://lidarr:8686"), LIDARR_API_KEY: z.string().default(""),
   CURATOR_AI_API_KEY: z.string().default(""), CURATOR_AI_BASE_URL: z.string().url().default("http://inference-api.inference.svc.cluster.local:8080/v1"), CURATOR_AI_MODEL: z.string().default("curator"),
   PROWLARR_URL: z.string().url().default("http://prowlarr:9696"), PROWLARR_API_KEY: z.string().default(""),
