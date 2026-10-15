@@ -77,3 +77,9 @@ test("observation mode changes neither source settings nor recovery ownership", 
     expected: false,
   });
 });
+test('an exhausted indexer quota is not recorded as a hard failure or used to disable it',async()=>{
+  db().exec('DELETE FROM state; DELETE FROM source_outcomes;');
+  const original=globalThis.fetch;
+  globalThis.fetch=async(input)=>String(input).endsWith('/indexer')?Response.json([{id:1,name:'Limited',enable:true,priority:25}]):new Response('Query limit reached',{status:429});
+  try{await maintainSources(true);assert.equal((db().prepare('SELECT count(*) n FROM source_outcomes').get() as {n:number}).n,0);assert.equal(stateGet('source_health_1'),'')}finally{globalThis.fetch=original}
+});

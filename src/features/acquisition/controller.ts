@@ -4,6 +4,7 @@ import {
   blocklistQueue,
   queue,
   wantedMissing,
+  album,
   type QueueItem,
   type Wanted,
 } from "./lidarr";
@@ -19,7 +20,6 @@ import {
   type Torrent,
 } from "./qbittorrent";
 import {
-  canConfirmImport,
   controllerMode,
   balancedSearchTargets,
   diversifySearchTargets,
@@ -29,7 +29,6 @@ import {
   orderSearchTargets,
   retryDelay,
   searchBudget,
-  shouldUseFallback,
   stalledDecision,
 } from "./policy";
 import {
@@ -42,6 +41,7 @@ import {
   updateTarget,
   upsertTarget,
 } from "./repository";
+import { recoverQualityProfiles } from "./quality";
 import { findRelease } from "./search";
 import { maintainSources } from "./prowlarr";
 import { exactManualImport } from "./manual-import";
@@ -95,7 +95,7 @@ function recordTorrent(item: Torrent, target: AcquisitionTarget | null) {
       tracker: item.tracker,
     };
   observe(value);
-  if (target) {
+  if (target && target.status !== "imported" && target.status !== "inactive") {
     const patch: Record<string, unknown> = {
       download_hash: item.hash,
       status: item.progress >= 1 ? "downloaded" : "downloading",
@@ -107,52 +107,43 @@ function recordTorrent(item: Torrent, target: AcquisitionTarget | null) {
   }
   return { before, value };
 }
-function synchronizeTargets(wanted: Wanted[]) {
-  const existing = targets(),
-    known = new Set(existing.map((target) => target.lidarr_album_id)),
-    bootstrapped =
-      stateGet("acquisition_bootstrapped") === "true" || existing.length > 0;
-  db().transaction(() => {
-    for (const album of wanted)
-      upsertTarget({
-        albumId: album.id,
-        artistId: album.artistId,
-        origin: bootstrapped && !known.has(album.id) ? "user" : "migration",
-        artist: album.artist?.artistName,
-        title: album.title,
-      });
-    stateSet("acquisition_bootstrapped", "true");
-    const missing = new Set(wanted.map((item) => item.id));
-    for (const target of targets()) {
-      if (
-        !missing.has(target.lidarr_album_id) &&
-        target.status !== "imported" &&
-        canConfirmImport(target)
-      ) {
-        recordSourceOutcome(target, "import");
-        updateTarget(target.id, {
-          status: "imported",
-          imported_at: iso(),
-          next_retry_at: null,
-        });
-      } else if (
-        missing.has(target.lidarr_album_id) &&
-        target.status === "imported"
-      ) {
-        updateTarget(target.id, {
-          status: "pending",
-          imported_at: null,
-          download_hash: null,
-          first_queued_at: null,
-          last_progress_at: null,
-          last_size_left: null,
-          attempts_today: 0,
-          attempts_day: null,
-          next_retry_at: null,
-        });
-      }
+export async function synchronizeTargets(wanted: Wanted[], queueItems:QueueItem[]=[]) {
+  const missing=new Set(wanted.map(a=>a.id)),active=new Set(queueItems.map(a=>a.albumId));
+  db().transaction(()=>{
+    for(const item of wanted){
+      const request=db().prepare("SELECT 1 FROM music_requests WHERE lidarr_album_id=?").get(item.id);
+      upsertTarget({albumId:item.id,artistId:item.artistId,origin:request?'user':'migration',artist:item.artist?.artistName,title:item.title});
     }
+    stateSet('acquisition_bootstrapped','true');
   })();
+  for(const target of targets()){
+    if(missing.has(target.lidarr_album_id)){
+      if(['imported','inactive'].includes(target.status)){
+        db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);
+        updateTarget(target.id,{status:'pending',imported_at:null,download_hash:null,first_queued_at:null,last_progress_at:null,last_size_left:null,next_retry_at:null});
+      }else if(!active.has(target.lidarr_album_id)&&['queued','downloading','downloaded'].includes(target.status)){
+        const pending=db().prepare("SELECT status FROM acquisition_submissions WHERE target_id=?").get(target.id) as {status:string}|undefined;
+        if(!pending||pending.status==='confirmed'){
+          db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);
+          updateTarget(target.id,{status:'pending',download_hash:null,next_retry_at:null,detail_json:JSON.stringify({reason:'Previously tracked transfer is absent; checking sources again'})});
+        }else updateTarget(target.id,{detail_json:JSON.stringify({reason:'Submission awaiting transfer confirmation; no duplicate will be submitted'})});
+      }
+      continue;
+    }
+    if(['imported','inactive'].includes(target.status))continue;
+    // Absence from /wanted/missing can also mean unmonitored or removed. Only
+    // actual file statistics confirm an import; a complete snapshot is required.
+    const actual=await album(target.lidarr_album_id).catch(()=>null);
+    if(!actual)continue;
+    if((actual.statistics?.percentOfTracks??0)>=100&&(actual.statistics?.trackFileCount??0)>0){
+      recordSourceOutcomeOnce(target,'import',target.download_hash??`album:${target.lidarr_album_id}`);
+      updateTarget(target.id,{status:'imported',imported_at:iso(),next_retry_at:null});
+      db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);
+    }else if(!actual.monitored){
+      updateTarget(target.id,{status:'inactive',next_retry_at:null,detail_json:JSON.stringify({reason:'Album is not monitored'})});
+      db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);
+    }
+  }
 }
 
 function acquisitionQuota(recovering: boolean) {
@@ -162,7 +153,7 @@ function acquisitionQuota(recovering: boolean) {
         count(*) daily,
         sum(coalesce(json_extract(evidence_json,'$.priority'),0)=1) priorityDaily
         FROM download_interventions
-        WHERE action='search' AND status='applied' AND created_at>=datetime('now','-1 day')`,
+        WHERE action='search' AND status='applied' AND json_extract(evidence_json,'$.strategyVersion')=2 AND created_at>=datetime('now','-1 day')`,
     )
     .get() as {
     short: number | null;
@@ -181,13 +172,13 @@ function failedSearchPatch(target: AcquisitionTarget, error: unknown) {
     attempts = target.attempts_day === day ? target.attempts_today + 1 : 1;
   return {
     status: "pending",
-    attempts_today: attempts,
+    attempts_today: target.attempts_today,
     attempts_day: day,
     last_search_at: searchedAt,
     next_retry_at: new Date(
-      Date.now() + retryDelay(attempts) * 3_600_000,
+      Date.now() + 5 * 60_000,
     ).toISOString(),
-    detail_json: JSON.stringify({ error: String(error) }),
+    detail_json: JSON.stringify({ reason:'Search service error; retry scheduled', error: String(error), strategyVersion:2 }),
   };
 }
 async function replace(
@@ -256,7 +247,7 @@ async function repairImports(items: QueueItem[], apply: boolean) {
         `${item.title ?? ""} ${item.errorMessage ?? ""}`,
       );
     let exact: Awaited<ReturnType<typeof exactManualImport>> = false;
-    if (apply && !obvious)
+    if (apply)
       exact = await exactManualImport(item).catch(() => false);
     if (exact) {
       if (!target) {
@@ -294,12 +285,10 @@ async function repairImports(items: QueueItem[], apply: boolean) {
       });
       continue;
     }
-    await replace(
-      item,
-      target,
-      item.errorMessage ?? "Edition or track-list mismatch",
-      apply,
-    );
+    // A failed import does not prove a bad torrent. Preserve completed audio
+    // and report the mapping/archive problem instead of repeatedly blocklisting.
+    updateTarget(target.id,{status:'downloaded',detail_json:JSON.stringify({reason:item.errorMessage??'Import needs review',messages:item.statusMessages,editionHint:obvious})});
+    intervene({targetId:target.id,hash:item.downloadId,action:'manual-import',status:'deferred',evidence:{title:item.title,reason:'No unambiguous import mapping; payload retained'}});
   }
 }
 async function cleanupOrphans(
@@ -389,7 +378,7 @@ async function cleanupUnmonitoredQueue(
 async function tune(torrents: Torrent[], apply: boolean) {
   if (!apply) return;
   const productive = torrents.filter(
-      (item) => item.dlspeed > 0 || item.num_seeds > 0,
+      (item) => item.progress < 1 && (item.dlspeed > 0 || item.num_seeds > 0),
     ).length,
     throughput = torrents.reduce((sum, item) => sum + item.dlspeed, 0),
     settings = runtimeSettings(),
@@ -429,7 +418,7 @@ async function tune(torrents: Torrent[], apply: boolean) {
         })
       : null;
   if (test && Date.now() - test.started >= 15 * 60_000) {
-    const keep = throughput >= test.baseline * 0.95;
+    const keep = test.baseline > 0 && throughput >= test.baseline * 0.95;
     if (!keep)
       await setPreferences({
         max_active_downloads: test.from,
@@ -439,7 +428,7 @@ async function tune(torrents: Torrent[], apply: boolean) {
     stateSet("acquisition_slot_test", "");
     stateSet("acquisition_slots_at", String(Date.now()));
   } else if (
-    !test &&
+    !test && productive > 0 && throughput > 0 &&
     Date.now() - Number(stateGet("acquisition_slots_at", "0")) >= 15 * 60_000
   ) {
     const desired = Math.max(
@@ -477,7 +466,9 @@ async function searchWork(
   queueItems: QueueItem[],
   apply: boolean,
   incomplete: number,
+  currentWanted: Set<number>,
 ) {
+  if(incomplete>=96)return;
   const settings = runtimeSettings(),
     active = new Set(queueItems.map((item) => item.albumId)),
     now = Date.now(),
@@ -491,12 +482,13 @@ async function searchWork(
           FROM acquisition_targets
           WHERE status IN ('pending','staged')
             AND (next_retry_at IS NULL OR datetime(next_retry_at)<=CURRENT_TIMESTAMP
-              OR (?=1 AND last_search_at IS NOT NULL AND datetime(last_search_at)<=datetime('now','-2 hours')))
-            AND (attempts_day IS NULL OR attempts_day<>date('now') OR attempts_today<3)`,
+              OR coalesce(json_extract(detail_json,'$.strategyVersion'),0)<2)
+            AND (attempts_day IS NULL OR attempts_day<>date('now') OR attempts_today<3 OR coalesce(json_extract(detail_json,'$.strategyVersion'),0)<2)`,
         )
-        .all(recovering ? 1 : 0) as AcquisitionTarget[]
-    ).filter((target) => !active.has(target.lidarr_album_id)),
-    ordered = orderSearchTargets(rows, now),
+        .all() as AcquisitionTarget[]
+    ).filter((target) => !active.has(target.lidarr_album_id) && currentWanted.has(target.lidarr_album_id)),
+    ordered = orderSearchTargets(rows.map(target=>({...target,origin:
+      db().prepare('SELECT 1 FROM music_requests WHERE lidarr_album_id=?').get(target.lidarr_album_id)?'user':target.origin==='playlist'?'playlist':'migration'})), now),
     quota = apply
       ? acquisitionQuota(recovering)
       : { short: 10, general: 10, priority: 10 },
@@ -521,23 +513,23 @@ async function searchWork(
   stateSet("acquisition_search_status", JSON.stringify({ eligible: rows.length, selected: selected.length, budget: quota, recovering }));
   const run = async (target: AcquisitionTarget) => {
     const priorityTarget = isPriorityTarget(target, now),
-      searches = Number((db().prepare("SELECT count(*) count FROM download_interventions WHERE target_id=? AND action='search' AND status='applied'").get(target.id) as { count: number }).count),
       fallback =
-        settings.qualityFallback &&
-        shouldUseFallback(target, searches);
+        settings.qualityFallback;
     intervene({
       targetId: target.id,
       action: "search",
       status: apply ? "applied" : "proposed",
-      evidence: { mode, fallback, priority: priorityTarget },
+      evidence: { mode, fallback, priority: priorityTarget, strategyVersion:2 },
     });
     if (apply)
       await findRelease(target, fallback).catch((error) =>
         updateTarget(target.id, failedSearchPatch(target, error)),
       );
   };
-  for (let index = 0; index < selected.length; index += 4) {
-    const batch = selected.slice(index, index + 4);
+  const deadline=Date.now()+90_000;
+  for (let index = 0; index < selected.length; index += 2) {
+    if(index>0&&Date.now()>deadline){stateSet('acquisition_requested_action','run');break}
+    const batch = selected.slice(index, index + 2);
     // Fallback temporarily changes the artist's quality profile. Searches for
     // the same artist must finish restoring it before another one starts.
     const artistIds = batch
@@ -594,8 +586,10 @@ async function cleanupImported(torrents: Torrent[], apply: boolean) {
 export async function runAcquisitionCycle() {
   if (running || !acquireControllerLease()) return;
   running = true;
+  const pulse=setInterval(()=>stateSet('acquisition_lease',String(Date.now()+4*60_000)),30_000);
   stateSet("acquisition_running", "true");
   try {
+    await recoverQualityProfiles();
     const settings = runtimeSettings(),
       paused = stateGet("acquisition_paused") === "true",
       observeOnly = Date.now() < observationUntil(),
@@ -607,12 +601,19 @@ export async function runAcquisitionCycle() {
       qbitTorrents(),
       qbitTransfer(),
     ]);
-    synchronizeTargets(wanted);
+    await synchronizeTargets(wanted, queueItems);
     const queueByHash = new Map(
       queueItems
         .filter((item) => item.downloadId)
         .map((item) => [item.downloadId!.toLowerCase(), item]),
     );
+    for(const item of queueItems){
+      if(!item.albumId||!item.downloadId)continue;
+      const target=targetByAlbum(item.albumId);
+      if(!target)continue;
+      db().prepare("UPDATE acquisition_submissions SET status='confirmed',updated_at=CURRENT_TIMESTAMP WHERE target_id=?").run(target.id);
+      recordSourceOutcomeOnce(target,'grab',item.downloadId.toLowerCase());
+    }
     const observations = torrents.map((item) => {
       const queued = queueByHash.get(item.hash.toLowerCase()),
         target = queued?.albumId
@@ -709,7 +710,7 @@ export async function runAcquisitionCycle() {
     await tune(torrents, apply);
     await cleanupImported(torrents, apply);
     stateSet("acquisition_phase", "searching");
-    await searchWork(mode, queueItems, apply, incomplete.length);
+    await searchWork(mode, queueItems, apply, incomplete.length, new Set(wanted.map(a=>a.id)));
     if (Date.now() - Number(stateGet("source_test_at", "0")) > 6 * 3_600_000) {
       await maintainSources(apply);
       stateSet("source_test_at", String(Date.now()));
@@ -745,12 +746,31 @@ export async function runAcquisitionCycle() {
     stateSet("acquisition_phase", "idle");
     stateSet("acquisition_running", "false");
     stateSet("acquisition_lease", "0");
+    clearInterval(pulse);
     running = false;
   }
+}
+let monitoring=false;
+async function monitorTransfers(){
+  if(monitoring)return;monitoring=true;
+  try{
+    const [items,torrents,transfer]=await Promise.all([queue(),qbitTorrents(),qbitTransfer()]);
+    for(const item of items){
+      if(!item.albumId||!item.downloadId)continue;
+      const target=targetByAlbum(item.albumId),torrent=torrents.find(t=>t.hash.toLowerCase()===item.downloadId?.toLowerCase());
+      if(!target||!torrent)continue;
+      db().prepare("UPDATE acquisition_submissions SET status='confirmed',updated_at=CURRENT_TIMESTAMP WHERE target_id=?").run(target.id);
+      recordSourceOutcomeOnce(target,'grab',item.downloadId.toLowerCase());
+      recordTorrent(torrent,target);
+    }
+    const raw=stateGet('acquisition_summary');
+    if(raw){const summary=JSON.parse(raw);summary.downloadSpeed=transfer.dl_info_speed;summary.incomplete=torrents.filter(t=>t.progress<1).length;summary.productive=torrents.filter(t=>t.progress<1&&(t.dlspeed>0||t.num_seeds>0)).length;summary.importFailures=items.filter(i=>i.trackedDownloadState==='importFailed').length;summary.updatedAt=iso();stateSet('acquisition_summary',JSON.stringify(summary))}
+  }catch(error){console.warn(JSON.stringify({event:'acquisition_monitor_error',error:String(error)}))}finally{monitoring=false}
 }
 export function startAcquisitionController() {
   if (timer) return;
   stateSet("acquisition_heartbeat", String(Date.now()));
+  const monitorTimer=setInterval(()=>void monitorTransfers(),30_000);
   const heartbeatTimer = setInterval(
     () => stateSet("acquisition_heartbeat", String(Date.now())),
     60_000,
@@ -767,5 +787,6 @@ export function startAcquisitionController() {
     if (timer) clearInterval(timer);
     if (actionTimer) clearInterval(actionTimer);
     clearInterval(heartbeatTimer);
+    clearInterval(monitorTimer);
   });
 }

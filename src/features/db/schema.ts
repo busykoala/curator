@@ -54,4 +54,7 @@ CREATE INDEX IF NOT EXISTS download_observations_recent ON download_observations
 CREATE TABLE IF NOT EXISTS download_interventions(id INTEGER PRIMARY KEY,target_id INTEGER REFERENCES acquisition_targets(id) ON DELETE SET NULL,torrent_hash TEXT,action TEXT NOT NULL,status TEXT NOT NULL,evidence_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS download_interventions_recent ON download_interventions(action,status,created_at DESC);
 CREATE TABLE IF NOT EXISTS source_outcomes(id INTEGER PRIMARY KEY,indexer_id INTEGER,indexer_name TEXT NOT NULL,event TEXT NOT NULL,latency_ms INTEGER,detail_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE INDEX IF NOT EXISTS source_outcomes_recent ON source_outcomes(indexer_name,created_at DESC);`;
+CREATE INDEX IF NOT EXISTS source_outcomes_recent ON source_outcomes(indexer_name,created_at DESC);
+CREATE TABLE IF NOT EXISTS acquisition_requests(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,indexer_id INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS acquisition_requests_recent ON acquisition_requests(indexer_id,created_at);
+CREATE TABLE IF NOT EXISTS acquisition_submissions(target_id INTEGER PRIMARY KEY REFERENCES acquisition_targets(id) ON DELETE CASCADE,guid TEXT NOT NULL,status TEXT NOT NULL,detail_json TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`;

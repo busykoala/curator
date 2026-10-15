@@ -11,8 +11,11 @@ async function call<T>(path: string, init: RequestInit = {}) {
     },
     signal: AbortSignal.timeout(15_000),
   });
-  if (!response.ok)
+  if (!response.ok){
+    const message=await response.text();
+    if(response.status===429||/query limit|grab limit|rate limit|retry.after/i.test(message))throw new Error('Prowlarr rate limited');
     throw new Error(`Prowlarr ${path} failed (${response.status})`);
+  }
   const text = await response.text();
   return (text ? JSON.parse(text) : undefined) as T;
 }
@@ -64,7 +67,7 @@ export async function maintainSources(apply: boolean) {
         successes: number;
         disabledByCurator: boolean;
       };
-    let ok = false,
+    let ok = false, throttled = false,
       latency = 0;
     try {
       const start = Date.now();
@@ -74,7 +77,8 @@ export async function maintainSources(apply: boolean) {
       });
       latency = Date.now() - start;
       ok = true;
-    } catch {}
+    } catch(error) { throttled=/rate limited/i.test(String(error)); }
+    if(throttled){scores.push({indexerId:item.id,name:item.name,score:.5,priority:item.priority,hardFailures:saved.failures});continue;}
     const next = {
       failures: ok ? 0 : saved.failures + 1,
       successes: ok ? saved.successes + 1 : 0,
