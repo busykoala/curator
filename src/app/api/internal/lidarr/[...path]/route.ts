@@ -11,6 +11,7 @@ export async function GET(request:Request,context:Context){
   const {path}=await context.params,endpoint=path.join('/').replace(/^api\/v1\//,'');
   if(!/^(system\/status|queue|manualimport|command\/\d+)$/.test(endpoint))return new Response('Unsupported helper endpoint',{status:404});
   const query=new URL(request.url).searchParams;
+  let helperDownloadId:string|undefined;
   if(endpoint==='manualimport'){
     const folder=query.get('folder');
     if(folder&&(!folder.startsWith('/data/downloads/')||folder.split('/').includes('..')))return new Response('Invalid import path',{status:400});
@@ -22,7 +23,10 @@ export async function GET(request:Request,context:Context){
       if(!queued.ok)return new Response('Import validation unavailable',{status:503});
       const items=(await queued.json()).records;
       const item=items.find((q:{outputPath?:string;status?:string;sizeleft?:number})=>q.status==='completed'&&Number(q.sizeleft)===0&&helperFolders(q.outputPath??'').includes(folder));
-      if(item?.artistId){query.set('artistId',String(item.artistId));query.set('downloadId',String(item.downloadId))}
+      if(item?.artistId){query.set('artistId',String(item.artistId));helperDownloadId=String(item.downloadId)}
+      // Lidarr gives downloadId precedence over folder, so it would scan the
+      // original archive directory again even when we pass the extracted alias.
+      query.delete('downloadId');
     }
   }
   const response=await upstream(endpoint+'?'+query);
@@ -35,10 +39,10 @@ export async function GET(request:Request,context:Context){
         // that suffix when extracting, while Lidarr retains the original path.
         query.set('folder',folders[1]);
         const alternate=await upstream(endpoint+'?'+query);
-        if(alternate.ok)return Response.json(await alternate.json());
+        if(alternate.ok){const extracted=await alternate.json();return Response.json(extracted.map((r:Record<string,unknown>)=>({...r,...(helperDownloadId?{downloadId:helperDownloadId}:{})})))}
       }
     }
-    return Response.json(rows);
+    return Response.json(rows.map((r:Record<string,unknown>)=>({...r,...(helperDownloadId?{downloadId:helperDownloadId}:{})})));
   }
   return new Response(response.body,{status:response.status,headers:{'Content-Type':'application/json'}});
 }
@@ -57,7 +61,7 @@ export async function POST(request:Request,context:Context){
   const folders=helperFolders(typeof item?.outputPath==='string'?item.outputPath:dirname(first.path));
   const folder=folders.find(root=>body.files.every((f:{path?:string})=>typeof f.path==='string'&&f.path.startsWith(root+'/')));
   if(!folder)return new Response('Files do not belong to download folder',{status:422});
-  const r=await upstream('manualimport?'+new URLSearchParams({folder,artistId:String(item?.artistId??''),downloadId:String(first.downloadId??''),filterExistingFiles:'true'}));
+  const r=await upstream('manualimport?'+new URLSearchParams({folder,artistId:String(item?.artistId??''),filterExistingFiles:'true'}));
   if(!r.ok)return new Response('Import validation unavailable',{status:503});
   if(!validateHelperImport(body,items,await r.json()))return new Response('Import mapping is rejected or ambiguous',{status:422});
   const response=await upstream('command',{method:'POST',body:JSON.stringify({...body,replaceExistingFiles:false,importMode:'copy'})});

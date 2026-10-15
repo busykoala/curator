@@ -13,15 +13,15 @@ test('archive helper endpoint authenticates and validates the actual extracted d
   globalThis.fetch=async(input,init)=>{
     const url=new URL(String(input));
     if(url.pathname.endsWith('/queue'))return Response.json({records:[{downloadId:'abc',albumId:3,artistId:2,status:'completed',sizeleft:0,outputPath:'/data/downloads/Album.7z'}]});
-    if(url.pathname.endsWith('/manualimport')){assert.equal(url.searchParams.get('artistId'),'2');assert.equal(url.searchParams.get('downloadId'),'abc');return Response.json(url.searchParams.get('folder')==='/data/downloads/Album'?rows:[])}
+    if(url.pathname.endsWith('/manualimport')){assert.equal(url.searchParams.get('artistId'),'2');assert.equal(url.searchParams.has('downloadId'),false);return Response.json(url.searchParams.get('folder')==='/data/downloads/Album'?rows.map(({downloadId,...r})=>r):[])}
     if(url.pathname.endsWith('/command')){const body=JSON.parse(String(init?.body));assert.equal(body.replaceExistingFiles,false);assert.equal(body.importMode,'copy');imports++;return Response.json({id:1})}
     throw Error('Unexpected endpoint '+url.pathname);
   };
   try{
     assert.equal((await POST(new Request('http://curator/api/internal/lidarr/api/v1/command',{method:'POST',body:JSON.stringify(command)}),context)).status,403);
     const headers={'x-api-key':config.LIDARR_API_KEY,'Content-Type':'application/json'};
-    const listed=await GET(new Request('http://curator/api/internal/lidarr/api/v1/manualimport?folder=%2Fdata%2Fdownloads%2FAlbum.7z',{headers}),{params:Promise.resolve({path:['api','v1','manualimport']})});
-    assert.equal((await listed.json()).length,1);
+    const listed=await GET(new Request('http://curator/api/internal/lidarr/api/v1/manualimport?folder=%2Fdata%2Fdownloads%2FAlbum.7z&downloadId=abc',{headers}),{params:Promise.resolve({path:['api','v1','manualimport']})});
+    assert.equal((await listed.json())[0].downloadId,'abc');
     assert.equal((await POST(new Request('http://curator/api/internal/lidarr/api/v1/command',{method:'POST',headers,body:JSON.stringify(command)}),context)).status,200);
     assert.equal(imports,1);
     const wrong={...command,files:[{...file,albumId:99}]};
