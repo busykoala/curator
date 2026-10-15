@@ -38,7 +38,7 @@ async function main() { try {
   assert.equal(await exactManualImport({ id: 2, downloadId: "other" }), false);
   assert.equal(submitted, undefined);
   albums=[42,42];archive=true;
-  assert.notEqual(await exactManualImport({id:3,albumId:42,artistId:7,downloadId:'archive',outputPath:'/data/downloads/test.7z'}),false);
+  assert.notEqual(await exactManualImport({id:3,albumId:42,artistId:7,downloadId:'archive',trackFileCount:19,outputPath:'/data/downloads/test.7z'}),false);
   assert.equal(((submitted as Record<string,unknown>|undefined)?.files as unknown[]).length,2);
   console.log("Manual import audit passed: unique album identities are recovered and ambiguous mappings are rejected.");
 } finally {

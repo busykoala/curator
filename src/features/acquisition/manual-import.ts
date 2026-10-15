@@ -10,7 +10,10 @@ export async function exactManualImport(item:QueueItem):Promise<ExactManualImpor
     rows=await manualImportFolder(folder,item.artistId);
     if(rows.length)break;
   }
-  if(!rows.length||rows.length!==Number(item.trackFileCount??rows.length))return false;
+  // Queue counts describe the currently selected catalogue edition, not the
+  // downloaded one (e.g. 19 deluxe tracks versus 11 standard tracks). Fresh
+  // release IDs, unique tracks and rejection checks below decide the mapping.
+  if(!rows.length)return false;
   const albumIds=new Set<number>(),artistIds=new Set<number>(),trackIds=new Set<number>(),releaseIds=new Set<number>();
   for(const row of rows){
     const rejections=row.rejections as unknown[]|undefined,tracks=row.tracks as Array<{id?:number}>|undefined,album=row.album as{id?:number}|undefined,artist=row.artist as{id?:number}|undefined,albumReleaseId=Number(row.albumReleaseId);
