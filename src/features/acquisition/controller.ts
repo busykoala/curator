@@ -488,7 +488,7 @@ async function searchWork(
         .all() as AcquisitionTarget[]
     ).filter((target) => !active.has(target.lidarr_album_id) && currentWanted.has(target.lidarr_album_id)),
     ordered = orderSearchTargets(rows.map(target=>({...target,origin:
-      db().prepare('SELECT 1 FROM music_requests WHERE lidarr_album_id=?').get(target.lidarr_album_id)?'user':target.origin==='playlist'?'playlist':'migration'})), now),
+      JSON.parse(target.detail_json??'{}').operatorRetry||db().prepare('SELECT 1 FROM music_requests WHERE lidarr_album_id=?').get(target.lidarr_album_id)?'user':target.origin==='playlist'?'playlist':'migration'})), now),
     quota = apply
       ? acquisitionQuota(recovering)
       : { short: 10, general: 10, priority: 10 },
