@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 export type CatalogAlbum = {
   id: number; artistId: number; title: string; monitored: boolean;
   releaseDate?: string; albumType?:string; secondaryTypes?: string[]; disambiguation?: string;
-  releases?: Array<{ title: string }>;
+  releases?: Array<{ title: string; disambiguation?:string }>;
   statistics?: { trackFileCount?: number; percentOfTracks?: number };
 };
 export type Release = Record<string, unknown>;
@@ -43,8 +43,8 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string)
   const prefix = significant(raw).slice(0, artistWords.length).join(" ");
   if (!artistWords.length || prefix !== artistWords.join(" ")) return false;
   const metadata = `${album.title} ${(album.secondaryTypes ?? []).join(" ")}`;
-  const knownTitles=[album.title,album.disambiguation??'',...(album.releases??[]).map(r=>r.title)];
-  const technical=new Set(('remaster remastered deluxe expanded anniversary edition version original mono stereo cd lp vinyl japan japanese uk us eu digital flac alac mp3 bit kbps khz hz studio masters rock pop jazz reggae blues folk classical metal electronic elettronica alternative indie dance soul rnb country').split(' '));
+  const knownTitles=[album.title,album.disambiguation??'',...(album.releases??[]).flatMap(r=>[r.title,r.disambiguation??''])];
+  const technical=new Set(('remaster remastered deluxe expanded anniversary edition version original mono stereo cd lp vinyl uhqr japan japanese uk us eu digital flac alac mp3 bit kbps khz hz studio masters rock pop jazz reggae blues folk classical metal electronic elettronica alternative indie dance soul rnb country').split(' '));
   for(const part of raw.matchAll(/\(([^)]*)\)/g)){
     const content=key(part[1]);
     if(knownTitles.some(t=>key(t).includes(content)))continue;

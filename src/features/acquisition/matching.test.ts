@@ -5,6 +5,7 @@ const album=(title:string,releaseDate='1975-01-01'):CatalogAlbum=>({id:1,artistI
 const item=(title:string,extra={})=>({title,...extra});
 test('recognizes actual parser failures without accepting similar recordings',()=>{
   assert.ok(matchesAlbum(item('Green Day  ¡Uno   (2012) [FLAC] 88'),album('¡Uno!','2012-01-01'),'Green Day'));
+  assert.ok(matchesAlbum(item('Bob-Marley- -The-Wailers--Rastaman-Vibration-(UHQR)-PBTHAL-(1976-Reggae)-[Flac-2..'),album('Rastaman Vibration','1976-01-01'),'Bob Marley & The Wailers'));
   assert.ok(matchesAlbum(item('Metallica &amp; The San Francisco Symphony   S&amp;M2 FLAC'),album('S&M2','2020-01-01'),'Metallica'));
   assert.ok(matchesAlbum(item('Dire Straits And Mark Knopfler The Best Of: Private Investigations (2005) FLAC'),album('The Best of Dire Straits & Mark Knopfler: Private Investigations','2005-01-01'),'Dire Straits'));
   assert.ok(matchesAlbum(item('Fleetwood Mac - Fleetwood Mac (1975) FLAC',{albumTitle:'Fleetwood Mac'}),album('Fleetwood Mac'),'Fleetwood Mac'));
