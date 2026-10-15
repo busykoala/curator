@@ -15,6 +15,7 @@ export function decodeTitle(value: string) {
 const words = (s: string) => decodeTitle(s).normalize("NFKD").replace(/\p{M}/gu, "")
   .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(/\s+/).filter(Boolean);
 const stop = new Set(["the", "a", "an", "and", "of"]);
+const technicalDescriptors=new Set(('remaster remastered deluxe expanded anniversary edition version original mono stereo cd lp vinyl uhqr japan japanese uk us eu digital flac alac mp3 bit kbps khz hz studio masters rock pop jazz reggae blues folk classical metal electronic elettronica alternative indie dance soul rnb country').split(' '));
 const significant = (s: string) => words(s).filter(w => !stop.has(w));
 const key = (s: string) => significant(s).join(" ");
 const number = (s: string) => (({one:"1",two:"2",three:"3",i:"1",ii:"2",iii:"3",iv:"4",v:"5"} as Record<string,string>)[s] ?? s);
@@ -44,7 +45,7 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string)
   if (!artistWords.length || prefix !== artistWords.join(" ")) return false;
   const metadata = `${album.title} ${(album.secondaryTypes ?? []).join(" ")}`;
   const knownTitles=[album.title,album.disambiguation??'',...(album.releases??[]).flatMap(r=>[r.title,r.disambiguation??''])];
-  const technical=new Set(('remaster remastered deluxe expanded anniversary edition version original mono stereo cd lp vinyl uhqr japan japanese uk us eu digital flac alac mp3 bit kbps khz hz studio masters rock pop jazz reggae blues folk classical metal electronic elettronica alternative indie dance soul rnb country').split(' '));
+  const technical=technicalDescriptors;
   for(const part of raw.matchAll(/\(([^)]*)\)/g)){
     const content=key(part[1]);
     if(knownTitles.some(t=>key(t).includes(content)))continue;
@@ -94,11 +95,14 @@ export function repairedTitle(item: Release, album: CatalogAlbum, artist: string
 
 /** Do not turn an unparseable compilation or longer album name into this one. */
 export function conflictingAlbum(item:Release,album:CatalogAlbum,catalog:CatalogAlbum[],artist:string){
-  const artistPrefix=key(artist),raw=key(String(item.title??''));
+  const artistPrefix=key(artist),raw=key(String(item.title??'').replace(/\([^)]*\)/g,' '));
   const title=' '+(raw.startsWith(artistPrefix)?raw.slice(artistPrefix.length).trim():raw)+' ';
   const expected=[album.title,...(album.releases??[]).map(r=>r.title)].map(key);
   return catalog.some(other=>{
     const phrase=key(other.title);
+    // A genre or edition annotation is not evidence of a second recording,
+    // even when that artist also has a compilation called e.g. "Reggae".
+    if(significant(other.title).every(w=>technicalDescriptors.has(w)||/^\d+$/.test(w)))return false;
     return other.id!==album.id&&phrase.length>=5&&!expected.some(t=>(' '+t+' ').includes(' '+phrase+' '))&&title.includes(' '+phrase+' ');
   });
 }

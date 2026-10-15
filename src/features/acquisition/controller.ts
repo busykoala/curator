@@ -599,8 +599,9 @@ async function cleanupImported(torrents: Torrent[], apply: boolean) {
     });
   }
 }
-export async function runAcquisitionCycle() {
+export async function runAcquisitionCycle(consumeRequest=false) {
   if (running || !acquireControllerLease()) return;
+  if(consumeRequest)stateSet('acquisition_requested_action','');
   running = true;
   const pulse=setInterval(()=>stateSet('acquisition_lease',String(Date.now()+4*60_000)),30_000);
   stateSet("acquisition_running", "true");
@@ -785,6 +786,9 @@ async function monitorTransfers(){
     if(raw){const summary=JSON.parse(raw);summary.downloadSpeed=transfer.dl_info_speed;summary.incomplete=torrents.filter(t=>t.progress<1).length;summary.productive=torrents.filter(t=>t.progress<1&&(t.dlspeed>0||t.num_seeds>0)).length;summary.importFailures=items.filter(i=>i.trackedDownloadState==='importFailed').length;summary.updatedAt=iso();stateSet('acquisition_summary',JSON.stringify(summary))}
   }catch(error){console.warn(JSON.stringify({event:'acquisition_monitor_error',error:String(error)}))}finally{monitoring=false}
 }
+export async function runRequestedAcquisitionCycle(){
+  if(stateGet('acquisition_requested_action')==='run'&&!running)await runAcquisitionCycle(true);
+}
 export function startAcquisitionController() {
   if (timer) return;
   stateSet("acquisition_heartbeat", String(Date.now()));
@@ -796,10 +800,7 @@ export function startAcquisitionController() {
   setTimeout(() => void runAcquisitionCycle(), 4_000);
   timer = setInterval(() => void runAcquisitionCycle(), 5 * 60_000);
   actionTimer = setInterval(() => {
-    if (stateGet("acquisition_requested_action") === "run" && !running) {
-      stateSet("acquisition_requested_action", "");
-      void runAcquisitionCycle();
-    }
+    void runRequestedAcquisitionCycle();
   }, 2_000);
   process.once("SIGTERM", () => {
     if (timer) clearInterval(timer);

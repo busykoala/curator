@@ -19,6 +19,8 @@ test('recognizes actual parser failures without accepting similar recordings',()
   assert.ok(matchesAlbum(item('Hidden Orchestra - Archipelago (2012) FLAC'),album('Archipelago','2012-01-01'),'Hidden Orchestra'));
 });
 test('repairs retain source identity and reject other albums even when the parser cannot resolve them',()=>{
+  assert.equal(conflictingAlbum(item('Bob Marley & The Wailers - Rastaman Vibration (UHQR) (1976 Reggae) FLAC'),album('Rastaman Vibration'),[{...album('Reggae'),id:2}],'Bob Marley & The Wailers'),false);
+  assert.equal(conflictingAlbum(item('Bob Marley & The Wailers - Rastaman Vibration Reggae FLAC'),album('Rastaman Vibration'),[{...album('Reggae'),id:2}],'Bob Marley & The Wailers'),false);
   const target=album('Labyrinth','2020-01-01');
   assert.equal(conflictingAlbum(item('Khatia Buniatishvili - Labyrinth Ephemera (2024) FLAC'),target,[{...album('Labyrinth Ephemera'),id:2}],'Khatia Buniatishvili'),true);
   assert.equal(conflictingAlbum(item('Khatia Buniatishvili - Labyrinth (2020) FLAC'),target,[{...album('Labyrinth Ephemera'),id:2}],'Khatia Buniatishvili'),false);
