@@ -199,6 +199,12 @@ const balanced = balancedSearchTargets([
 assert.equal(balanced.length, 4);
 assert.deepEqual(balanced.slice(0, 2).map(item => item.id), [12, 13]);
 
+// Retrying older singles must not undo the migration's album-first order.
+assert.equal(balancedSearchTargets([
+  {...retried,id:21,album_type:'Single',last_search_at:'2026-01-01T00:00:00Z'},
+  {...retried,id:22,album_type:'Album',last_search_at:'2026-10-01T00:00:00Z'},
+],1,now)[0].id,22);
+
 // Retry timestamps are ISO strings, while SQLite CURRENT_TIMESTAMP uses a space.
 import Database from "better-sqlite3";
 import { dailyArtworkRetrySql } from "../src/features/scheduler/retry-policy";

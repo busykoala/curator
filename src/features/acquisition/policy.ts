@@ -137,6 +137,8 @@ export function balancedSearchTargets<T extends AcquisitionTarget & { search_cou
     retries = ordered
       .filter((target) => Boolean(target.last_search_at))
       .sort((a, b) =>
+        Number(Boolean(a.album_type)&&a.album_type!=='Album') -
+          Number(Boolean(b.album_type)&&b.album_type!=='Album') ||
         Number(shouldUseFallback(b, Number(b.search_count ?? 0))) -
           Number(shouldUseFallback(a, Number(a.search_count ?? 0))) ||
         String(a.last_search_at).localeCompare(String(b.last_search_at)),
