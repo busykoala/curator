@@ -1,6 +1,7 @@
 import { album,releaseTracks,importFiles,manualImport,manualImportFolder,recheckManualImport,type QueueItem } from "./lidarr";
 import {helperFolders,unmatchedTrackSubset,manualImportUpdates} from './import-guard';
 import {acceptsProvenImport,proveRelease,type ImportProof,type ImportRow} from './import-proof';
+import {queueImportedIdentity} from './imported-identity';
 
 export type ExactManualImport={albumId:number;artistId?:number;artist?:string;album?:string;recovery?:string};
 
@@ -60,6 +61,7 @@ export async function exactManualImport(item:QueueItem,onReview?:(detail:Record<
   const albumId=[...albumIds][0];
   if(item.albumId&&item.albumId!==albumId)return false;
   const files=rows.map(row=>({path:row.path,artistId:(row.artist as{id?:number})?.id,albumId,albumReleaseId:Number(row.albumReleaseId),trackIds:(row.tracks as Array<{id:number}>).map(track=>track.id),quality:row.quality,downloadId:item.downloadId}));
+  if(proven)queueImportedIdentity({albumId,artistId:[...artistIds][0],releaseId:[...releaseIds][0],artist:String((rows[0].artist as {artistName?:string}).artistName??''),album:String((rows[0].album as {title?:string}).title??''),trackIds:[...trackIds]});
   await importFiles(files);
   const first=rows[0];
   return{albumId,artistId:[...artistIds][0],artist:String((first.artist as{artistName?:string}|undefined)?.artistName??""),album:String((first.album as{title?:string}|undefined)?.title??""),...(proven?{recovery:'Complete catalogue track list, positions and durations independently verified; native track mapping agrees'}:{})};

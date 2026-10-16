@@ -49,6 +49,7 @@ import { findRelease } from "./search";
 import { hasArtistCache } from "./discovery";
 import { maintainSources } from "./prowlarr";
 import { exactManualImport } from "./manual-import";
+import {recoverImportedIdentities} from './imported-identity';
 import {reconcileSubmissions} from './submissions';
 import type { AcquisitionTarget, DownloadObservation } from "./types";
 
@@ -733,6 +734,7 @@ export async function runAcquisitionCycle(consumeRequest=false) {
     await cleanupOrphans(torrents, queueByHash, apply);
     await cleanupUnmonitoredQueue(queueItems, new Set(wanted.map((item) => item.id)), torrents, apply);
     await repairImports(queueItems, apply);
+    if(apply)await recoverImportedIdentities().catch(error=>console.warn(JSON.stringify({event:'acquisition_identity_recovery_error',error:String(error)})));
     await tune(torrents, apply);
     await cleanupImported(torrents, apply);
     stateSet("acquisition_phase", "searching");

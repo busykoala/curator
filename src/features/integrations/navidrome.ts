@@ -102,6 +102,7 @@ export function navidromeConfigured() {
   const value = credentials();
   return Boolean(value.username && value.password);
 }
+export const refreshLibrary=()=>call('startScan');
 async function rawPlaylists() {
   const root = await call("getPlaylists");
   return (

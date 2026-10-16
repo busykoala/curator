@@ -1,0 +1,29 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,writeFile,readFile,mkdir,link,symlink,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {config} from '@/config';
+import {libraryImportPath,missingIdentityProperties,repairImportedFile} from './imported-identity';
+test('identity repair only fills missing fields, preserving existing metadata',()=>{
+  assert.deepEqual(missingIdentityProperties({ARTIST:['Existing Artist'],TRACKNUMBER:'0'},{ARTIST:'Artist',ALBUM:'Album',TRACKNUMBER:'1'}),{ALBUM:['Album'],TRACKNUMBER:['1']});
+  assert.throws(()=>libraryImportPath('/data/downloads/test.flac'),/outside/);
+  assert.throws(()=>libraryImportPath('/data/library/../downloads/test.flac'),/outside/);
+});
+test('transactional library metadata repair preserves hardlinked torrent originals and rejects escaped paths',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'curator-library-tags-')),root=join(dir,'library'),original=join(dir,'original.flac');
+  const beforeRoot=config.MUSIC_ROOT;config.MUSIC_ROOT=root;
+  try{
+    await mkdir(root);await writeFile(original,'original audio');const library=join(root,'song.flac');await link(original,library);
+    let properties:Record<string,string[]>={};
+    const io={read:async()=>({ARTIST:['Existing Artist']}),write:async(path:string,p:Record<string,string[]>)=>{properties=p;await writeFile(path,'audio with metadata')}};
+    assert.equal(await repairImportedFile(library,{ARTIST:'Canonical Artist',ALBUM:'Album'},io),true);
+    assert.deepEqual(properties,{ALBUM:['Album']});assert.equal(await readFile(original,'utf8'),'original audio');assert.equal(await readFile(library,'utf8'),'audio with metadata');
+    const escaped=join(root,'escape.flac');await symlink(original,escaped);
+    await assert.rejects(repairImportedFile(escaped,{ALBUM:'Album'},io),/outside/);
+    await assert.rejects(repairImportedFile(library,{ALBUM:'Album'},{...io,write:async()=>{throw Error('Write failed')}}),/Write failed/);
+    assert.equal(await readFile(library,'utf8'),'audio with metadata');
+    await assert.rejects(repairImportedFile(library,{ALBUM:'Album'},{...io,write:async path=>{await writeFile(path,'replacement');await writeFile(library,'concurrent edit')}}),/changed/);
+    assert.equal(await readFile(library,'utf8'),'concurrent edit');
+  }finally{config.MUSIC_ROOT=beforeRoot;await rm(dir,{recursive:true,force:true})}
+});
