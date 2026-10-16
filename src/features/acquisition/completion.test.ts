@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {incompleteExtras,type TorrentFile} from './qbittorrent';
-import {connectivityProbeInterval,needsReplacementSearch,stalledDecision} from './policy';
+import {connectivityProbeInterval,needsReplacementSearch,stalledDecision,productiveTransfer} from './policy';
 import type {AcquisitionTarget,DownloadObservation} from './types';
 import {retainMismatchedQueue} from './lidarr';
 const files:TorrentFile[]=[{index:0,name:'01.mp3',size:1000,progress:1,priority:1},{index:1,name:'Folder.jpg',size:500,progress:.5,priority:1},{index:2,name:'Album.nfo',size:100,progress:0,priority:1}];
@@ -34,4 +34,16 @@ test('ordinary stalled downloads recover in four hours without discarding near-c
   assert.equal(stalledDecision(target,observation,observation,5)?.action,'replace');
   assert.equal(stalledDecision(target,{...observation,speed:1},observation,5),null);
   assert.equal(stalledDecision(target,{...observation,progress:.99,availability:.99},observation,5),null);
+});
+
+test('advertised peers cannot keep a byte-stalled transfer productive or exempt it from recovery',()=>{
+ const target={id:1,origin:'migration',last_progress_at:new Date(Date.now()-5*3600000).toISOString()} as AcquisitionTarget;
+ const row={state:'stalledDL',progress:.1,availability:1.1,speed:0,connectedSeeds:1,downloaded:100,amountLeft:900} as DownloadObservation;
+ assert.equal(stalledDecision(target,row,row,5)?.action,'replace');
+ assert.equal(stalledDecision(target,{...row,downloaded:101},row,5),null);
+ assert.equal(stalledDecision(target,{...row,progress:.95},row,5),null);
+ for(const state of ['queuedDL','pausedDL','stoppedDL','checkingDL','moving'])assert.equal(stalledDecision(target,{...row,state},row,5),null);
+ assert.equal(productiveTransfer(.1,0,target.last_progress_at),false);
+ assert.equal(productiveTransfer(.1,100,target.last_progress_at),true);
+ assert.equal(productiveTransfer(.1,0,new Date(Date.now()-60000).toISOString()),true);
 });

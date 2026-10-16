@@ -34,6 +34,8 @@ import {
   retryDelay,
   searchBudget,
   stalledDecision,
+  productiveTransfer,
+  hoursSince,
 } from "./policy";
 import {
   acquireControllerLease,
@@ -59,6 +61,12 @@ let running = false,
   timer: NodeJS.Timeout | undefined,
   actionTimer: NodeJS.Timeout | undefined;
 const iso = () => new Date().toISOString();
+function productiveTorrent(item:Torrent){
+  if(item.progress>=1)return false;
+  if(item.dlspeed>0)return true;
+  const target=db().prepare('SELECT last_progress_at FROM acquisition_targets WHERE download_hash=? COLLATE NOCASE').get(item.hash) as {last_progress_at?:string}|undefined;
+  return productiveTransfer(item.progress,item.dlspeed,target?.last_progress_at);
+}
 function recordSourceOutcome(target: AcquisitionTarget, event: string, detail: Record<string, unknown> = {}) {
   if (!target.source_name) return;
   db().prepare("INSERT INTO source_outcomes(indexer_name,event,detail_json) VALUES(?,?,?)").run(
@@ -393,9 +401,7 @@ async function cleanupUnmonitoredQueue(
 }
 async function tune(torrents: Torrent[], apply: boolean) {
   if (!apply) return;
-  const productive = torrents.filter(
-      (item) => item.progress < 1 && (item.dlspeed > 0 || item.num_seeds > 0),
-    ).length,
+  const productive = torrents.filter(productiveTorrent).length,
     throughput = torrents.reduce((sum, item) => sum + item.dlspeed, 0),
     settings = runtimeSettings(),
     preferred = torrents
@@ -730,7 +736,7 @@ export async function runAcquisitionCycle(consumeRequest=false) {
         });
         if (apply) await reannounce(row.item.hash);
       }
-      if(apply&&row.item.progress>=.9&&row.item.progress<1&&row.item.dlspeed===0&&row.item.num_seeds===0&&age>=.25){
+      if(apply&&row.item.progress>=.9&&row.item.progress<1&&row.item.dlspeed===0&&age>=.25&&hoursSince(targetByAlbum(target.lidarr_album_id)?.last_progress_at)>=.25){
         const finished=await finishAudioPayload(row.item.hash).catch(()=>false as const);
         if(finished){intervene({targetId:target.id,hash:row.item.hash,action:'finish-audio',status:'applied',evidence:{...finished,reason:'All audio files complete; only optional artwork or text was unavailable'}});continue}
       }
@@ -766,9 +772,7 @@ export async function runAcquisitionCycle(consumeRequest=false) {
         wanted: wanted.length,
         incomplete: incomplete.length,
         orphaned,
-        productive: incomplete.filter(
-          (item) => item.dlspeed > 0 || item.num_seeds > 0,
-        ).length,
+        productive: incomplete.filter(productiveTorrent).length,
         downloadSpeed: transfer.dl_info_speed,
         importFailures: queueItems.filter(
           (item) => item.trackedDownloadState === "importFailed",
@@ -806,7 +810,7 @@ async function monitorTransfers(){
       recordTorrent(torrent,target);
     }
     const raw=stateGet('acquisition_summary');
-    if(raw){const summary=JSON.parse(raw);summary.downloadSpeed=transfer.dl_info_speed;summary.incomplete=torrents.filter(t=>t.progress<1).length;summary.productive=torrents.filter(t=>t.progress<1&&(t.dlspeed>0||t.num_seeds>0)).length;summary.importFailures=items.filter(i=>i.trackedDownloadState==='importFailed').length;summary.updatedAt=iso();stateSet('acquisition_summary',JSON.stringify(summary))}
+    if(raw){const summary=JSON.parse(raw);summary.downloadSpeed=transfer.dl_info_speed;summary.incomplete=torrents.filter(t=>t.progress<1).length;summary.productive=torrents.filter(productiveTorrent).length;summary.importFailures=items.filter(i=>i.trackedDownloadState==='importFailed').length;summary.updatedAt=iso();stateSet('acquisition_summary',JSON.stringify(summary))}
   }catch(error){console.warn(JSON.stringify({event:'acquisition_monitor_error',error:String(error)}))}finally{monitoring=false}
 }
 export async function runRequestedAcquisitionCycle(){

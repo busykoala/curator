@@ -30,6 +30,9 @@ export const hoursSince = (value?: string | null) =>
           hour,
       )
     : Infinity;
+export function productiveTransfer(progress:number,speed:number,lastProgressAt?:string|null){
+  return progress<1&&(speed>0||hoursSince(lastProgressAt)<5/60);
+}
 export function canConfirmImport(target: Pick<AcquisitionTarget, "status">) {
   return ["queued", "downloading", "downloaded"].includes(target.status);
 }
@@ -185,6 +188,7 @@ export function stalledDecision(
   previous?: DownloadObservation,
   ageHours = 0,
 ): InterventionDecision | null {
+  if(/^(queued|paused|stopped|checking|moving|allocating|error|missingFiles)/i.test(now.state))return null;
   const progressed = Boolean(previous && now.downloaded > previous.downloaded);
   const metadata = now.progress === 0 && now.amountLeft === 0;
   if (metadata && ageHours >= 1/3 && !progressed && now.speed===0)
@@ -195,7 +199,7 @@ export function stalledDecision(
       targetId: target.id,
       hash: now.hash,
     };
-  if (progressed || now.speed > 0 || now.connectedSeeds > 0) return null;
+  if (progressed || now.speed > 0) return null;
   if (now.progress === 0 && now.availability === 0 && ageHours >= 2)
     return {
       action: "replace",
@@ -208,10 +212,12 @@ export function stalledDecision(
   const grace = target.origin === "migration"
     ? (now.progress >= 0.9 ? 48 : 4)
     : (now.progress >= 0.9 ? 24 : 2);
-  if (idle >= grace && ageHours >= grace && now.availability <= now.progress + 0.001)
+  if (idle >= grace && ageHours >= grace)
     return {
       action: "replace",
-      reason: `No byte progress or reachable source for ${grace} hours`,
+      reason: now.connectedSeeds>0||now.availability>now.progress+.001
+        ?`No byte progress for ${grace} hours despite advertised peers or pieces`
+        :`No byte progress or reachable source for ${grace} hours`,
       destructive: true,
       targetId: target.id,
       hash: now.hash,
