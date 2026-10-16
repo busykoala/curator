@@ -799,12 +799,13 @@ export async function runRequestedAcquisitionCycle(){
 export function startAcquisitionController() {
   if (timer) return;
   stateSet("acquisition_heartbeat", String(Date.now()));
+  stateSet('acquisition_requested_action','run');
   const monitorTimer=setInterval(()=>void monitorTransfers(),30_000);
   const heartbeatTimer = setInterval(
     () => stateSet("acquisition_heartbeat", String(Date.now())),
     60_000,
   );
-  setTimeout(() => void runAcquisitionCycle(), 4_000);
+  setTimeout(() => void runRequestedAcquisitionCycle(), 4_000);
   timer = setInterval(() => void runAcquisitionCycle(), 5 * 60_000);
   actionTimer = setInterval(() => {
     void runRequestedAcquisitionCycle();

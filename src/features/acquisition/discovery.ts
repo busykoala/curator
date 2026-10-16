@@ -43,12 +43,13 @@ export async function directCandidates(artist:string,title:string) {
       await reserveSearch("direct",[source.id]);
       stateSet(`acquisition_source_wait:${source.id}`,String(Date.now()+5000));
       const reports=await prowlarr<Release[]>(`/search?query=${encodeURIComponent(query)}&type=search&categories=3000&indexerIds=${source.id}&limit=100`);
+      stateSet(`acquisition_source_error:${source.id}`,'');
       return reports.map(r=>{
         const title=String(r.title??'');
         const quality=/\bflac\b/i.test(title)?'FLAC':/\bmp3\b.*\b320\b|\b320\s*kbps\b/i.test(title)?'MP3-320':/\bmp3\b.*\bv0\b/i.test(title)?'MP3-VBR-V0':'Unknown';
         return {...r,quality:{quality:{name:quality}},indexer:`${source.name} (Prowlarr)`,direct:true};
       });
-    }));stateSet(`acquisition_source_error:${source.id}`,'');completed++;if(completed>=2)break}catch(error){
+    }));completed++;if(completed>=2)break}catch(error){
       errors.push(error);
       const retry=error instanceof SearchDeferred?Date.parse(error.retryAt):Date.now()+5*60_000;
       stateSet(`acquisition_source_wait:${source.id}`,String(retry));
