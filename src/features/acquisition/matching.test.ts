@@ -39,7 +39,16 @@ test('repairs retain source identity and reject other albums even when the parse
   assert.equal(conflictingAlbum(item('Khatia Buniatishvili - Labyrinth Ephemera (2024) FLAC'),target,[{...album('Labyrinth Ephemera'),id:2}],'Khatia Buniatishvili'),true);
   assert.equal(conflictingAlbum(item('Khatia Buniatishvili - Labyrinth (2020) FLAC'),target,[{...album('Labyrinth Ephemera'),id:2}],'Khatia Buniatishvili'),false);
   const first=repairedTitle({title:'Khatia Buniatishvili Labyrinth',guid:'source-one'},target,'Khatia Buniatishvili');
+  assert.match(first,/\[src-[a-p]{12}\]$/);
   assert.notEqual(first,repairedTitle({title:'Khatia Buniatishvili Labyrinth',guid:'source-two'},target,'Khatia Buniatishvili'));
+});
+test('artist aliases require a verified original native identity and cannot waive recording variants',()=>{
+  const target=album('Soul Rebels','1970-01-01');
+  const source=item('Bob Marley - Soul Rebels (1970) FLAC');
+  assert.equal(matchesAlbum(source,target,'Bob Marley & The Wailers'),false);
+  assert.equal(matchesAlbum(source,target,'Bob Marley & The Wailers',{artist:{id:1},albums:[{id:1}]}),true);
+  assert.equal(matchesAlbum(source,target,'Bob Marley & The Wailers',{artist:{id:2},albums:[{id:1}]}),false);
+  assert.equal(matchesAlbum(item('Bob Marley - Soul Rebels (Source Materials) FLAC'),target,'Bob Marley & The Wailers',{artist:{id:1},albums:[{id:1}]}),false);
 });
 test('does not confuse volumes, compilation fragments, or ambiguous generic titles',()=>{
   assert.equal(matchesAlbum(item('Queen - Greatest Hits I,II,III FLAC'),album('Greatest Hits I & II'),'Queen'),false);

@@ -56,9 +56,10 @@ export function parserRejections(item: Release) {
 /** Conservative title evidence, followed by Lidarr's own exact ID resolution. */
 export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string, parsed?: {artist?:{id:number};albums?:Array<{id:number}>}) {
   const raw = decodeTitle(String(item.title ?? "")), titleWords = words(raw), artistWords = significant(artist);
+  const verified=parsed?.artist?.id===album.artistId&&parsed.albums?.length===1&&parsed.albums[0].id===album.id;
   // Never mistake e.g. Delores Keane for Keane. Collaborative credits may follow.
   const prefix = significant(raw).slice(0, artistWords.length).join(" ");
-  if (!artistWords.length || prefix !== artistWords.join(" ")) return false;
+  if (!artistWords.length || (prefix !== artistWords.join(" ")&&!verified)) return false;
   // Some catalogue groups reuse a studio album's name for a multi-album box.
   // The shared title alone cannot establish that collection's identity.
   if(/\bbox\s*set\b/i.test(album.disambiguation??'')&&!/\bbox\s*set\b|\bdisk union\b/i.test(raw)){
@@ -90,7 +91,6 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string,
   // Generic compilation names and numeric titles require exact native mapping;
   // don't repair them using a substring such as "Best of Bob Marley" in Legend.
   if (needsNativeIdentity(album,artist)) {
-    const verified=parsed?.artist?.id===album.artistId&&parsed.albums?.length===1&&parsed.albums[0].id===album.id;
     if (!verified&&(key(String(item.albumTitle ?? "")) !== key(album.title) || item.rejected)) return false;
     const year = album.releaseDate?.slice(0, 4);
     if (!year || !titleWords.includes(year)) return false;
@@ -111,7 +111,11 @@ export function repairedTitle(item: Release, album: CatalogAlbum, artist: string
   const quality = releaseQuality(item);
   // Recording variants have already been checked against metadata. The original
   // title remains in the audit record; the download URL/hash is never changed.
-  const source=createHash('sha256').update(String(item.guid??item.downloadUrl??item.title)).digest('hex').slice(0,12);
+  // Lidarr treats digit runs in a release-group suffix as an overriding year.
+  // Encode every hexadecimal nibble as a letter, preserving all48 identity
+  // bits while keeping the album's real year visible to the native parser.
+  const source=createHash('sha256').update(String(item.guid??item.downloadUrl??item.title)).digest('hex').slice(0,12)
+    .replace(/[0-9a-f]/g,n=>String.fromCharCode(97+parseInt(n,16)));
   return `${artist} - ${album.title} ${album.releaseDate ? `(${album.releaseDate.slice(0, 4)}) ` : ""}[${quality}] [src-${source}]`;
 }
 

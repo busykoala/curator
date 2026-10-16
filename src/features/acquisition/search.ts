@@ -2,7 +2,7 @@ import { db } from "@/features/db/client";
 import type { AcquisitionTarget } from "./types";
 import { album, albumCatalog, parseRelease, pushRelease, releaseIsBlocked, SearchDeferred } from "./lidarr";
 import { nativeAlbum, nativeArtist, directCandidates, directArtist, cachedArtistCandidates } from "./discovery";
-import { allowedQuality, conflictingAlbum, decodeTitle, matchesAlbum, needsNativeIdentity, needsQualityRepair, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
+import { allowedQuality, conflictingAlbum, decodeTitle, matchesAlbum, needsQualityRepair, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
 import { releaseScore } from "./policy";
 import { sourceScores, withHybrid } from "./quality";
 import { qbitCapacity, releaseInfoHash } from "./qbittorrent";
@@ -55,9 +55,10 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
         if(Number(item.seeders??0)<2){reject('Fewer than two reported seeders');continue}
         if(String(item.protocol??'torrent')!=='torrent'){reject('Unsupported download protocol');continue}
         let matched=matchesAlbum(item,metadata,target.artist);
-        if(!matched&&needsNativeIdentity(metadata,target.artist)&&matchesAlbum({...item,albumTitle:metadata.title,rejected:false},metadata,target.artist)){
-          // Generic titles need the original, unmodified source title to resolve
-          // to exactly this catalogue identity before any repair is considered.
+        if(!matched){
+          // Artist aliases and generic titles require the original source title
+          // to resolve to exactly this identity. Recording/edition restrictions
+          // still apply; an unfamiliar credit alone is not proof of a mismatch.
           const raw=decodeTitle(String(item.title)),parsed=await parseRelease(raw);
           parsedTitles.set(raw,parsed);
           matched=matchesAlbum(item,metadata,target.artist,parsed);
