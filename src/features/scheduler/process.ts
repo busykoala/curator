@@ -18,6 +18,7 @@ import { splitArtistCredits,splitComposerCredits } from "@/features/scanner/cred
 import { inferGenreFallback } from "@/features/taxonomy/genre-fallback";
 import { semanticTagProperties } from "@/features/categorization/tags";
 import { aiCooldownRemaining } from "@/features/ai/client";
+import {hasIdentityContext} from '@/features/scanner/normalize';
 type Row = { id: number; path: string; album_key: string; artist_name: string; album_name: string; inode: number; size: number; mtime_ms: number; tags_json: string; applied_hash: string | null };
 type Progress = { subject: string; phase: string; currentFile?: string; processedCount: number; totalCount: number };
 function taxonomySnapshot(): Record<string, string[]> { const output: Record<string, string[]> = {}; const rows = db().prepare("SELECT kind,name FROM taxonomy_terms WHERE active=1 ORDER BY name").all() as Array<{ kind: string; name: string }>; for (const row of rows) (output[row.kind] ??= []).push(row.name); return output; }
@@ -34,6 +35,11 @@ export async function processAlbums(limit=12,report:(progress:Progress)=>void=()
     if(stateGet("paused")==="true"||aiCooldownRemaining())break;
     const key=keys[albumIndex].album_key,files=db().prepare("SELECT * FROM files WHERE album_key=? AND status='analyzed'").all(key) as Row[];
     if(!files.length)continue;
+    if(!hasIdentityContext(files[0].artist_name,files[0].album_name)&&!getManualOverride(key)?.confirmed){
+      db().prepare("UPDATE files SET status='error' WHERE album_key=? AND status='analyzed'").run(key);
+      replaceFileIssue(files[0].id,key,'identity_unresolved','warning','Artist or album tags are missing; awaiting verified import metadata or manual identification');
+      continue;
+    }
     if(!acquireAlbumLease(key,"write"))continue;
     const first=files[0],subject=`${first.artist_name} / ${first.album_name}`;
     report({subject,phase:"resolve",processedCount:albumIndex,totalCount:keys.length});
@@ -48,6 +54,7 @@ export async function processAlbums(limit=12,report:(progress:Progress)=>void=()
       if(coverPath)for(const dir of new Set(files.map(file=>dirname(file.path))))if(`${dir}/cover.jpg`!==coverPath)await copyFile(coverPath,`${dir}/cover.jpg`).catch(()=>{});
       let fileFailures=0;
       for(let fileIndex=0;fileIndex<files.length;fileIndex++){
+        if(stateGet('paused')==='true'){db().prepare("UPDATE files SET status='analyzed' WHERE album_key=? AND status='processing'").run(key);break}
         const file=files[fileIndex],tags=repairDeezerCensorship(file.path,JSON.parse(file.tags_json) as Record<string,unknown>,config.MUSIC_ROOT),scalar=(value:unknown):string=>Array.isArray(value)?String(value[0]??""):String(value??""),trackArtists=splitArtistCredits([tags.artists,tags.artist,tags.ARTISTS].flat()),displayArtist=trackArtists.join(" feat. ")||identity.artist;
         report({subject,phase:"write",currentFile:file.path,processedCount:fileIndex,totalCount:files.length});
         const properties:Record<string,string[]>={TITLE:[scalar(tags.title)].filter(Boolean),ARTIST:[displayArtist],ARTISTS:trackArtists.length?trackArtists:[identity.artist],ALBUM:[identity.album],ALBUMARTIST:[identity.artist],ALBUMARTISTS:[identity.artist],GENRE:genres,STYLE:styles,MOOD:moods,SCENE:scenes,ERA:era(identity.date),ARTISTDESCRIPTION:[safeDescription(result.artistDescription,`${identity.artist} is the credited artist for ${identity.album}.`)],ALBUMDESCRIPTION:[safeDescription(result.albumDescription,`${identity.album} is an album by ${identity.artist}.`)],DATE:[identity.date||scalar(tags.date)].filter(Boolean),RELEASEDATE:[identity.date||scalar(tags.date)].filter(Boolean)},composers=splitComposerCredits([tags.composer,tags.COMPOSER,tags.AUTHOR].flat()).map(name=>name.toLowerCase()==="billie joe"?"Billie Joe Armstrong":name);properties.COMPOSER=composers;properties.COMPOSERS=[];properties.AUTHOR=[];properties.AUTHORS=[];
@@ -56,6 +63,7 @@ export async function processAlbums(limit=12,report:(progress:Progress)=>void=()
         const override=db().prepare("SELECT patch_json FROM file_metadata_overrides WHERE file_id=?").get(file.id) as{patch_json:string}|undefined;if(override)Object.assign(properties,JSON.parse(override.patch_json) as Record<string,string[]>);
         try{if(await writeMetadata(file,{properties,coverPath})==="written"){written++;changedFolders.add(dirname(file.path))}}catch(error){fileFailures++;db().prepare("UPDATE files SET status='error',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(file.id);replaceFileIssue(file.id,key,"processing_failed","error",String(error))}
       }
+      if(stateGet('paused')==='true')continue;
       db().prepare("UPDATE issues SET status='resolved',updated_at=CURRENT_TIMESTAMP WHERE album_key=? AND status='open' AND code!='processing_failed'").run(key);if(!fileFailures)db().prepare("UPDATE issues SET status='resolved',updated_at=CURRENT_TIMESTAMP WHERE album_key=? AND status='open' AND code='processing_failed'").run(key);
       const spokenWord=Boolean(db().prepare("SELECT 1 FROM track_profiles p,json_each(p.profile_json,'$.genre') genre WHERE p.album_key=? AND genre.value='spoken_word_comedy' LIMIT 1").get(key));
       if(!writableIdentity&&!manuallyConfirmed&&!spokenWord)db().prepare("INSERT INTO issues(album_key,code,severity,message) VALUES (?,'identity_unresolved','warning',?)").run(key,`Best identity confidence ${identity.confidence.toFixed(2)}, margin ${identity.margin.toFixed(2)}; no factual IDs written`);

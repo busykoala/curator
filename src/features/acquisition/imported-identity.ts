@@ -9,7 +9,7 @@ import {album,artist,releaseTracks,trackFiles} from './lidarr';
 import {rescanFolders} from '@/features/sources/lidarr';
 import {refreshLibrary} from '@/features/integrations/navidrome';
 const run=promisify(execFile);
-type IdentityJob={albumId:number;artistId:number;releaseId:number;artist:string;album:string;trackIds:number[]};
+type IdentityJob={albumId:number;artistId:number;releaseId:number;artist:string;album:string;date?:string;trackIds:number[]};
 const jobKey=(id:number)=>`acquisition_identity_pending:${id}`;
 export function queueImportedIdentity(job:IdentityJob){
   if(!job.artist.trim()||!job.album.trim()||!job.trackIds.length||new Set(job.trackIds).size!==job.trackIds.length)throw Error('Incomplete imported identity');
@@ -28,7 +28,15 @@ export function missingIdentityProperties(tags:Record<string,unknown>,expected:R
   }
   return missing;
 }
-type TagIO={read:(path:string)=>Promise<Record<string,unknown>>;write:(path:string,properties:Record<string,string[]>)=>Promise<void>};
+type GeneratedIdentity={artist:string;album:string};
+export function identityRepairPlan(tags:Record<string,unknown>,expected:Record<string,string>,generated?:GeneratedIdentity){
+ const scalar=(v:unknown)=>String(Array.isArray(v)?v[0]??'':v??'');
+ const restore=Boolean(generated&&scalar(tags.ARTIST)===generated.artist&&scalar(tags.ALBUM)===generated.album&&(expected.ARTIST!==generated.artist||expected.ALBUM!==generated.album));
+ const properties=missingIdentityProperties(tags,expected);
+ if(restore){for(const [k,v] of Object.entries(expected))properties[k]=[v];properties.ARTISTS=[expected.ARTIST];properties.ALBUMARTISTS=[expected.ALBUMARTIST];for(const k of ['GENRE','STYLE','MOOD','SCENE','ERA','ARTISTDESCRIPTION','ALBUMDESCRIPTION','DATE','RELEASEDATE','MUSICBRAINZ_ARTISTID','MUSICBRAINZ_ALBUMARTISTID','MUSICBRAINZ_RELEASEGROUPID','MUSICBRAINZ_ALBUMID'])if(!(k in expected))properties[k]=[]}
+ return{properties,restore};
+}
+type TagIO={read:(path:string)=>Promise<Record<string,unknown>>;write:(path:string,properties:Record<string,string[]>,clearPictures?:boolean)=>Promise<void>};
 const tagIO:TagIO={async read(actual){
   let tags:Record<string,unknown>={};
   const flac=extname(actual).toLowerCase()==='.flac';
@@ -38,39 +46,44 @@ const tagIO:TagIO={async read(actual){
     tags={TITLE:read.title,ARTIST:read.artist,ALBUM:read.album,ALBUMARTIST:read.albumArtist,TRACKNUMBER:read.track,DISCNUMBER:read.discNumber};
   }
   return tags;
-},async write(path,properties){
-  if(extname(path).toLowerCase()==='.flac')await run('metaflac',[...Object.entries(properties).flatMap(([k,v])=>[`--remove-tag=${k}`,`--set-tag=${k}=${v[0]}`]),path],{timeout:30000});
+},async write(path,properties,clearPictures){
+  if(extname(path).toLowerCase()==='.flac'){
+    if(clearPictures)await run('metaflac',['--remove','--block-type=PICTURE',path],{timeout:30000});
+    await run('metaflac',[...Object.entries(properties).flatMap(([k,v])=>[`--remove-tag=${k}`,...v.map(value=>`--set-tag=${k}=${value}`)]),path],{timeout:30000});
+  }
   else{const {writeTagsBatch}=await import('taglib-wasm/simple');const result=await writeTagsBatch([{path,properties}],{concurrency:1,continueOnError:false});if(result.items[0]?.status==='error')throw result.items[0].error}
 }};
-export async function repairImportedFile(path:string,expected:Record<string,string>,io=tagIO){
+export async function repairImportedFile(path:string,expected:Record<string,string>,io=tagIO,generated?:GeneratedIdentity){
   const root=await realpath(config.MUSIC_ROOT),actual=await realpath(path);
   if(!actual.startsWith(root+sep))throw Error('Imported file resolves outside the library');
   const before=await stat(actual);
   if(!before.isFile())throw Error('Imported path is not a file');
-  const properties=missingIdentityProperties(await io.read(actual),expected);
+  const {properties,restore}=identityRepairPlan(await io.read(actual),expected,generated);
   if(!Object.keys(properties).length)return false;
   const temp=actual.slice(0,-extname(actual).length)+'.curator-recovery-'+randomUUID()+extname(actual);
   try{
     // Copy and replace the library file: even a historical hardlink cannot
     // mutate a torrent's original bytes, and a failed write leaves audio intact.
     await copyFile(actual,temp);
-    await io.write(temp,properties);
+    await io.write(temp,properties,restore);
     const current=await stat(actual);if(current.size!==before.size||current.mtimeMs!==before.mtimeMs)throw Error('Imported file changed during identity repair');
     const handle=await open(temp,'r+');try{await handle.sync()}finally{await handle.close()}
-    await rename(temp,actual);return true;
+    await rename(temp,actual);
+    if(restore)await rename(resolve(dirname(actual),'cover.jpg'),resolve(dirname(actual),'cover.jpg.curator-identity-review-'+randomUUID())).catch((error:NodeJS.ErrnoException)=>{if(error.code!=='ENOENT')throw error});
+    return true;
   }finally{await rm(temp,{force:true})}
 }
 async function backfillProvenImports(){
-  if(stateGet('acquisition_identity_backfilled_v1'))return;
+  if(stateGet('acquisition_identity_backfilled_v2'))return;
   const rows=db().prepare("SELECT DISTINCT a.lidarr_album_id id FROM download_interventions i JOIN acquisition_targets a ON a.id=i.target_id WHERE i.action='manual-import' AND i.status='applied' AND json_extract(i.evidence_json,'$.recovery') IS NOT NULL AND i.created_at>=datetime('now','-7 days')").all() as {id:number}[];
   for(const row of rows){
-    if(stateGet(jobKey(row.id))||stateGet(`acquisition_identity_done:${row.id}`))continue;
+    if(stateGet(jobKey(row.id)))continue;
     const a=await album(row.id),release=a.releases?.find(r=>r.monitored);
     if(!release?.id||Number(a.statistics?.percentOfTracks??0)<100)continue;
     const ar=await artist(a.artistId),tracks=await releaseTracks(release.id);
-    queueImportedIdentity({albumId:a.id,artistId:a.artistId,releaseId:release.id,artist:String(ar.artistName),album:a.title,trackIds:tracks.map(t=>t.id)});
+    queueImportedIdentity({albumId:a.id,artistId:a.artistId,releaseId:release.id,artist:String(ar.artistName),album:a.title,date:a.releaseDate,trackIds:tracks.map(t=>t.id)});
   }
-  stateSet('acquisition_identity_backfilled_v1','true');
+  stateSet('acquisition_identity_backfilled_v2','true');
 }
 export async function recoverImportedIdentities(){
   await backfillProvenImports();
@@ -86,7 +99,14 @@ export async function recoverImportedIdentities(){
       if(!file||file.albumId!==job.albumId)throw Error('Imported file identity is unavailable');
       const path=libraryImportPath(file.path);
       folders.add(dirname(path));
-      if(await repairImportedFile(path,{TITLE:track.title,ARTIST:job.artist,ALBUMARTIST:job.artist,ALBUM:job.album,TRACKNUMBER:String(track.absoluteTrackNumber),DISCNUMBER:String(track.mediumNumber)}))repaired++;
+      const previous=db().prepare('SELECT artist_name,album_name,tags_json,applied_hash FROM files WHERE path=?').get(path) as {artist_name:string;album_name:string;tags_json:string;applied_hash:string|null}|undefined;
+      let generated:GeneratedIdentity|undefined;
+      if(previous?.applied_hash&&previous.artist_name==='Unknown Artist'&&previous.album_name==='Unknown Album'){
+        const tags=JSON.parse(previous.tags_json),first=(v:unknown)=>String(Array.isArray(v)?v[0]??'':v??'');
+        generated={artist:first(tags.artist),album:first(tags.album)};
+      }
+      if(await repairImportedFile(path,{TITLE:track.title,ARTIST:job.artist,ALBUMARTIST:job.artist,ALBUM:job.album,TRACKNUMBER:String(track.absoluteTrackNumber),DISCNUMBER:String(track.mediumNumber),...(job.date?{DATE:job.date.slice(0,10)}:{})},undefined,generated))repaired++;
+      if(generated){db().prepare('DELETE FROM track_profiles WHERE file_id IN (SELECT id FROM files WHERE path=?)').run(path);db().prepare("UPDATE files SET status='error',applied_hash=NULL WHERE path=?").run(path);stateSet('last_scan','0')}
     }
     if(folders.size)await rescanFolders([...folders]);
     // Also retry notification after a restart or partial write failure.

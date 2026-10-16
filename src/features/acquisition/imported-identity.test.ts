@@ -4,7 +4,15 @@ import {mkdtemp,writeFile,readFile,mkdir,link,symlink,rm} from 'node:fs/promises
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {config} from '@/config';
-import {libraryImportPath,missingIdentityProperties,repairImportedFile} from './imported-identity';
+import {identityRepairPlan,libraryImportPath,missingIdentityProperties,repairImportedFile} from './imported-identity';
+test('verified imports undo only the exact wrong identity generated from unidentified source tags',()=>{
+ const expected={ARTIST:'Jimi Hendrix',ALBUMARTIST:'Jimi Hendrix',ALBUM:'War Heroes',TITLE:'Bleeding Heart',DATE:'1972-10-01'};
+ const tags={ARTIST:['Shinedown'],ALBUM:['Leave a Whisper'],GENRE:['Rock']};
+ const plan=identityRepairPlan(tags,expected,{artist:'Shinedown',album:'Leave a Whisper'});
+ assert.equal(plan.restore,true);assert.deepEqual(plan.properties.ARTIST,['Jimi Hendrix']);assert.deepEqual(plan.properties.ALBUM,['War Heroes']);assert.deepEqual(plan.properties.GENRE,[]);assert.deepEqual(plan.properties.DATE,['1972-10-01']);
+ assert.equal(identityRepairPlan({...tags,ARTIST:['Manual Edit']},expected,{artist:'Shinedown',album:'Leave a Whisper'}).restore,false);
+ assert.equal(identityRepairPlan(tags,expected).restore,false);
+});
 test('identity repair only fills missing fields, preserving existing metadata',()=>{
   assert.deepEqual(missingIdentityProperties({ARTIST:['Existing Artist'],TRACKNUMBER:'0'},{ARTIST:'Artist',ALBUM:'Album',TRACKNUMBER:'1'}),{ALBUM:['Album'],TRACKNUMBER:['1']});
   assert.throws(()=>libraryImportPath('/data/downloads/test.flac'),/outside/);

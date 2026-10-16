@@ -1,9 +1,9 @@
 import { opendir, stat } from "node:fs/promises";
-import { extname } from "node:path";
+import { dirname,extname } from "node:path";
 import { config } from "@/config";
 import { db, stateSet } from "@/features/db/client";
 import { analyzeFile } from "@/features/analysis/analyze";
-import { albumKey, clean } from "./normalize";
+import { clean,scannedAlbumKey } from "./normalize";
 import { repairDeezerCensorship } from "./deezer-censorship";
 import { TagWorkerPool } from "./tag-worker-pool";
 import { detectDuplicates } from "@/features/analysis/duplicates";
@@ -25,7 +25,7 @@ async function processFile(path: string, workers: TagWorkerPool, existing?: Exis
     const metadata = await stat(path);
     if (existing && existing.status!=="error" && existing.inode === Number(metadata.ino) && existing.size === metadata.size && existing.mtime_ms === metadata.mtimeMs) return "unchanged";
     const { tags, properties, pictures } = await workers.read(path, EXTRA); const tagRecord = repairDeezerCensorship(path, tags as unknown as Record<string, unknown>, config.MUSIC_ROOT);
-    const artist = clean(tagRecord.albumArtist) || clean(tagRecord.artist) || "Unknown Artist"; const album = clean(tagRecord.album) || "Unknown Album"; const key = albumKey(artist, album);
+    const artist = clean(tagRecord.albumArtist) || clean(tagRecord.artist) || "Unknown Artist"; const album = clean(tagRecord.album) || "Unknown Album"; const key = scannedAlbumKey(artist, album,dirname(path));
     const tagsJson=JSON.stringify(tagRecord),propertiesJson=JSON.stringify(properties),artworkJson=JSON.stringify(pictures);
     const contentUnchanged=existing?.tags_json===tagsJson&&existing.properties_json===propertiesJson&&existing.artwork_json===artworkJson;
     const nextStatus=contentUnchanged&&existing?.status==="written"?"written":"analyzed";

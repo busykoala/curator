@@ -4,6 +4,12 @@ import { identityIsWritable,resolveIdentity } from "./resolve";
 import type { MbCandidate } from "@/features/sources/musicbrainz";
 
 function candidate(title:string,artistNames:string[],primary="Album"):MbCandidate{return{id:"11111111-1111-4111-8111-111111111111",title,score:100,"first-release-date":"1999-01-01","primary-type":primary,"artist-credit":artistNames.map((name,index)=>({artist:{id:`22222222-2222-4222-8222-22222222222${index}`,name},joinphrase:index<artistNames.length-1?" & ":""}))}}
+test('low-confidence catalogue candidates cannot replace local names, dates, IDs or semantic evidence',()=>{
+  for(const [artist,album] of [['Unknown Artist','Unknown Album'],['Jimi Hendrix','War Heroes']]){
+    const identity=resolveIdentity(artist,album,[candidate('Leave a Whisper',['Shinedown'])],[]);
+    assert.equal(identityIsWritable(identity),false);assert.equal(identity.artist,artist);assert.equal(identity.album,album);assert.equal(identity.artistId,undefined);assert.equal(identity.releaseGroupId,undefined);assert.equal(identity.date,undefined);assert.deepEqual(identity.semanticTags,[]);
+  }
+});
 
 for(const [artist,album,group] of [
   ["Massive Attack","Massive Attack ?– Blue Lines",candidate("Blue Lines",["Massive Attack"])],

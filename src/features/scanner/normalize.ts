@@ -11,6 +11,8 @@ export function clean(value: unknown): string {
 }
 export function normalized(value: string): string { return clean(value).toLocaleLowerCase().replace(/[’']/g, "'").replace(/[^\p{L}\p{N}]+/gu, " ").trim(); }
 export function albumKey(artist: string, album: string): string { return createHash("sha256").update(`${normalized(artist)}\0${normalized(album)}`).digest("hex"); }
+export function hasIdentityContext(artist:string,album:string){return Boolean(clean(artist)&&clean(album)&&!/^unknown artist$/i.test(artist)&&!/^unknown album$/i.test(album))}
+export function scannedAlbumKey(artist:string,album:string,directory:string){return hasIdentityContext(artist,album)?albumKey(artist,album):stableHash({artist,album,directory})}
 function canonical(value: unknown): unknown { if (Array.isArray(value)) return value.map(canonical); if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)])); return value; }
 export function stableHash(value: unknown): string { return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex"); }
 export function wordLimit(text: string, max: number): string { return clean(text).split(" ").slice(0, max).join(" "); }

@@ -61,7 +61,7 @@ export async function exactManualImport(item:QueueItem,onReview?:(detail:Record<
   const albumId=[...albumIds][0];
   if(item.albumId&&item.albumId!==albumId)return false;
   const files=rows.map(row=>({path:row.path,artistId:(row.artist as{id?:number})?.id,albumId,albumReleaseId:Number(row.albumReleaseId),trackIds:(row.tracks as Array<{id:number}>).map(track=>track.id),quality:row.quality,downloadId:item.downloadId}));
-  if(proven)queueImportedIdentity({albumId,artistId:[...artistIds][0],releaseId:[...releaseIds][0],artist:String((rows[0].artist as {artistName?:string}).artistName??''),album:String((rows[0].album as {title?:string}).title??''),trackIds:[...trackIds]});
+  if(proven)queueImportedIdentity({albumId,artistId:[...artistIds][0],releaseId:[...releaseIds][0],artist:String((rows[0].artist as {artistName?:string}).artistName??''),album:String((rows[0].album as {title?:string}).title??''),date:(rows[0].album as {releaseDate?:string}).releaseDate,trackIds:[...trackIds]});
   await importFiles(files);
   const first=rows[0];
   return{albumId,artistId:[...artistIds][0],artist:String((first.artist as{artistName?:string}|undefined)?.artistName??""),album:String((first.album as{title?:string}|undefined)?.title??""),...(proven?{recovery:'Complete catalogue track list, positions and durations independently verified; native track mapping agrees'}:{})};
