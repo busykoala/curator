@@ -77,3 +77,17 @@ test('music-capable providers retain the music category',async()=>{
   };
   try{assert.deepEqual(await directCandidates('Test','Album'),[])}finally{globalThis.fetch=original}
 });
+
+test('an enabled Knaben provider adds capacity while a manually disabled one stays unused',async()=>{
+  db().exec('DELETE FROM state; DELETE FROM acquisition_requests');clearDiscoveryCache();
+  const original=globalThis.fetch;let enabled=false,calls=0;
+  globalThis.fetch=async input=>{
+    const url=new URL(String(input));
+    if(url.pathname.endsWith('/indexer'))return Response.json([{id:4,name:'Knaben',enable:enabled,capabilities:{categories:[{id:3000}]}}]);
+    calls++;assert.equal(url.searchParams.get('indexerIds'),'4');assert.equal(url.searchParams.get('categories'),'3000');return Response.json([]);
+  };
+  try{
+    await assert.rejects(directCandidates('Test','Album'),/No enabled discovery providers/);assert.equal(calls,0);
+    enabled=true;clearDiscoveryCache();assert.deepEqual(await directCandidates('Test','Album'),[]);assert.equal(calls,1);
+  }finally{globalThis.fetch=original}
+});

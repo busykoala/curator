@@ -123,7 +123,7 @@ async function sourceCandidates(source: Indexer, query: string) {
 }
 export async function directCandidates(artist: string, title: string) {
   if (!sources || sources.expires < Date.now()) sources = { expires: Date.now() + 300_000, rows: await prowlarr<Indexer[]>('/indexer') };
-  const preferred = ['TorrentsCSV', 'LimeTorrents', 'The Pirate Bay', 'TorrentKitty', 'TorrentDownload'];
+  const preferred = ['TorrentsCSV', 'Knaben', 'LimeTorrents', 'The Pirate Bay', 'TorrentKitty', 'TorrentDownload'];
   const rows = sources.rows.filter(s => s.enable && preferred.includes(s.name))
     .sort((a, b) => preferred.indexOf(a.name) - preferred.indexOf(b.name));
   // Broaden the query, never the identity acceptance criteria.
