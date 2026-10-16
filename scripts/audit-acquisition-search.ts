@@ -25,10 +25,11 @@ globalThis.fetch=async(input,init)=>{
  if(url.endsWith('/album/1'))return Response.json({id:1,artistId:1,title:'Album',monitored:true,statistics:{percentOfTracks:0}});
  if(url.includes('/album?artistId='))return Response.json([]);
  if(url.endsWith('/indexer'))return Response.json(url.includes('9696')?(mode==='native-outage'?[{id:3,name:'LimeTorrents',enable:true}]:['native-quota','all-deferred'].includes(mode)?[{id:10,name:'TorrentsCSV',enable:true,capabilities:{categories:[{id:8000}]}}]:[]):[{id:1,enableInteractiveSearch:true}]);
- if(url.includes('/search?')){if(mode==='native-quota')assert.equal(new URL(url).searchParams.has('categories'),false);return Response.json([{guid:'alternate',title:'Test - Album FLAC',indexerId:3,protocol:'torrent',seeders:10,size:300000000,magnetUrl:'magnet:?xt=urn:btih:0123456789012345678901234567890123456789'}]);}
+ if(url.includes('/search?')){if(mode==='native-quota')assert.equal(new URL(url).searchParams.has('categories'),false);return Response.json([{guid:'alternate',title:'Test - Album FLAC',indexerId:3,protocol:'torrent',seeders:10,size:300000000,infoHash:'0123456789012345678901234567890123456789'}]);}
  assert.match(url,/\/api\/v1\/release/);
  if(init?.method==='POST'){
   const release=JSON.parse(String(init.body));posts.push(release.indexer);
+  if(mode==='native-quota'){assert.equal(new URL(release.magnetUrl).searchParams.get('xt'),'urn:btih:0123456789012345678901234567890123456789');assert.ok(Number.isFinite(Date.parse(release.publishDate)))}
   assert.match(url,/release\/push/);
   if(mode.startsWith('repair')){assert.match(url,/release\/push/);assert.equal(release.albumId,1);if(mode==='repair-quality')assert.match(release.title,/FLAC 24bit/);const approved=mode==='repair'||mode==='repair-quality';return Response.json({approved,rejected:!approved,rejections:approved?[]:['Too large']})}
   if(mode==='timeout')throw new DOMException('Timed out','TimeoutError');

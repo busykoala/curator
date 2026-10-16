@@ -2,6 +2,7 @@ import { config } from "@/config";
 import { db, stateGet, stateSet } from "@/features/db/client";
 import { artistReleases, releases, reserveSearch, SearchDeferred } from "./lidarr";
 import type { Release } from "./matching";
+import { releaseInfoHash } from './qbittorrent';
 
 const cache = new Map<string, { expires: number; work: Promise<Release[]> }>();
 const sourceWork = new Map<number, Promise<unknown>>();
@@ -78,6 +79,21 @@ async function serializedSource<T>(id: number, work: () => Promise<T>): Promise<
   sourceWork.set(id, next);
   try { return await next; } finally { if (sourceWork.get(id) === next) sourceWork.delete(id); }
 }
+export function directRelease(report: Release, sourceName: string, observedAt = new Date().toISOString()): Release {
+  const title = String(report.title ?? ''), hash = releaseInfoHash(report);
+  const quality = /\bflac\b/i.test(title) ? 'FLAC' : /\bmp3\b.*\b320\b|\b320\s*kbps\b/i.test(title) ? 'MP3-320' : /\bmp3\b.*\bv0\b/i.test(title) ? 'MP3-VBR-V0' : 'Unknown';
+  let magnetUrl=report.magnetUrl;
+  if(!magnetUrl&&!report.downloadUrl){
+    if(String(report.guid??'').startsWith('magnet:?'))magnetUrl=report.guid;
+    else if(hash)magnetUrl=`magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(title)}`;
+  }
+  const hasDate=typeof report.publishDate==='string'&&Number.isFinite(Date.parse(report.publishDate));
+  // Hash-only indexers omit both download links and publication dates. Use the
+  // verified hash as the magnet and record observation time explicitly; this
+  // timestamp is transport metadata, never the library album's release date.
+  return {...report,...(magnetUrl?{magnetUrl}:{}),publishDate:hasDate?report.publishDate:observedAt,
+    publicationDateSource:hasDate?'indexer':'observed',quality:{quality:{name:quality}},indexer:`${sourceName} (Prowlarr)`,direct:true};
+}
 async function sourceCandidates(source: Indexer, query: string) {
   return cached(`direct:${source.id}:${query}`, () => serializedSource(source.id, async () => {
     const until = Number(stateGet(`acquisition_source_wait:${source.id}`, '0'));
@@ -98,11 +114,7 @@ async function sourceCandidates(source: Indexer, query: string) {
       recordSearch(source.name, source.id, 'search', started, { query, categories, results: reports.length });
       stateSet(`acquisition_source_error:${source.id}`, '');
       stateSet(`acquisition_source_status:${source.id}`, JSON.stringify({ at: new Date().toISOString(), results: reports.length }));
-      return reports.map(r => {
-        const title = String(r.title ?? '');
-        const quality = /\bflac\b/i.test(title) ? 'FLAC' : /\bmp3\b.*\b320\b|\b320\s*kbps\b/i.test(title) ? 'MP3-320' : /\bmp3\b.*\bv0\b/i.test(title) ? 'MP3-VBR-V0' : 'Unknown';
-        return { ...r, quality: { quality: { name: quality } }, indexer: `${source.name} (Prowlarr)`, direct: true };
-      });
+      return reports.map(r => directRelease(r, source.name));
     } catch (error) {
       recordSearch(source.name, source.id, 'search_failure', started, { query, reason: String(error) });
       throw error;

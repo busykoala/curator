@@ -5,9 +5,19 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {config} from '@/config';
 import {db,stateGet} from '@/features/db/client';
-import {clearDiscoveryCache,directCandidates} from './discovery';
+import {clearDiscoveryCache,directCandidates,directRelease} from './discovery';
 const dir=mkdtempSync(join(tmpdir(),'curator-discovery-'));config.DATABASE_PATH=join(dir,'test.sqlite');
 after(()=>{db().close();rmSync(dir,{recursive:true,force:true})});
+test('hash-only search results get an exact magnet and an explicitly observed transport date',()=>{
+  const hash='0123456789012345678901234567890123456789',at='2026-10-16T19:00:00.000Z';
+  const item=directRelease({title:'Quincy Jones - Big Band Bossa Nova FLAC',guid:'source-id',infoHash:hash},'TorrentsCSV',at);
+  assert.equal(new URL(String(item.magnetUrl)).searchParams.get('xt'),`urn:btih:${hash}`);
+  assert.equal(item.publishDate,at);assert.equal(item.publicationDateSource,'observed');
+  const original={title:'Album FLAC',magnetUrl:'magnet:?xt=urn:btih:'+hash+'&tr=tracker',publishDate:'2025-01-01T00:00:00Z'};
+  const preserved=directRelease(original,'Test',at);
+  assert.equal(preserved.magnetUrl,original.magnetUrl);assert.equal(preserved.publishDate,original.publishDate);
+  assert.equal(directRelease({title:'Album FLAC',infoHash:'invalid'},'Test',at).magnetUrl,undefined);
+});
 test('an unavailable preferred provider cannot suppress other sources or turn healthy zero results into errors',async()=>{
   const original=globalThis.fetch;const queried:number[]=[];
   clearDiscoveryCache();

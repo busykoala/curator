@@ -51,6 +51,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
         for(const reason of (item.rejections as string[]|undefined)??[])evidence[reason]=(evidence[reason]??0)+1;
         const reject=(reason:string)=>{evidence[reason]=(evidence[reason]??0)+1};
         if(!allowedQuality(item,fallback)){reject('Unsupported or unreported audio quality');continue}
+        if(item.direct&&!item.downloadUrl&&!item.magnetUrl){reject('Missing torrent download handle');continue}
         if(Number(item.seeders??0)<2){reject('Fewer than two reported seeders');continue}
         if(String(item.protocol??'torrent')!=='torrent'){reject('Unsupported download protocol');continue}
         let matched=matchesAlbum(item,metadata,target.artist);
