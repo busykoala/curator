@@ -12,6 +12,7 @@ test('Prowlarr search resources are adapted to the Lidarr submission contract',(
  const r=releasePushPayload({title:'Test - Album FLAC',indexerFlags:[],categories:[{id:8000}],protocol:'torrent',infoHash:'0123456789012345678901234567890123456789',magnetUrl:'magnet:?xt=urn:btih:0123456789012345678901234567890123456789',publishDate:'2026-10-16T00:00:00Z',quality:{quality:{name:'FLAC'}},direct:true});
  assert.equal(r.indexerFlags,0);assert.equal(r.categories,undefined);assert.equal(r.quality,undefined);assert.equal(r.direct,undefined);
  assert.equal(r.infoHash,'0123456789012345678901234567890123456789');assert.equal(r.publishDate,'2026-10-16T00:00:00Z');
+ assert.equal(r.downloadUrl,r.magnetUrl);
 });
 test('an exhausted native fanout does not prevent a provider-scoped search and retry uses quota expiry',async()=>{
  const original=globalThis.fetch;
