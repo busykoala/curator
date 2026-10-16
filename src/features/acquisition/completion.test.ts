@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {incompleteExtras,type TorrentFile} from './qbittorrent';
-import {stalledDecision} from './policy';
+import {connectivityProbeInterval,stalledDecision} from './policy';
 import type {AcquisitionTarget,DownloadObservation} from './types';
 const files:TorrentFile[]=[{index:0,name:'01.mp3',size:1000,progress:1,priority:1},{index:1,name:'Folder.jpg',size:500,progress:.5,priority:1},{index:2,name:'Album.nfo',size:100,progress:0,priority:1}];
+test('an inconclusive diagnostic source error does not freeze recovery for half an hour',()=>{
+  assert.equal(connectivityProbeInterval({error:'fetch failed'}),5*60_000);
+  assert.equal(connectivityProbeInterval({}),30*60_000);
+});
 test('only incomplete artwork and text may be skipped when all audio is complete',()=>{
   assert.deepEqual(incompleteExtras(files),[1,2]);
   assert.deepEqual(incompleteExtras(files.map((f,i)=>i?f:{...f,progress:.99})),[]);

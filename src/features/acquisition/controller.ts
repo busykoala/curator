@@ -22,6 +22,7 @@ import {
 } from "./qbittorrent";
 import {
   controllerMode,
+  connectivityProbeInterval,
   balancedSearchTargets,
   diversifySearchTargets,
   isManagedIncomplete,
@@ -689,7 +690,7 @@ export async function runAcquisitionCycle(consumeRequest=false) {
       stateSet("acquisition_phase", "diagnosing");
       if (
         apply &&
-        Date.now() - Number(stateGet("acquisition_probe_at", "0")) > 30 * 60_000
+        Date.now() - Number(stateGet("acquisition_probe_at", "0")) > connectivityProbeInterval(JSON.parse(stateGet('acquisition_probe','{}')))
       ) {
         const probe = await connectivityProbe().catch((error) => ({ ok: false, error: String(error) }));
         stateSet("acquisition_probe", JSON.stringify(probe));
