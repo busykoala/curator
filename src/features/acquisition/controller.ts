@@ -24,6 +24,7 @@ import {
 import {
   controllerMode,
   connectivityProbeInterval,
+  needsReplacementSearch,
   balancedSearchTargets,
   diversifySearchTargets,
   isManagedIncomplete,
@@ -221,7 +222,7 @@ async function replace(
     status: "pending",
     download_hash: null,
     next_retry_at: iso(),
-    detail_json: JSON.stringify({ reason }),
+    detail_json: JSON.stringify({ reason,recoveryRetry:true }),
   });
   intervene({
     targetId: target.id,
@@ -504,7 +505,7 @@ async function searchWork(
         .all() as AcquisitionTarget[]
     ).filter((target) => !active.has(target.lidarr_album_id) && currentWanted.has(target.lidarr_album_id)),
     ordered = orderSearchTargets(rows.map(target=>({...target,created_at:target.wanted_since??target.created_at,album_type:wantedTypes.get(target.lidarr_album_id),origin:
-      JSON.parse(target.detail_json??'{}').operatorRetry||db().prepare('SELECT 1 FROM music_requests WHERE lidarr_album_id=?').get(target.lidarr_album_id)?'user':target.origin==='playlist'?'playlist':'migration'})), now),
+      needsReplacementSearch(target.detail_json)||JSON.parse(target.detail_json??'{}').operatorRetry||db().prepare('SELECT 1 FROM music_requests WHERE lidarr_album_id=?').get(target.lidarr_album_id)?'user':target.origin==='playlist'?'playlist':'migration'})), now),
     quota = apply
       ? acquisitionQuota(recovering)
       : { short: 10, general: 10, priority: 10 },

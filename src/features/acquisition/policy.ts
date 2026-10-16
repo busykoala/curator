@@ -9,6 +9,9 @@ const priorityWindow = 24 * hour;
 // A failed diagnostic HTTP fetch says nothing about reachable torrent peers.
 // Keep destructive recovery conservative, but retry an inconclusive probe soon.
 export const connectivityProbeInterval=(probe:{error?:unknown})=>probe.error?5*60_000:30*60_000;
+export function needsReplacementSearch(detailJson?:string){
+  try{const detail=JSON.parse(detailJson??'{}');return detail.recoveryRetry===true||/^(No byte progress or reachable source|No bytes or reachable pieces|Magnet metadata remained unavailable)/.test(String(detail.reason??''))}catch{return false}
+}
 export const searchLimits = {
   short: 10,
   daily: 150,
