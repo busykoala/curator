@@ -12,6 +12,7 @@ export function viable(item:Release,fallback:boolean){return allowedQuality(item
 export function confirmedGrabConflict(error:unknown){const message=String(error);return/Lidarr \/release failed \(409\)/.test(message)||(/Lidarr \/release failed \(500\)/.test(message)&&/409:Conflict/.test(message)&&/qbittorrent|torrents\/add/i.test(message))}
 export function confirmedCandidateFailure(error:unknown){
   const message=String(error);
+  if(/JSON value could not be converted|One or more validation errors occurred/i.test(message))return false;
   if(/Lidarr \/release\/push failed \((?:400|409)\)/.test(message))return true;
   return confirmedGrabConflict(error)||(
     /Lidarr \/release(?:\/push)? failed \((?:429|5\d\d)\)/.test(message)&&
@@ -113,10 +114,15 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
           }
         }catch(error){
           if(error instanceof SearchDeferred){db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);throw error}
+          if(/Lidarr \/release\/push failed \(400\)/.test(String(error))&&/JSON value could not be converted|One or more validation errors occurred/i.test(String(error))){
+            db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);
+            db().prepare("INSERT INTO source_outcomes(indexer_name,event,detail_json) VALUES(?,'submission_invalid',?)").run(source,JSON.stringify({albumId:metadata.id,reason:String(error).slice(0,1200)}));
+            throw error;
+          }
           if(!confirmedCandidateFailure(error))throw error; // Ambiguous submissions remain persisted for reconciliation.
           db().prepare("DELETE FROM acquisition_submissions WHERE target_id=?").run(target.id);
           failedSources.add(source);
-          db().prepare("INSERT INTO source_outcomes(indexer_name,event,detail_json) VALUES(?,'grab_failure',?)").run(source,JSON.stringify({albumId:metadata.id,guid:item.guid}));continue;
+          db().prepare("INSERT INTO source_outcomes(indexer_name,event,detail_json) VALUES(?,'grab_failure',?)").run(source,JSON.stringify({albumId:metadata.id,guid:item.guid,reason:String(error).slice(0,1200)}));continue;
         }
         db().prepare("UPDATE acquisition_submissions SET status='accepted',updated_at=CURRENT_TIMESTAMP WHERE target_id=?").run(target.id);
         updateTarget(target.id,{status:'queued',source_name:source,last_release_guid:String(item.guid),attempts_today:attempts,attempts_day:day,last_search_at:new Date().toISOString(),next_retry_at:null,quality_phase:fallback?'hybrid':'lossless',detail_json:JSON.stringify({reason:'Accepted by Lidarr; awaiting transfer confirmation',rawTitle:item.title,title,score,strategyVersion:3})});

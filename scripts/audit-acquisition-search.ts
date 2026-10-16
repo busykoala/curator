@@ -25,13 +25,14 @@ globalThis.fetch=async(input,init)=>{
  if(url.endsWith('/album/1'))return Response.json({id:1,artistId:1,title:'Album',monitored:true,statistics:{percentOfTracks:0}});
  if(url.includes('/album?artistId='))return Response.json([]);
  if(url.endsWith('/indexer'))return Response.json(url.includes('9696')?(mode==='native-outage'?[{id:3,name:'LimeTorrents',enable:true}]:['native-quota','all-deferred'].includes(mode)?[{id:10,name:'TorrentsCSV',enable:true,capabilities:{categories:[{id:8000}]}}]:[]):[{id:1,enableInteractiveSearch:true}]);
- if(url.includes('/search?')){if(mode==='native-quota')assert.equal(new URL(url).searchParams.has('categories'),false);return Response.json([{guid:'alternate',title:'Test - Album FLAC',indexerId:3,protocol:'torrent',seeders:10,size:300000000,infoHash:'0123456789012345678901234567890123456789'}]);}
+ if(url.includes('/search?')){if(mode==='native-quota')assert.equal(new URL(url).searchParams.has('categories'),false);return Response.json([{guid:'alternate',title:'Test - Album FLAC',indexerId:3,protocol:'torrent',seeders:10,size:300000000,infoHash:'0123456789012345678901234567890123456789',indexerFlags:[]}]);}
  assert.match(url,/\/api\/v1\/release/);
  if(init?.method==='POST'){
   const release=JSON.parse(String(init.body));posts.push(release.indexer);
-  if(mode==='native-quota'){assert.equal(new URL(release.magnetUrl).searchParams.get('xt'),'urn:btih:0123456789012345678901234567890123456789');assert.ok(Number.isFinite(Date.parse(release.publishDate)))}
+  if(mode==='native-quota'){assert.equal(release.indexerFlags,0);assert.equal(release.categories,undefined);assert.equal(new URL(release.magnetUrl).searchParams.get('xt'),'urn:btih:0123456789012345678901234567890123456789');assert.ok(Number.isFinite(Date.parse(release.publishDate)))}
   assert.match(url,/release\/push/);
   if(mode.startsWith('repair')){assert.match(url,/release\/push/);assert.equal(release.albumId,1);if(mode==='repair-quality')assert.match(release.title,/FLAC 24bit/);const approved=mode==='repair'||mode==='repair-quality';return Response.json({approved,rejected:!approved,rejections:approved?[]:['Too large']})}
+  if(mode==='payload-invalid')return Response.json({title:'One or more validation errors occurred.',errors:{'$.indexerFlags':['The JSON value could not be converted to System.Int32.']}},{status:400});
   if(mode==='timeout')throw new DOMException('Timed out','TimeoutError');
   if(release.indexer==='Bad')return new Response(mode==='download-failure'?'Downloading torrent failed via Prowlarr /download':'Unavailable',{status:mode==='download-failure'?500:409});
   return Response.json({approved:true,rejected:false});
@@ -72,6 +73,9 @@ const previousSearch=targetByAlbum(1)!.last_search_at;
 assert.equal((await findRelease(targetByAlbum(1)!,false)).searchCompleted,false);
 assert.equal(targetByAlbum(1)!.last_search_at,previousSearch);
 assert.deepEqual(posts,[]);
+reset();posts=[];mode='payload-invalid';db().exec('DELETE FROM acquisition_requests');
+await assert.rejects(findRelease(targetByAlbum(1)!,false),/validation errors/);
+assert.equal((db().prepare('SELECT count(*) n FROM acquisition_submissions').get() as {n:number}).n,0);
 reset();posts=[];mode='generic';db().exec('DELETE FROM acquisition_requests');
 upsertTarget({albumId:4,artistId:1,origin:'migration',artist:'Test',title:'Greatest Hits'});
 assert.equal((await findRelease(targetByAlbum(4)!,false)).grabbed,true);

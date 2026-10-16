@@ -5,9 +5,14 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {config} from '@/config';
 import {db} from '@/features/db/client';
-import {reserveSearch,SearchDeferred} from './lidarr';
+import {reserveSearch,SearchDeferred,releasePushPayload} from './lidarr';
 const dir=mkdtempSync(join(tmpdir(),'curator-request-budget-'));config.DATABASE_PATH=join(dir,'test.sqlite');
 after(()=>{db().close();rmSync(dir,{recursive:true,force:true})});
+test('Prowlarr search resources are adapted to the Lidarr submission contract',()=>{
+ const r=releasePushPayload({title:'Test - Album FLAC',indexerFlags:[],categories:[{id:8000}],protocol:'torrent',infoHash:'0123456789012345678901234567890123456789',magnetUrl:'magnet:?xt=urn:btih:0123456789012345678901234567890123456789',publishDate:'2026-10-16T00:00:00Z',quality:{quality:{name:'FLAC'}},direct:true});
+ assert.equal(r.indexerFlags,0);assert.equal(r.categories,undefined);assert.equal(r.quality,undefined);assert.equal(r.direct,undefined);
+ assert.equal(r.infoHash,'0123456789012345678901234567890123456789');assert.equal(r.publishDate,'2026-10-16T00:00:00Z');
+});
 test('an exhausted native fanout does not prevent a provider-scoped search and retry uses quota expiry',async()=>{
  const original=globalThis.fetch;
  globalThis.fetch=async()=>Response.json([1,3].map(id=>({id,enableInteractiveSearch:true,fields:[{name:'baseUrl',value:`http://prowlarr:9696/${id}/api`}]})));

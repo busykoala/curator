@@ -15,7 +15,15 @@ export const wantedMissing=async()=>{const size=100,first=await call<{totalRecor
 export const queue=()=>call<{records:QueueItem[]}>("/queue?page=1&pageSize=1000&includeUnknownArtistItems=true").then(value=>value.records??[]);
 export const releases=(albumId:number)=>call<Array<Record<string,unknown>>>(`/release?albumId=${albumId}`);
 export const grabRelease=(release:Record<string,unknown>)=>call("/release",{method:"POST",body:JSON.stringify(release)});
-export const pushRelease=(release:Release)=>call<Release>("/release/push",{method:"POST",body:JSON.stringify(release)});
+export function releasePushPayload(release:Release):Release {
+  // Prowlarr's search DTO is not Lidarr's push DTO. For example its flags are
+  // an array, whereas Lidarr requires an integer. Pass transport/identity
+  // fields explicitly and let Lidarr re-evaluate quality from the title.
+  const fields=['title','guid','downloadUrl','magnetUrl','infoHash','size','seeders','publishDate','protocol','indexer','indexerId','albumId','artistId','downloadClientId'];
+  return {...Object.fromEntries(fields.filter(key=>release[key]!==undefined).map(key=>[key,release[key]])),
+    indexerFlags:typeof release.indexerFlags==='number'?release.indexerFlags:0};
+}
+export const pushRelease=(release:Release)=>call<Release>("/release/push",{method:"POST",body:JSON.stringify(releasePushPayload(release))});
 export const album=(id:number)=>call<CatalogAlbum>(`/album/${id}`);
 export const parseRelease=(title:string)=>call<{artist?:{id:number};albums?:Array<{id:number}>}>(`/parse?title=${encodeURIComponent(title)}`);
 export const albumCatalog=(artistId:number)=>call<CatalogAlbum[]>(`/album?artistId=${artistId}`);
