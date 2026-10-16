@@ -21,15 +21,20 @@ let sources:{expires:number;rows:Indexer[]}|undefined;
 async function prowlarr<T>(path:string):Promise<T> {
   const r=await fetch(`${config.PROWLARR_URL}/api/v1${path}`,{headers:{"X-Api-Key":config.PROWLARR_API_KEY},signal:AbortSignal.timeout(45_000)});
   if(r.status===429)throw new SearchDeferred(new Date(Date.now()+Math.max(60,Number(r.headers.get("retry-after"))||900)*1000).toISOString(),"Prowlarr rate limited");
-  if(!r.ok)throw Error(`Prowlarr search failed (${r.status})`);
+  if(!r.ok){
+    const text=await r.text();
+    if(r.status===400&&/all selected indexers being unavailable/i.test(text))throw new SearchDeferred(new Date(Date.now()+30*60_000).toISOString(),'Indexer temporarily unavailable');
+    throw Error(`Prowlarr search failed (${r.status})`);
+  }
   return r.json();
 }
 export async function directCandidates(artist:string,title:string) {
   if(!sources||sources.expires<Date.now())sources={expires:Date.now()+300_000,rows:await prowlarr<Indexer[]>("/indexer")};
-  const rows=sources.rows.filter(s=>s.enable&&/^(The Pirate Bay|LimeTorrents|TorrentDownload)$/.test(s.name)).slice(0,2);
+  const preferred=['LimeTorrents','The Pirate Bay','TorrentKitty','TorrentsCSV','TorrentDownload'];
+  const rows=sources.rows.filter(s=>s.enable&&preferred.includes(s.name)).sort((a,b)=>preferred.indexOf(a.name)-preferred.indexOf(b.name));
   // Broaden the query, never the identity acceptance criteria.
-  const query=`${artist} ${title.replace(/\([^)]*\)|\[[^\]]*\]/g,' ')}`.replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim();
-  const result:Release[]=[];const errors:unknown[]=[];
+  const query=`${/^various artists$/i.test(artist)?'':artist} ${title.replace(/\([^)]*\)|\[[^\]]*\]/g,' ')}`.replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim();
+  const result:Release[]=[];const errors:unknown[]=[];let completed=0;
   for(const source of rows) {
     const key=`direct:${source.id}:${query}`;
     try{result.push(...await cached(key,async()=>{
@@ -43,8 +48,15 @@ export async function directCandidates(artist:string,title:string) {
         const quality=/\bflac\b/i.test(title)?'FLAC':/\bmp3\b.*\b320\b|\b320\s*kbps\b/i.test(title)?'MP3-320':/\bmp3\b.*\bv0\b/i.test(title)?'MP3-VBR-V0':'Unknown';
         return {...r,quality:{quality:{name:quality}},indexer:`${source.name} (Prowlarr)`,direct:true};
       });
-    }))}catch(error){errors.push(error);if(error instanceof SearchDeferred)stateSet(`acquisition_source_wait:${source.id}`,String(new Date(error.retryAt).getTime()))}
+    }));stateSet(`acquisition_source_error:${source.id}`,'');completed++;if(completed>=2)break}catch(error){
+      errors.push(error);
+      const retry=error instanceof SearchDeferred?Date.parse(error.retryAt):Date.now()+5*60_000;
+      stateSet(`acquisition_source_wait:${source.id}`,String(retry));
+      stateSet(`acquisition_source_error:${source.id}`,JSON.stringify({message:String(error),retryAt:new Date(retry).toISOString()}));
+    }
   }
-  if(!result.length&&errors.length)throw errors[0];
+  // A healthy source returning zero results is a completed search, even if
+  // another source is unavailable. Never turn that into a five-minute loop.
+  if(!completed&&errors.length)throw errors[0];
   return result;
 }

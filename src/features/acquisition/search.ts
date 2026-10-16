@@ -32,9 +32,16 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
   }
   const day=new Date().toISOString().slice(0,10),attempts=target.attempts_day===day?target.attempts_today+1:1;
   const evidence:Record<string,number>={};
+  const discoveryErrors:Array<{stage:string;reason:string;retryAt?:string}>=[];
   let catalog:Awaited<ReturnType<typeof albumCatalog>>|undefined;
   const work=async()=>{
     const scores=sourceScores(),seen=new Set<string>(),failedSources=new Set<string>();let tried=0;
+    const discover=async(stage:string,fetcher:()=>Promise<Release[]>)=>{
+      try{return await fetcher()}catch(error){
+        discoveryErrors.push({stage,reason:error instanceof Error?error.message:String(error),...(error instanceof SearchDeferred?{retryAt:error.retryAt}:{})});
+        return [];
+      }
+    };
     const submit=async(items:Release[])=>{
       const candidates=items.filter(item=>{
         const id=`${item.indexer}:${item.guid}`;
@@ -101,14 +108,18 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
       return false;
     };
     const sameArtist=(db().prepare("SELECT count(*) n FROM acquisition_targets WHERE lidarr_artist_id=? AND status IN ('pending','staged')").get(target.lidarr_artist_id) as {n:number}).n;
-    if(cachedArtistOnly){return {grabbed:Boolean(target.lidarr_artist_id&&await submit(await nativeArtist(target.lidarr_artist_id)))}}
+    if(cachedArtistOnly){return {grabbed:Boolean(target.lidarr_artist_id&&await submit(await discover('cached artist',()=>nativeArtist(target.lidarr_artist_id!))))}}
     const artistFirst=Boolean(target.lidarr_artist_id)&&(sameArtist>1||Boolean(metadata.disambiguation));
-    if(artistFirst&&await submit(await nativeArtist(target.lidarr_artist_id!)))return {grabbed:true};
-    if(await submit(await nativeAlbum(metadata.id)))return {grabbed:true};
-    if(!artistFirst&&target.lidarr_artist_id&&await submit(await nativeArtist(target.lidarr_artist_id)))return {grabbed:true};
-    if(tried<3&&await submit(await directCandidates(target.artist,metadata.title)))return {grabbed:true};
-    const reason=Object.keys(evidence).length?'Search results rejected; see rejection reasons':'No matching results in completed searches';
-    updateTarget(target.id,{status:'staged',attempts_today:attempts,attempts_day:day,last_search_at:new Date().toISOString(),next_retry_at:new Date(Date.now()+24*3600_000).toISOString(),quality_phase:fallback?'hybrid':'lossless',detail_json:JSON.stringify({reason,rejections:evidence,strategyVersion:2})});
+    if(artistFirst&&await submit(await discover('artist',()=>nativeArtist(target.lidarr_artist_id!))))return {grabbed:true};
+    if(artistFirst&&tried<3&&await submit(await discover('alternate sources',()=>directCandidates(target.artist,metadata.title))))return {grabbed:true};
+    if(await submit(await discover('album',()=>nativeAlbum(metadata.id))))return {grabbed:true};
+    if(!artistFirst&&tried<3&&await submit(await discover('alternate sources',()=>directCandidates(target.artist,metadata.title))))return {grabbed:true};
+    if(!artistFirst&&target.lidarr_artist_id&&await submit(await discover('artist',()=>nativeArtist(target.lidarr_artist_id!))))return {grabbed:true};
+    const reason=discoveryErrors.length?'Some search sources unavailable; alternatives checked':Object.keys(evidence).length?'Search results rejected; see rejection reasons':'No matching results in completed searches';
+    // A provider outage is distinct from an exhaustive no-match. Back off while
+    // leaving enough time for other albums, instead of repeating every 5 min.
+    const retryAt=discoveryErrors.length?Math.max(Date.now()+30*60_000,...discoveryErrors.map(e=>Date.parse(e.retryAt??'')||0)):Date.now()+24*3600_000;
+    updateTarget(target.id,{status:'staged',attempts_today:discoveryErrors.length?(target.attempts_day===day?target.attempts_today:0):attempts,attempts_day:day,last_search_at:new Date().toISOString(),next_retry_at:new Date(retryAt).toISOString(),quality_phase:fallback?'hybrid':'lossless',detail_json:JSON.stringify({reason,rejections:evidence,...(discoveryErrors.length?{sourceErrors:discoveryErrors}:{}),strategyVersion:2})});
     return {grabbed:false,reason};
   };
   try{return fallback&&target.lidarr_artist_id?await withHybrid(target.lidarr_artist_id,work):await work()}

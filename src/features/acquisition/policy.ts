@@ -198,8 +198,8 @@ export function stalledDecision(
     };
   const idle = hoursSince(target.last_progress_at ?? target.first_queued_at);
   const grace = target.origin === "migration"
-    ? (now.progress >= 0.9 ? 48 : 8)
-    : (now.progress >= 0.9 ? 24 : 4);
+    ? (now.progress >= 0.9 ? 48 : 4)
+    : (now.progress >= 0.9 ? 24 : 2);
   if (idle >= grace && ageHours >= grace && now.availability <= now.progress + 0.001)
     return {
       action: "replace",

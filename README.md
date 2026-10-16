@@ -21,6 +21,10 @@ Published images are available from ghcr.io/busykoala/curator. Deployment config
 
 ## Data boundaries
 
+The acquisition worker continuously discovers monitored missing albums in Lidarr. Searches retain per-provider budgets and can use alternate Prowlarr sources when a native search fails or a provider is unavailable. Provider outages are recorded separately from rejected or empty results.
+
+Import recovery checks complete catalogue track lists, positions, recording identities and measured durations before selecting an edition. Missing tags alone can be recovered when Lidarr's fresh track mappings agree with that evidence; other native rejections remain blocking. Imports copy audio, retain source downloads, and never treat a studio album as a same-named box set. When all audio is complete, unavailable artwork and text attachments can be deselected so they do not prevent import; incomplete audio and CUE/archive files remain protected.
+
 - SQLite stores operational state, provider evidence, jobs, and settings.
 - Music files and sidecar artwork remain the durable enriched library.
 - Provider credentials are server-only.

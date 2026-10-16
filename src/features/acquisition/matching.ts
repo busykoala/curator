@@ -1,8 +1,8 @@
 import {createHash} from 'node:crypto';
 export type CatalogAlbum = {
-  id: number; artistId: number; title: string; monitored: boolean;
+  id: number; artistId: number; title: string; monitored: boolean;anyReleaseOk?:boolean;
   releaseDate?: string; albumType?:string; secondaryTypes?: string[]; disambiguation?: string;
-  releases?: Array<{ title: string; disambiguation?:string }>;
+  releases?: Array<{ id?:number;title: string;disambiguation?:string;trackCount?:number;mediumCount?:number;monitored?:boolean }>;
   statistics?: { trackFileCount?: number; percentOfTracks?: number };
 };
 export type Release = Record<string, unknown>;
@@ -53,6 +53,12 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string)
   // Never mistake e.g. Delores Keane for Keane. Collaborative credits may follow.
   const prefix = significant(raw).slice(0, artistWords.length).join(" ");
   if (!artistWords.length || prefix !== artistWords.join(" ")) return false;
+  // Some catalogue groups reuse a studio album's name for a multi-album box.
+  // The shared title alone cannot establish that collection's identity.
+  if(/\bbox\s*set\b/i.test(album.disambiguation??'')&&!/\bbox\s*set\b|\bdisk union\b/i.test(raw)){
+    const counts=(album.releases??[]).map(r=>r.mediumCount??0).filter(n=>n>1);
+    if(!counts.some(n=>new RegExp(`\\b${n}\\s*(?:x\\s*)?(?:cd|discs?|lp)\\b`,'i').test(raw)))return false;
+  }
   const metadata = `${album.title} ${(album.secondaryTypes ?? []).join(" ")}`;
   const knownTitles=[album.title,album.disambiguation??'',...(album.releases??[]).flatMap(r=>[r.title,r.disambiguation??''])];
   const technical=technicalDescriptors;

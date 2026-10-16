@@ -13,6 +13,7 @@ import {
   qbitPreferences,
   qbitTorrents,
   qbitTransfer,
+  finishAudioPayload,
   reannounce,
   removeTorrent,
   setPreferences,
@@ -251,8 +252,9 @@ async function repairImports(items: QueueItem[], apply: boolean) {
         `${item.title ?? ""} ${item.errorMessage ?? ""}`,
       );
     let exact: Awaited<ReturnType<typeof exactManualImport>> = false;
+    let review:Record<string,unknown>={};
     if (apply)
-      exact = await exactManualImport(item).catch(() => false);
+      exact = await exactManualImport(item,detail=>{review=detail}).catch(() => false);
     if (exact) {
       if (!target) {
         upsertTarget({
@@ -276,7 +278,7 @@ async function repairImports(items: QueueItem[], apply: boolean) {
         hash: item.downloadId,
         action: "manual-import",
         status: "applied",
-        evidence: { title: item.title },
+        evidence: { title: item.title,recovery:exact.recovery },
       });
       continue;
     }
@@ -291,8 +293,8 @@ async function repairImports(items: QueueItem[], apply: boolean) {
     }
     // A failed import does not prove a bad torrent. Preserve completed audio
     // and report the mapping/archive problem instead of repeatedly blocklisting.
-    updateTarget(target.id,{status:'downloaded',detail_json:JSON.stringify({reason:item.errorMessage??'Import needs review',messages:item.statusMessages,editionHint:obvious})});
-    intervene({targetId:target.id,hash:item.downloadId,action:'manual-import',status:'deferred',evidence:{title:item.title,reason:'No unambiguous import mapping; payload retained'}});
+    updateTarget(target.id,{status:'downloaded',detail_json:JSON.stringify({reason:item.errorMessage??'Import needs review',...review,messages:item.statusMessages,editionHint:obvious})});
+    intervene({targetId:target.id,hash:item.downloadId,action:'manual-import',status:'deferred',evidence:{title:item.title,reason:'No unambiguous import mapping; payload retained',...review}});
   }
 }
 async function cleanupOrphans(
@@ -712,6 +714,10 @@ export async function runAcquisitionCycle(consumeRequest=false) {
           evidence: { age },
         });
         if (apply) await reannounce(row.item.hash);
+      }
+      if(apply&&row.item.progress>=.9&&row.item.progress<1&&row.item.dlspeed===0&&row.item.num_seeds===0&&age>=.25){
+        const finished=await finishAudioPayload(row.item.hash).catch(()=>false as const);
+        if(finished){intervene({targetId:target.id,hash:row.item.hash,action:'finish-audio',status:'applied',evidence:{...finished,reason:'All audio files complete; only optional artwork or text was unavailable'}});continue}
       }
       const decision = stalledDecision(target, row.value, row.before, age);
       if (decision && sourceHealthy && staleRepairs < 5) {

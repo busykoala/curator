@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 import {conflictingAlbum,matchesAlbum,releaseQuality,repairedTitle, type CatalogAlbum} from "./matching";
 const album=(title:string,releaseDate='1975-01-01'):CatalogAlbum=>({id:1,artistId:1,title,releaseDate,monitored:true});
 const item=(title:string,extra={})=>({title,...extra});
+test('a shared studio title is insufficient evidence for a multi-album box set',()=>{
+  const box={...album('Catch a Fire','2006-10-04'),disambiguation:'Disk Union box set',releases:[{title:'Catch a Fire',mediumCount:11}]};
+  assert.equal(matchesAlbum(item('Bob Marley & The Wailers - Catch A Fire (50th Anniversary) (2023 Reggae) FLAC'),box,'Bob Marley & The Wailers'),false);
+  assert.equal(matchesAlbum(item('Bob Marley & The Wailers - Catch A Fire 11CD FLAC'),box,'Bob Marley & The Wailers'),true);
+});
 test('explicit 24-bit evidence survives truncated indexer titles without inferring quality from file size',()=>{
   const quality={quality:{name:'FLAC'}};
   assert.equal(releaseQuality({title:'Artist - Album [Flac 24 96 LP]',quality}),'FLAC 24bit');

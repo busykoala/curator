@@ -17,6 +17,20 @@ export const reannounce=(hash:string)=>call("/torrents/reannounce",{hashes:hash}
 export const topPriority=(hashes:string[])=>hashes.length?call("/torrents/topPrio",{hashes:hashes.join("|")}):Promise.resolve();
 export const forceStart=(hash:string,value:boolean)=>call("/torrents/setForceStart",{hashes:hash,value:String(value)});
 export const stopTorrent=(hash:string)=>call("/torrents/stop",{hashes:hash});
+export type TorrentFile={index:number;name:string;progress:number;priority:number;size:number};
+export function incompleteExtras(files:TorrentFile[]){
+  const audio=files.filter(f=>/\.(flac|mp3)$/i.test(f.name));
+  const missing=files.filter(f=>f.priority>0&&f.progress<1);
+  if(!audio.length||audio.some(f=>f.priority===0||f.progress<1)||!missing.length||missing.some(f=>!Number.isInteger(f.index)||f.index<0||!/\.(jpe?g|png|nfo|txt)$/i.test(f.name)))return [];
+  return missing.map(f=>f.index);
+}
+export async function finishAudioPayload(hash:string):Promise<false|{skippedExtras:number;audioFiles:number}>{
+  const files=await call(`/torrents/files?hash=${encodeURIComponent(hash)}`) as TorrentFile[];
+  const ids=incompleteExtras(files);
+  if(!ids.length)return false;
+  await call('/torrents/filePrio',{hash,id:ids.join('|'),priority:'0'});
+  return{skippedExtras:ids.length,audioFiles:files.filter(f=>/\.(flac|mp3)$/i.test(f.name)).length};
+}
 export const removeTorrent=(hash:string,files:boolean)=>call("/torrents/delete",{hashes:hash,deleteFiles:String(files)});
 export function releaseInfoHash(item:Record<string,unknown>){
   for(const value of [item.infoHash,item.releaseHash])if(/^[a-f\d]{40}$/i.test(String(value??"")))return String(value).toLowerCase();

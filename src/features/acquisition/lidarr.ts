@@ -19,6 +19,7 @@ export const pushRelease=(release:Release)=>call<Release>("/release/push",{metho
 export const album=(id:number)=>call<CatalogAlbum>(`/album/${id}`);
 export const parseRelease=(title:string)=>call<{artist?:{id:number};albums?:Array<{id:number}>}>(`/parse?title=${encodeURIComponent(title)}`);
 export const albumCatalog=(artistId:number)=>call<CatalogAlbum[]>(`/album?artistId=${artistId}`);
+export const releaseTracks=(releaseId:number)=>call<import('./import-proof').ReleaseTrack[]>(`/track?albumReleaseId=${releaseId}`);
 export const artistReleases=(artistId:number)=>call<Release[]>(`/release?artistId=${artistId}`);
 export const grabsSince=(date:string)=>call<Array<{sourceTitle:string;downloadId?:string;albumId?:number;data?:{torrentInfoHash?:string}}>>('/history/since?'+new URLSearchParams({date,eventType:'1'}));
 let blockedCache:{expires:number;titles:Set<string>;hashes:Set<string>}|undefined;
@@ -69,7 +70,7 @@ export const manualImportFolder=(folder:string,artistId?:number)=>call<Array<Rec
 export const recheckManualImport=(items:Record<string,unknown>[])=>call<Array<Record<string,unknown>>>('/manualimport',{method:'POST',body:JSON.stringify(items)});
 type Command={id:number;status?:string;message?:string;body?:{message?:string}};
 export async function importFiles(files:Record<string,unknown>[]){
-  const started=await call<Command>("/command",{method:"POST",body:JSON.stringify({name:"ManualImport",files,importMode:"auto"})});
+  const started=await call<Command>("/command",{method:"POST",body:JSON.stringify({name:"ManualImport",files,importMode:"copy",replaceExistingFiles:false})});
   if(!started?.id)throw new Error("Lidarr did not return a command id for manual import");
   for(let attempt=0;attempt<300;attempt++){
     const command=await call<Command>(`/command/${started.id}`);
