@@ -62,6 +62,9 @@ export async function reserveSearch(kind:string,indexerIds?:number[]) {
 }
 export const searchAlbums=(ids:number[])=>ids.length?call("/command",{method:"POST",body:JSON.stringify({name:"AlbumSearch",albumIds:ids})}):Promise.resolve();
 export async function blocklistQueue(item:QueueItem){return call(`/queue/${item.id}?removeFromClient=true&blocklist=true&skipRedownload=false&changeCategory=false`,{method:"DELETE"})}
+// Ignore a proven wrong catalogue mapping without deleting, moving, marking
+// imported, or globally blocklisting a legitimate studio-album payload.
+export const retainMismatchedQueue=(item:QueueItem)=>call(`/queue/${item.id}?removeFromClient=false&blocklist=false&skipRedownload=true&changeCategory=false`,{method:'DELETE'});
 export const artist=(id:number)=>call<Record<string,unknown>&{id:number;qualityProfileId:number}>(`/artist/${id}`);
 export const updateArtist=(value:Record<string,unknown>&{id:number})=>call(`/artist/${value.id}`,{method:"PUT",body:JSON.stringify(value)});
 export const profiles=()=>call<Array<Record<string,unknown>&{id:number;name:string}>>("/qualityprofile");

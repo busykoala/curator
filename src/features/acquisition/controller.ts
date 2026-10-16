@@ -2,6 +2,7 @@ import { db, stateGet, stateSet } from "@/features/db/client";
 import { runtimeSettings } from "@/features/settings/runtime";
 import {
   blocklistQueue,
+  retainMismatchedQueue,
   queue,
   wantedMissing,
   album,
@@ -295,6 +296,12 @@ async function repairImports(items: QueueItem[], apply: boolean) {
     }
     // A failed import does not prove a bad torrent. Preserve completed audio
     // and report the mapping/archive problem instead of repeatedly blocklisting.
+    if(apply&&review.reason==='Downloaded audio does not match the requested box set'){
+      await retainMismatchedQueue(item);
+      updateTarget(target.id,{status:'pending',download_hash:null,next_retry_at:iso(),detail_json:JSON.stringify({...review,reason:'Wrong box-set payload retained for review; searching the requested collection'})});
+      intervene({targetId:target.id,hash:item.downloadId,action:'retain-mismatch',status:'applied',evidence:{...review,payloadPreserved:true}});
+      continue;
+    }
     updateTarget(target.id,{status:'downloaded',detail_json:JSON.stringify({reason:item.errorMessage??'Import needs review',...review,messages:item.statusMessages,editionHint:obvious})});
     intervene({targetId:target.id,hash:item.downloadId,action:'manual-import',status:'deferred',evidence:{title:item.title,reason:'No unambiguous import mapping; payload retained',...review}});
   }
