@@ -17,6 +17,8 @@ globalThis.fetch=async(input,init)=>{
  const url=String(input);
  if(url.includes('/api/v2/auth/login'))return new Response('Ok.',{headers:{'set-cookie':'SID=test-cookie'}});
  if(url.includes('/api/v2/sync/maindata'))return Response.json({torrents:{},server_state:{free_space_on_disk:mode==='capacity'?1:1024**4}});
+ if(url.includes('/parse?')&&mode.startsWith('generic'))return Response.json({artist:{id:1},albums:[{id:mode==='generic'?4:99}]});
+ if(url.endsWith('/album/4'))return Response.json({id:4,artistId:1,title:'Greatest Hits',releaseDate:'1981-01-01',monitored:true,statistics:{percentOfTracks:0}});
  if(url.includes('/parse?')){const title=new URL(url).searchParams.get('title')??'';return Response.json({artist:{id:mode==='shared'?7:1},albums:[{id:mode==='wrong-album'?99:mode==='shared'?(title.includes('Second')?2:3):1}]})}
  if(url.includes('/blocklist?'))return Response.json({totalRecords:0,records:[]});
  if(/\/album\/[23]$/.test(url)){const id=Number(url.split('/').at(-1));return Response.json({id,artistId:7,title:id===2?'Second':'Third',monitored:true,statistics:{percentOfTracks:0}})}
@@ -35,7 +37,7 @@ globalThis.fetch=async(input,init)=>{
  }
  if(mode==='native-outage')throw Error('Native search unavailable');
  if(url.includes('/release?artistId=7')){artistSearches++;return Response.json(['Second','Third'].map((title,i)=>({guid:'shared-'+i,title:'Test - '+title+' FLAC',indexer:'Good',quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:5,size:300000000,rejected:false,rejections:[]})))}
- const items=mode.startsWith('repair')?[{guid:'repair',title:mode==='repair-quality'?'Test - Album (24bit-96kHz) FLAC':'Test  Album FLAC',indexer:'Good',quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10,size:300000000,rejected:true,rejections:mode==='repair-quality'?['400 MB is larger than maximum allowed 300 MB']:['Unable to parse release']}]:mode==='empty'?[]:['Bad','Bad','Good'].map((source,i)=>({guid:String(i),title:'Test - Album FLAC',indexer:source,quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10-i,size:300000000,rejected:false,rejections:[]}));
+ const items=mode.startsWith('generic')?[{guid:'generic',title:'Test - Greatest Hits (1981) FLAC',indexer:'Good',quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10,size:300000000,rejected:false,rejections:[]}]:mode.startsWith('repair')?[{guid:'repair',title:mode==='repair-quality'?'Test - Album (24bit-96kHz) FLAC':'Test  Album FLAC',indexer:'Good',quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10,size:300000000,rejected:true,rejections:mode==='repair-quality'?['400 MB is larger than maximum allowed 300 MB']:['Unable to parse release']}]:mode==='empty'?[]:['Bad','Bad','Good'].map((source,i)=>({guid:String(i),title:'Test - Album FLAC',indexer:source,quality:{quality:{name:'FLAC'}},protocol:'torrent',seeders:10-i,size:300000000,rejected:false,rejections:[]}));
  return Response.json(items);
 };
 assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,false);assert.deepEqual(posts,[]);
@@ -68,6 +70,13 @@ db().transaction(()=>{for(let i=0;i<300;i++)exhaustedDirect.run()})();
 const previousSearch=targetByAlbum(1)!.last_search_at;
 assert.equal((await findRelease(targetByAlbum(1)!,false)).searchCompleted,false);
 assert.equal(targetByAlbum(1)!.last_search_at,previousSearch);
+assert.deepEqual(posts,[]);
+reset();posts=[];mode='generic';db().exec('DELETE FROM acquisition_requests');
+upsertTarget({albumId:4,artistId:1,origin:'migration',artist:'Test',title:'Greatest Hits'});
+assert.equal((await findRelease(targetByAlbum(4)!,false)).grabbed,true);
+assert.deepEqual(posts,['Good']);
+reset();posts=[];mode='generic-wrong';
+assert.equal((await findRelease(targetByAlbum(4)!,false)).grabbed,false);
 assert.deepEqual(posts,[]);
 console.log('Search integration audit passed: no duplicate searches, failing sources are skipped after confirmed conflicts/download errors, and ambiguous timeouts are not retried.');
 }finally{globalThis.fetch=original;db().close();rmSync(dir,{recursive:true,force:true})}

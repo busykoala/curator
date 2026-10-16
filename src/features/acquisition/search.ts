@@ -2,7 +2,7 @@ import { db } from "@/features/db/client";
 import type { AcquisitionTarget } from "./types";
 import { album, albumCatalog, parseRelease, pushRelease, releaseIsBlocked, SearchDeferred } from "./lidarr";
 import { nativeAlbum, nativeArtist, directCandidates, directArtist, cachedArtistCandidates } from "./discovery";
-import { allowedQuality, conflictingAlbum, decodeTitle, matchesAlbum, needsQualityRepair, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
+import { allowedQuality, conflictingAlbum, decodeTitle, matchesAlbum, needsNativeIdentity, needsQualityRepair, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
 import { releaseScore } from "./policy";
 import { sourceScores, withHybrid } from "./quality";
 import { qbitCapacity, releaseInfoHash } from "./qbittorrent";
@@ -44,13 +44,27 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
       }
     };
     const submit=async(items:Release[])=>{
-      const candidates=items.filter(item=>{
+      const filtered:Release[]=[],parsedTitles=new Map<string,Awaited<ReturnType<typeof parseRelease>>>();
+      for(const item of items){
         const id=`${item.indexer}:${item.guid}`;
-        if(seen.has(id))return false;seen.add(id);
+        if(seen.has(id))continue;seen.add(id);
         for(const reason of (item.rejections as string[]|undefined)??[])evidence[reason]=(evidence[reason]??0)+1;
-        return allowedQuality(item,fallback)&&Number(item.seeders??0)>=2&&String(item.protocol??'torrent')==='torrent'&&matchesAlbum(item,metadata,target.artist)&&
-          (viable(item,fallback)||parserRejections(item)||needsQualityRepair(item)||Boolean(item.direct));
-      }).map(item=>{
+        const reject=(reason:string)=>{evidence[reason]=(evidence[reason]??0)+1};
+        if(!allowedQuality(item,fallback)){reject('Unsupported or unreported audio quality');continue}
+        if(Number(item.seeders??0)<2){reject('Fewer than two reported seeders');continue}
+        if(String(item.protocol??'torrent')!=='torrent'){reject('Unsupported download protocol');continue}
+        let matched=matchesAlbum(item,metadata,target.artist);
+        if(!matched&&needsNativeIdentity(metadata,target.artist)&&matchesAlbum({...item,albumTitle:metadata.title,rejected:false},metadata,target.artist)){
+          // Generic titles need the original, unmodified source title to resolve
+          // to exactly this catalogue identity before any repair is considered.
+          const raw=decodeTitle(String(item.title)),parsed=await parseRelease(raw);
+          parsedTitles.set(raw,parsed);
+          matched=matchesAlbum(item,metadata,target.artist,parsed);
+        }
+        if(!matched){reject('Different artist, album or recording variant');continue}
+        if(viable(item,fallback)||parserRejections(item)||needsQualityRepair(item)||Boolean(item.direct))filtered.push(item);
+      }
+      const candidates=filtered.map(item=>{
         const source=String(item.indexer??'unknown'),sourceScore=scores.find(s=>s.name===source.replace(/ \(Prowlarr\)$/i,''))?.score??.5;
         return {item,source,score:releaseScore({seeders:Number(item.seeders),size:Number(item.size),trackCount:10,quality:releaseQuality(item),sourceScore,importRate:sourceScore})};
       }).sort((a,b)=>b.score-a.score);
@@ -66,7 +80,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
         // Artist search results may be approved for a different album (including
         // an unmonitored EP). Validate every original title before using its
         // cached grab handle; never rename a positively identified other album.
-        const original=await parseRelease(decodeTitle(String(item.title)));
+        const original=parsedTitles.get(decodeTitle(String(item.title)))??await parseRelease(decodeTitle(String(item.title)));
         const exact=(parsed:typeof original)=>parsed.artist?.id===metadata.artistId&&parsed.albums?.length===1&&parsed.albums[0].id===metadata.id;
         if((original.artist&&original.artist.id!==metadata.artistId)||(original.albums?.length&&!exact(original))){
           evidence['Original title resolves to a different album']=(evidence['Original title resolves to a different album']??0)+1;continue;

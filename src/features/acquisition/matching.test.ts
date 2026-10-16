@@ -16,6 +16,8 @@ test('explicit 24-bit evidence survives truncated indexer titles without inferri
   assert.equal(releaseQuality({title:'Artist - Album [24bit]',quality:{quality:{name:'MP3-320'}}}),'MP3-320');
 });
 test('recognizes actual parser failures without accepting similar recordings',()=>{
+  assert.ok(matchesAlbum(item('Quincy Jones - Big Band Bossa Nova (Original Album Plus Bonus Tracks 1962) (1962 Pop) [Flac 16-44]'),album('Big Band Bossa Nova','1962-01-01'),'Quincy Jones'));
+  assert.equal(matchesAlbum(item('Quincy Jones - Big Band Bossa Nova (The Lost Album) FLAC'),album('Big Band Bossa Nova','1962-01-01'),'Quincy Jones'),false);
   assert.ok(matchesAlbum(item('Green Day  ¡Uno   (2012) [FLAC] 88'),album('¡Uno!','2012-01-01'),'Green Day'));
   assert.ok(matchesAlbum(item('Bob-Marley- -The-Wailers--Rastaman-Vibration-(UHQR)-PBTHAL-(1976-Reggae)-[Flac-2..'),album('Rastaman Vibration','1976-01-01'),'Bob Marley & The Wailers'));
   assert.ok(matchesAlbum(item('Metallica &amp; The San Francisco Symphony   S&amp;M2 FLAC'),album('S&M2','2020-01-01'),'Metallica'));
@@ -44,4 +46,10 @@ test('does not confuse volumes, compilation fragments, or ambiguous generic titl
   const past={...album('Past Masters Volumes One & Two'),releases:[{title:'Past Masters Volume Two'}]};
   assert.equal(matchesAlbum(item('The Beatles - Past Masters Volume Two FLAC'),past,'The Beatles'),false);
   assert.equal(matchesAlbum(item('Bob Marley & The Wailers - Legend The Best of Bob Marley FLAC',{rejected:true}),album('Best of Bob Marley'),'Bob Marley & The Wailers'),false);
+  const generic=album('Greatest Hits','1981-01-01'),release=item('Queen - Greatest Hits (1981) FLAC');
+  assert.equal(matchesAlbum(release,generic,'Queen'),false);
+  assert.equal(matchesAlbum(release,generic,'Queen',{artist:{id:1},albums:[{id:1}]}),true);
+  assert.equal(matchesAlbum(release,generic,'Queen',{artist:{id:1},albums:[{id:2}]}),false);
+  assert.equal(matchesAlbum(release,generic,'Queen',{artist:{id:1},albums:[{id:1},{id:2}]}),false);
+  assert.equal(matchesAlbum(item('Queen - Greatest Hits III (1981) FLAC'),generic,'Queen',{artist:{id:1},albums:[{id:2}]}),false);
 });

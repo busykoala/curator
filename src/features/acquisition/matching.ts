@@ -18,6 +18,12 @@ const stop = new Set(["the", "a", "an", "and", "of"]);
 const technicalDescriptors=new Set(('remaster remastered deluxe expanded anniversary edition version original mono stereo cd lp vinyl uhqr japan japanese uk us eu digital flac alac mp3 bit kbps khz hz studio masters rock pop jazz reggae blues folk classical metal electronic elettronica alternative indie dance soul rnb country').split(' '));
 const significant = (s: string) => words(s).filter(w => !stop.has(w));
 const key = (s: string) => significant(s).join(" ");
+export function needsNativeIdentity(album: CatalogAlbum, artist: string) {
+  const artistSet=new Set(significant(artist));
+  const meaningful=significant(album.title).filter(w=>!artistSet.has(w));
+  const generic=new Set(['best','greatest','hits','collection','ultimate','very','vol','volumes']);
+  return !meaningful.some(w=>!generic.has(w)&&!/^\d+$/.test(w));
+}
 const number = (s: string) => (({one:"1",two:"2",three:"3",i:"1",ii:"2",iii:"3",iv:"4",v:"5"} as Record<string,string>)[s] ?? s);
 function volumes(s: string) {
   // Years, bit depths and uploader numbers aren't album volume numbers.
@@ -48,7 +54,7 @@ export function parserRejections(item: Release) {
 }
 
 /** Conservative title evidence, followed by Lidarr's own exact ID resolution. */
-export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string) {
+export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string, parsed?: {artist?:{id:number};albums?:Array<{id:number}>}) {
   const raw = decodeTitle(String(item.title ?? "")), titleWords = words(raw), artistWords = significant(artist);
   // Never mistake e.g. Delores Keane for Keane. Collaborative credits may follow.
   const prefix = significant(raw).slice(0, artistWords.length).join(" ");
@@ -61,7 +67,7 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string)
   }
   const metadata = `${album.title} ${(album.secondaryTypes ?? []).join(" ")}`;
   const knownTitles=[album.title,album.disambiguation??'',...(album.releases??[]).flatMap(r=>[r.title,r.disambiguation??''])];
-  const technical=technicalDescriptors;
+  const technical=new Set([...technicalDescriptors,...'album plus bonus track tracks limited sacd eac web mqa dsd'.split(' ')]);
   for(const part of raw.matchAll(/\(([^)]*)\)/g)){
     const content=key(part[1]);
     if(knownTitles.some(t=>key(t).includes(content)))continue;
@@ -80,12 +86,12 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string)
     if (!words(album.title).join("").includes(range[1] + range[2])) return false;
   const expectedVolumes = volumes(album.title), actualVolumes = volumes(raw);
   if (expectedVolumes && actualVolumes && expectedVolumes !== actualVolumes) return false;
-  const artistSet = new Set(artistWords), meaningful = significant(album.title).filter(w => !artistSet.has(w));
+  const artistSet = new Set(artistWords);
   // Generic compilation names and numeric titles require exact native mapping;
   // don't repair them using a substring such as "Best of Bob Marley" in Legend.
-  const generic = new Set(["best", "greatest", "hits", "collection", "ultimate", "very", "vol", "volumes"]);
-  if (!meaningful.some(w => !generic.has(w) && !/^\d+$/.test(w))) {
-    if (key(String(item.albumTitle ?? "")) !== key(album.title) || item.rejected) return false;
+  if (needsNativeIdentity(album,artist)) {
+    const verified=parsed?.artist?.id===album.artistId&&parsed.albums?.length===1&&parsed.albums[0].id===album.id;
+    if (!verified&&(key(String(item.albumTitle ?? "")) !== key(album.title) || item.rejected)) return false;
     const year = album.releaseDate?.slice(0, 4);
     if (!year || !titleWords.includes(year)) return false;
   }
