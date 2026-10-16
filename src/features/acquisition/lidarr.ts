@@ -2,6 +2,7 @@ import { config } from "@/config";
 import { db } from "@/features/db/client";
 import type { CatalogAlbum, Release } from "./matching";
 import {releaseInfoHash} from './qbittorrent';
+import {configuredRequestLimits,type LimitField,type RequestLimits} from './source-limits';
 async function call<T>(path:string,init:RequestInit={}){
   const response=await fetch(`${config.LIDARR_URL}/api/v1${path}`,{...init,headers:{"X-Api-Key":config.LIDARR_API_KEY,"Content-Type":"application/json",...init.headers},signal:AbortSignal.timeout(60_000)});
   if(response.status===429){const value=response.headers.get('retry-after')??'';const seconds=Number(value);const retry=seconds>0?Date.now()+seconds*1000:Date.parse(value);throw new SearchDeferred(new Date(Number.isFinite(retry)?retry:Date.now()+900_000).toISOString(),'Lidarr rate limited')}
@@ -47,26 +48,33 @@ export async function releaseIsBlocked(item:Release){
 export class SearchDeferred extends Error {
   constructor(public retryAt: string, message: string) { super(message); }
 }
-let indexerCache: {expires:number;ids:number[]}|undefined;
-export async function reserveSearch(kind:string,indexerIds?:number[]) {
+let indexerCache: {expires:number;ids:number[];limits:Map<number,RequestLimits>}|undefined;
+export async function reserveSearch(kind:string,indexerIds?:number[],limits?:RequestLimits) {
+  const native=!indexerIds;
   if (!indexerIds) {
     if (!indexerCache || indexerCache.expires<Date.now()) {
       const rows=await call<Array<{id:number;enableInteractiveSearch:boolean;fields?:Array<{name:string;value?:unknown}>}>>("/indexer");
-      indexerCache={expires:Date.now()+300_000,ids:rows.filter(r=>r.enableInteractiveSearch).map(r=>{
+      const response=await fetch(`${config.PROWLARR_URL}/api/v1/indexer`,{headers:{'X-Api-Key':config.PROWLARR_API_KEY},signal:AbortSignal.timeout(15_000)});
+      if(!response.ok)throw new SearchDeferred(new Date(Date.now()+5*60_000).toISOString(),'Provider limits temporarily unavailable');
+      const providers=await response.json() as Array<{id:number;fields?:LimitField[]}>;
+      indexerCache={expires:Date.now()+300_000,limits:new Map(providers.map(p=>[p.id,configuredRequestLimits(p.fields)])),ids:rows.filter(r=>r.enableInteractiveSearch).map(r=>{
         const url=String(r.fields?.find(f=>f.name==='baseUrl')?.value??'');
         const mapped=/\/(\d+)(?:\/api)?\/?$/.exec(url);
         return mapped?Number(mapped[1]):-r.id;
       })};
     }
     // Native and Prowlarr namespaces are separate. Direct queries reserve the
-    // global pool too; Prowlarr remains authoritative for provider quotas.
+    // global pool too. Interactive requests can bypass Prowlarr query limits,
+    // so enforce the configured limits locally as well.
     indexerIds=indexerCache.ids;
   }
   db().transaction(()=>{
     let retry=0;
     for(const id of indexerIds!) {
+      const configured=limits??(native?indexerCache?.limits.get(id):undefined)??{};
+      const hourly=Math.min(300,configured.hourly??300),daily=Math.min(3000,configured.daily??3000);
       const n=db().prepare("SELECT sum(created_at>=datetime('now','-1 hour')) hourly,count(*) daily FROM acquisition_requests WHERE indexer_id=? AND created_at>=datetime('now','-1 day')").get(id) as {hourly:number;daily:number};
-      for(const [count,limit,windowMs,window] of [[n.hourly,300,3600_000,'-1 hour'],[n.daily,3000,86400_000,'-1 day']] as const){
+      for(const [count,limit,windowMs,window] of [[n.hourly,hourly,3600_000,'-1 hour'],[n.daily,daily,86400_000,'-1 day']] as const){
         if(count<limit)continue;
         const first=db().prepare("SELECT created_at FROM acquisition_requests WHERE indexer_id=? AND created_at>=datetime('now',?) ORDER BY created_at,id LIMIT 1 OFFSET ?").get(id,window,count-limit) as {created_at:string};
         retry=Math.max(retry,Date.parse(first.created_at.replace(' ','T')+'Z')+windowMs+1000);

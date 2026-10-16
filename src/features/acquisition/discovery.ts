@@ -3,6 +3,7 @@ import { db, stateGet, stateSet } from "@/features/db/client";
 import { artistReleases, releases, reserveSearch, SearchDeferred } from "./lidarr";
 import type { Release } from "./matching";
 import { releaseInfoHash } from './qbittorrent';
+import { configuredRequestLimits,type LimitField } from './source-limits';
 
 const cache = new Map<string, { expires: number; work: Promise<Release[]> }>();
 const sourceWork = new Map<number, Promise<unknown>>();
@@ -46,7 +47,7 @@ export const nativeArtist = (id: number) => cached(`artist:${id}`, () => nativeS
 export const directArtist = (id: number, artist: string) => cached(`direct-artist:${id}`, () => directCandidates(artist, ''));
 
 type Category = { id: number; subCategories?: Category[] };
-type Indexer = { id: number; name: string; enable: boolean; capabilities?: { categories?: Category[] } };
+type Indexer = { id: number; name: string; enable: boolean;fields?:LimitField[]; capabilities?: { categories?: Category[] } };
 let sources: { expires: number; rows: Indexer[] } | undefined;
 export function searchCategories(source: Indexer) {
   const ids = (rows: Category[]): number[] => rows.flatMap(row => [row.id, ...ids(row.subCategories ?? [])]);
@@ -103,8 +104,10 @@ async function sourceCandidates(source: Indexer, query: string) {
       if (until - Date.now() > 5000) throw new SearchDeferred(new Date(until).toISOString(), 'Indexer cooling down');
       await new Promise(resolve => setTimeout(resolve, Math.max(0, until - Date.now())));
     }
-    await reserveSearch('direct', [source.id]);
-    stateSet(`acquisition_source_wait:${source.id}`, String(Date.now() + 5000));
+    const limits=configuredRequestLimits(source.fields);
+    await reserveSearch('direct', [source.id],limits);
+    const spacing=Math.max(5000,limits.hourly?Math.ceil(3600_000/limits.hourly):0,limits.daily?Math.ceil(86400_000/limits.daily):0);
+    stateSet(`acquisition_source_wait:${source.id}`, String(Date.now() + spacing));
     const params = new URLSearchParams({ query, type: 'search', indexerIds: String(source.id), limit: '100' });
     const categories = searchCategories(source);
     if (categories.length) params.set('categories', categories.join(','));
@@ -121,7 +124,7 @@ async function sourceCandidates(source: Indexer, query: string) {
     }
   }));
 }
-export async function directCandidates(artist: string, title: string) {
+export async function directCandidates(artist: string, title: string, remainingSources=false) {
   if (!sources || sources.expires < Date.now()) sources = { expires: Date.now() + 300_000, rows: await prowlarr<Indexer[]>('/indexer') };
   const preferred = ['TorrentsCSV', 'Knaben', 'LimeTorrents', 'The Pirate Bay', 'TorrentKitty', 'TorrentDownload'];
   const rows = sources.rows.filter(s => s.enable && preferred.includes(s.name))
@@ -130,9 +133,10 @@ export async function directCandidates(artist: string, title: string) {
   const query = `${/^various artists$/i.test(artist) ? '' : artist} ${title.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')}`
     .replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
   if (!query) return [];
+  const candidates=remainingSources?rows.filter(source=>(cache.get(`direct:${source.id}:${query}`)?.expires??0)<=Date.now()):rows;
   const result: Release[] = [], errors: unknown[] = [];
   let completed = 0;
-  for (const source of rows) {
+  for (const source of candidates) {
     try {
       result.push(...await sourceCandidates(source, query));
       if (++completed >= 2) break;

@@ -2,6 +2,7 @@ import { album,releaseTracks,importFiles,manualImport,manualImportFolder,recheck
 import {helperFolders,unmatchedTrackSubset,manualImportUpdates} from './import-guard';
 import {acceptsProvenImport,proveRelease,type ImportProof,type ImportRow} from './import-proof';
 import {queueImportedIdentity} from './imported-identity';
+import {recordingTitleAliases,cachedRecordingTitleAliases} from '@/features/sources/musicbrainz';
 
 export type ExactManualImport={albumId:number;artistId?:number;artist?:string;album?:string;recovery?:string};
 
@@ -17,7 +18,16 @@ async function recoverCompleteRelease(rows:Record<string,unknown>[],item:QueueIt
   if(!releases.length){onReview?.({reason:/box\s*set/i.test(metadata.disambiguation??'')?'Downloaded audio does not match the requested box set':'Download does not contain a complete selectable catalogue edition',downloadFiles:rows.length,expectedTrackCounts:[...new Set((metadata.releases??[]).map(r=>r.trackCount))],catalogueDisambiguation:metadata.disambiguation});return}
   const proofs:ImportProof[]=[];
   for(const release of releases.slice(0,20)){
-    const proof=proveRelease(rows as ImportRow[],await releaseTracks(release.id!),release.id!,metadata.id,metadata.artistId,artist);
+    const tracks=await releaseTracks(release.id!);
+    for(const track of tracks)if(track.foreignRecordingId)track.titleAliases=cachedRecordingTitleAliases(track.foreignRecordingId);
+    const lookedUp=new Set<number>();let proof:ImportProof|undefined;
+    for(let pass=0;pass<4;pass++){
+      let missing:typeof tracks[number]|undefined;
+      proof=proveRelease(rows as ImportRow[],tracks,release.id!,metadata.id,metadata.artistId,artist,t=>{missing=t});
+      if(proof||pass===3||!missing||!missing.foreignRecordingId||lookedUp.has(missing.id))break;
+      lookedUp.add(missing.id);
+      missing.titleAliases=await recordingTitleAliases(missing.foreignRecordingId,`acquisition:${metadata.id}`).catch(()=>[]);
+    }
     if(proof)proofs.push(proof);
   }
   // Equivalent pressings are ranked by measured durations. If the evidence

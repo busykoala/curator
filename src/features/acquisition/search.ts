@@ -137,6 +137,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
     // Share broad artist results with siblings before spending album queries.
     if(artistFirst&&await submit(await discover('direct artist',()=>directArtist(target.lidarr_artist_id!,target.artist))))return {grabbed:true};
     if(tried<3&&await submit(await discover('alternate sources',()=>directCandidates(target.artist,metadata.title))))return {grabbed:true};
+    if(tried<3&&await submit(await discover('remaining sources',()=>directCandidates(target.artist,metadata.title,true))))return {grabbed:true};
     if(artistFirst&&await submit(await discover('artist',()=>nativeArtist(target.lidarr_artist_id!))))return {grabbed:true};
     if(await submit(await discover('album',()=>nativeAlbum(metadata.id))))return {grabbed:true};
     if(!artistFirst&&target.lidarr_artist_id&&await submit(await discover('artist',()=>nativeArtist(target.lidarr_artist_id!))))return {grabbed:true};

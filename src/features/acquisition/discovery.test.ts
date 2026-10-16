@@ -91,3 +91,19 @@ test('an enabled Knaben provider adds capacity while a manually disabled one sta
     enabled=true;clearDiscoveryCache();assert.deepEqual(await directCandidates('Test','Album'),[]);assert.equal(calls,1);
   }finally{globalThis.fetch=original}
 });
+
+test('a second discovery batch reaches other providers after two healthy empty searches',async()=>{
+ db().exec('DELETE FROM state; DELETE FROM acquisition_requests');clearDiscoveryCache();
+ const original=globalThis.fetch,queried:number[]=[];
+ globalThis.fetch=async input=>{
+  const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexer'))return Response.json([{id:10,name:'TorrentsCSV',enable:true},{id:4,name:'Knaben',enable:true},{id:3,name:'LimeTorrents',enable:true}]);
+  const id=Number(u.searchParams.get('indexerIds'));queried.push(id);
+  return Response.json(id===3?[{title:'Test - Album FLAC',infoHash:'0123456789012345678901234567890123456789',seeders:10,size:300000000}]:[]);
+ };
+ try{
+  assert.deepEqual(await directCandidates('Test','Album'),[]);
+  assert.equal((await directCandidates('Test','Album',true)).length,1);
+  assert.deepEqual(queried,[10,4,3]);
+ }finally{globalThis.fetch=original}
+});
