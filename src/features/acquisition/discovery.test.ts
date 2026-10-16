@@ -107,3 +107,13 @@ test('a second discovery batch reaches other providers after two healthy empty s
   assert.deepEqual(queried,[10,4,3]);
  }finally{globalThis.fetch=original}
 });
+
+test('enabled generic audio providers remain reachable independently of combined native searches',async()=>{
+ db().exec('DELETE FROM state; DELETE FROM acquisition_requests');clearDiscoveryCache();
+ const original=globalThis.fetch;let calls=0;
+ globalThis.fetch=async input=>{const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexer'))return Response.json([{id:8,name:'Configured audio provider',enable:true,protocol:'torrent',capabilities:{searchParams:['q'],categories:[{id:3000}]}},{id:99,name:'Disabled provider',enable:false,protocol:'torrent',capabilities:{searchParams:['q'],categories:[{id:3000}]}}]);
+  calls++;assert.equal(u.searchParams.get('indexerIds'),'8');assert.equal(u.searchParams.get('categories'),'3000');return Response.json([]);
+ };
+ try{assert.deepEqual(await directCandidates('Test','Album'),[]);assert.equal(calls,1)}finally{globalThis.fetch=original}
+});

@@ -47,11 +47,11 @@ export const nativeArtist = (id: number) => cached(`artist:${id}`, () => nativeS
 export const directArtist = (id: number, artist: string) => cached(`direct-artist:${id}`, () => directCandidates(artist, ''));
 
 type Category = { id: number; subCategories?: Category[] };
-type Indexer = { id: number; name: string; enable: boolean;fields?:LimitField[]; capabilities?: { categories?: Category[] } };
+type Indexer = { id: number; name: string; enable: boolean;protocol?:string;fields?:LimitField[]; capabilities?: { categories?: Category[];searchParams?:string[] } };
 let sources: { expires: number; rows: Indexer[] } | undefined;
+function categoryIds(rows:Category[]):number[]{return rows.flatMap(row=>[row.id,...categoryIds(row.subCategories??[])])}
 export function searchCategories(source: Indexer) {
-  const ids = (rows: Category[]): number[] => rows.flatMap(row => [row.id, ...ids(row.subCategories ?? [])]);
-  const categories = ids(source.capabilities?.categories ?? []);
+  const categories = categoryIds(source.capabilities?.categories ?? []);
   // Generic indexers classify music as Other. An unsupported music category
   // makes Prowlarr return an immediate empty response without querying them.
   return categories.some(id => id >= 3000 && id < 4000) ? [3000] : [];
@@ -126,9 +126,11 @@ async function sourceCandidates(source: Indexer, query: string) {
 }
 export async function directCandidates(artist: string, title: string, remainingSources=false) {
   if (!sources || sources.expires < Date.now()) sources = { expires: Date.now() + 300_000, rows: await prowlarr<Indexer[]>('/indexer') };
-  const preferred = ['TorrentsCSV', 'Knaben', 'LimeTorrents', 'The Pirate Bay', 'TorrentKitty', 'TorrentDownload'];
-  const rows = sources.rows.filter(s => s.enable && preferred.includes(s.name))
-    .sort((a, b) => preferred.indexOf(a.name) - preferred.indexOf(b.name));
+  const preferred = ['TorrentsCSV', 'Knaben', 'LimeTorrents', 'Nyaa.si', 'The Pirate Bay', 'TorrentKitty', 'TorrentDownload'];
+  const rank=(name:string)=>preferred.includes(name)?preferred.indexOf(name):preferred.length;
+  const rows = sources.rows.filter(s => s.enable && (preferred.includes(s.name)||
+    (s.protocol==='torrent'&&s.capabilities?.searchParams?.includes('q')&&categoryIds(s.capabilities.categories??[]).some(id=>(id>=3000&&id<4000)||id===8000))))
+    .sort((a, b) => rank(a.name)-rank(b.name));
   // Broaden the query, never the identity acceptance criteria.
   const query = `${/^various artists$/i.test(artist) ? '' : artist} ${title.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')}`
     .replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
