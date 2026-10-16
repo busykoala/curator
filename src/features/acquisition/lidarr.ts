@@ -51,12 +51,17 @@ export async function reserveSearch(kind:string,indexerIds?:number[]) {
     // global pool too; Prowlarr remains authoritative for provider quotas.
     indexerIds=indexerCache.ids;
   }
-  const retryAt=new Date(Date.now()+15*60_000).toISOString();
   db().transaction(()=>{
+    let retry=0;
     for(const id of indexerIds!) {
       const n=db().prepare("SELECT sum(created_at>=datetime('now','-1 hour')) hourly,count(*) daily FROM acquisition_requests WHERE indexer_id=? AND created_at>=datetime('now','-1 day')").get(id) as {hourly:number;daily:number};
-      if(n.hourly>=300||n.daily>=3000)throw new SearchDeferred(retryAt,"Indexer request budget exhausted");
+      for(const [count,limit,windowMs,window] of [[n.hourly,300,3600_000,'-1 hour'],[n.daily,3000,86400_000,'-1 day']] as const){
+        if(count<limit)continue;
+        const first=db().prepare("SELECT created_at FROM acquisition_requests WHERE indexer_id=? AND created_at>=datetime('now',?) ORDER BY created_at,id LIMIT 1 OFFSET ?").get(id,window,count-limit) as {created_at:string};
+        retry=Math.max(retry,Date.parse(first.created_at.replace(' ','T')+'Z')+windowMs+1000);
+      }
     }
+    if(retry)throw new SearchDeferred(new Date(retry).toISOString(),"Indexer request budget exhausted");
     for(const id of indexerIds!)db().prepare("INSERT INTO acquisition_requests(kind,indexer_id) VALUES(?,?)").run(kind,id);
   }).immediate();
 }

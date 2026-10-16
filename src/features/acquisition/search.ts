@@ -1,7 +1,7 @@
 import { db } from "@/features/db/client";
 import type { AcquisitionTarget } from "./types";
 import { album, albumCatalog, parseRelease, pushRelease, releaseIsBlocked, SearchDeferred } from "./lidarr";
-import { nativeAlbum, nativeArtist, directCandidates } from "./discovery";
+import { nativeAlbum, nativeArtist, directCandidates, directArtist, cachedArtistCandidates } from "./discovery";
 import { allowedQuality, conflictingAlbum, decodeTitle, matchesAlbum, needsQualityRepair, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
 import { releaseScore } from "./policy";
 import { sourceScores, withHybrid } from "./quality";
@@ -19,15 +19,16 @@ export function confirmedCandidateFailure(error:unknown){
   );
 }
 
-export async function findRelease(target:AcquisitionTarget,fallback:boolean,cachedArtistOnly=false) {
+export async function findRelease(target:AcquisitionTarget,fallback:boolean,cachedArtistOnly=false):Promise<{grabbed:boolean;reason?:string;searchCompleted?:boolean}> {
+  let completed=0;
   const unresolved=db().prepare("SELECT status FROM acquisition_submissions WHERE target_id=?").get(target.id) as {status:string}|undefined;
   if(unresolved?.status==='submitting'||unresolved?.status==='accepted') {
-    updateTarget(target.id,{status:'queued',detail_json:JSON.stringify({reason:'Awaiting confirmed download outcome',strategyVersion:2})});
+    updateTarget(target.id,{status:'queued',detail_json:JSON.stringify({reason:'Awaiting confirmed download outcome',strategyVersion:3})});
     return {grabbed:false,reason:'Awaiting confirmed download outcome'};
   }
   const metadata=await album(target.lidarr_album_id);
   if(!metadata.monitored||Number(metadata.statistics?.percentOfTracks??0)>=100) {
-    updateTarget(target.id,{status:metadata.monitored?'imported':'inactive',next_retry_at:null,detail_json:JSON.stringify({reason:metadata.monitored?'Verified album files in Lidarr':'Album is not monitored',strategyVersion:2})});
+    updateTarget(target.id,{status:metadata.monitored?'imported':'inactive',next_retry_at:null,detail_json:JSON.stringify({reason:metadata.monitored?'Verified album files in Lidarr':'Album is not monitored',strategyVersion:3})});
     return {grabbed:false,reason:'Album is no longer missing'};
   }
   const day=new Date().toISOString().slice(0,10),attempts=target.attempts_day===day?target.attempts_today+1:1;
@@ -37,7 +38,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
   const work=async()=>{
     const scores=sourceScores(),seen=new Set<string>(),failedSources=new Set<string>();let tried=0;
     const discover=async(stage:string,fetcher:()=>Promise<Release[]>)=>{
-      try{return await fetcher()}catch(error){
+      try{const items=await fetcher();completed++;return items}catch(error){
         discoveryErrors.push({stage,reason:error instanceof Error?error.message:String(error),...(error instanceof SearchDeferred?{retryAt:error.retryAt}:{})});
         return [];
       }
@@ -102,26 +103,29 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
           db().prepare("INSERT INTO source_outcomes(indexer_name,event,detail_json) VALUES(?,'grab_failure',?)").run(source,JSON.stringify({albumId:metadata.id,guid:item.guid}));continue;
         }
         db().prepare("UPDATE acquisition_submissions SET status='accepted',updated_at=CURRENT_TIMESTAMP WHERE target_id=?").run(target.id);
-        updateTarget(target.id,{status:'queued',source_name:source,last_release_guid:String(item.guid),attempts_today:attempts,attempts_day:day,last_search_at:new Date().toISOString(),next_retry_at:null,quality_phase:fallback?'hybrid':'lossless',detail_json:JSON.stringify({reason:'Accepted by Lidarr; awaiting transfer confirmation',rawTitle:item.title,title,score,strategyVersion:2})});
+        updateTarget(target.id,{status:'queued',source_name:source,last_release_guid:String(item.guid),attempts_today:attempts,attempts_day:day,last_search_at:new Date().toISOString(),next_retry_at:null,quality_phase:fallback?'hybrid':'lossless',detail_json:JSON.stringify({reason:'Accepted by Lidarr; awaiting transfer confirmation',rawTitle:item.title,title,score,strategyVersion:3})});
         return true;
       }
       return false;
     };
     const sameArtist=(db().prepare("SELECT count(*) n FROM acquisition_targets WHERE lidarr_artist_id=? AND status IN ('pending','staged')").get(target.lidarr_artist_id) as {n:number}).n;
-    if(cachedArtistOnly){return {grabbed:Boolean(target.lidarr_artist_id&&await submit(await discover('cached artist',()=>nativeArtist(target.lidarr_artist_id!))))}}
+    if(cachedArtistOnly){return {grabbed:Boolean(target.lidarr_artist_id&&await submit(await discover('cached artist',()=>cachedArtistCandidates(target.lidarr_artist_id!))))}}
     const artistFirst=Boolean(target.lidarr_artist_id)&&(sameArtist>1||Boolean(metadata.disambiguation));
+    // Provider-scoped discovery is independent of Lidarr's all-indexer fanout.
+    // Share broad artist results with siblings before spending album queries.
+    if(artistFirst&&await submit(await discover('direct artist',()=>directArtist(target.lidarr_artist_id!,target.artist))))return {grabbed:true};
+    if(tried<3&&await submit(await discover('alternate sources',()=>directCandidates(target.artist,metadata.title))))return {grabbed:true};
     if(artistFirst&&await submit(await discover('artist',()=>nativeArtist(target.lidarr_artist_id!))))return {grabbed:true};
-    if(artistFirst&&tried<3&&await submit(await discover('alternate sources',()=>directCandidates(target.artist,metadata.title))))return {grabbed:true};
     if(await submit(await discover('album',()=>nativeAlbum(metadata.id))))return {grabbed:true};
-    if(!artistFirst&&tried<3&&await submit(await discover('alternate sources',()=>directCandidates(target.artist,metadata.title))))return {grabbed:true};
     if(!artistFirst&&target.lidarr_artist_id&&await submit(await discover('artist',()=>nativeArtist(target.lidarr_artist_id!))))return {grabbed:true};
     const reason=discoveryErrors.length?'Some search sources unavailable; alternatives checked':Object.keys(evidence).length?'Search results rejected; see rejection reasons':'No matching results in completed searches';
-    // A provider outage is distinct from an exhaustive no-match. Back off while
-    // leaving enough time for other albums, instead of repeating every 5 min.
-    const retryAt=discoveryErrors.length?Math.max(Date.now()+30*60_000,...discoveryErrors.map(e=>Date.parse(e.retryAt??'')||0)):Date.now()+24*3600_000;
-    updateTarget(target.id,{status:'staged',attempts_today:discoveryErrors.length?(target.attempts_day===day?target.attempts_today:0):attempts,attempts_day:day,last_search_at:new Date().toISOString(),next_retry_at:new Date(retryAt).toISOString(),quality_phase:fallback?'hybrid':'lossless',detail_json:JSON.stringify({reason,rejections:evidence,...(discoveryErrors.length?{sourceErrors:discoveryErrors}:{}),strategyVersion:2})});
+    // Completed searches back off to let other albums use the budget. When all
+    // providers defer, retry when the first independent route can recover.
+    const deferredTimes=discoveryErrors.map(e=>Date.parse(e.retryAt??'')).filter(t=>Number.isFinite(t)&&t>Date.now());
+    const retryAt=completed?Date.now()+(discoveryErrors.length?6:24)*3600_000:Math.max(Date.now()+5*60_000,deferredTimes.length?Math.min(...deferredTimes):0);
+    updateTarget(target.id,{status:'staged',attempts_today:completed?attempts:(target.attempts_day===day?target.attempts_today:0),attempts_day:day,last_search_at:completed?new Date().toISOString():target.last_search_at,next_retry_at:new Date(retryAt).toISOString(),quality_phase:fallback?'hybrid':'lossless',detail_json:JSON.stringify({reason,rejections:evidence,...(discoveryErrors.length?{sourceErrors:discoveryErrors}:{}),strategyVersion:3})});
     return {grabbed:false,reason};
   };
-  try{return fallback&&target.lidarr_artist_id?await withHybrid(target.lidarr_artist_id,work):await work()}
-  catch(error){if(error instanceof SearchDeferred){updateTarget(target.id,{status:'staged',next_retry_at:error.retryAt,detail_json:JSON.stringify({reason:error.message,strategyVersion:2})});return{grabbed:false,reason:error.message}}throw error}
+  try{const result=fallback&&target.lidarr_artist_id?await withHybrid(target.lidarr_artist_id,work):await work();return {...result,searchCompleted:completed>0}}
+  catch(error){if(error instanceof SearchDeferred){updateTarget(target.id,{status:'staged',next_retry_at:error.retryAt,detail_json:JSON.stringify({reason:error.message,strategyVersion:3})});return{grabbed:false,reason:error.message}}throw error}
 }

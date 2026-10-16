@@ -161,7 +161,7 @@ function acquisitionQuota(recovering: boolean) {
         count(*) daily,
         sum(coalesce(json_extract(evidence_json,'$.priority'),0)=1) priorityDaily
         FROM download_interventions
-        WHERE action='search' AND status='applied' AND json_extract(evidence_json,'$.strategyVersion')=2 AND created_at>=datetime('now','-1 day')`,
+        WHERE action='search' AND status IN ('applied','started') AND json_extract(evidence_json,'$.strategyVersion')=3 AND created_at>=datetime('now','-1 day')`,
     )
     .get() as {
     short: number | null;
@@ -186,7 +186,7 @@ function failedSearchPatch(target: AcquisitionTarget, error: unknown) {
     next_retry_at: new Date(
       Date.now() + 5 * 60_000,
     ).toISOString(),
-    detail_json: JSON.stringify({ reason:'Search service error; retry scheduled', error: String(error), strategyVersion:2 }),
+    detail_json: JSON.stringify({ reason:'Search service error; retry scheduled', error: String(error), strategyVersion:3 }),
   };
 }
 async function replace(
@@ -499,8 +499,8 @@ async function searchWork(
           FROM acquisition_targets
           WHERE status IN ('pending','staged')
             AND (next_retry_at IS NULL OR datetime(next_retry_at)<=CURRENT_TIMESTAMP
-              OR coalesce(json_extract(detail_json,'$.strategyVersion'),0)<2)
-            AND (attempts_day IS NULL OR attempts_day<>date('now') OR attempts_today<3 OR coalesce(json_extract(detail_json,'$.strategyVersion'),0)<2)`,
+              OR coalesce(json_extract(detail_json,'$.strategyVersion'),0)<3)
+            AND (attempts_day IS NULL OR attempts_day<>date('now') OR attempts_today<3 OR coalesce(json_extract(detail_json,'$.strategyVersion'),0)<3)`,
         )
         .all() as AcquisitionTarget[]
     ).filter((target) => !active.has(target.lidarr_album_id) && currentWanted.has(target.lidarr_album_id)),
@@ -532,16 +532,20 @@ async function searchWork(
     const priorityTarget = isPriorityTarget(target, now),
       fallback =
         settings.qualityFallback;
-    intervene({
+    const event = intervene({
       targetId: target.id,
       action: "search",
-      status: apply ? "applied" : "proposed",
-      evidence: { mode, fallback, priority: priorityTarget, strategyVersion:2 },
+      status: apply ? "started" : "proposed",
+      evidence: { mode, fallback, priority: priorityTarget, strategyVersion:3 },
     });
     if (apply){
-      await findRelease(target, fallback).catch((error) =>
-        updateTarget(target.id, failedSearchPatch(target, error)),
-      );
+      try {
+        const result = await findRelease(target, fallback);
+        db().prepare('UPDATE download_interventions SET status=? WHERE id=?').run(result.searchCompleted ? 'applied' : 'deferred', event);
+      } catch (error) {
+        updateTarget(target.id, failedSearchPatch(target, error));
+        db().prepare("UPDATE download_interventions SET status='failed' WHERE id=?").run(event);
+      }
       // Drain useful artist results while their native release handles are live.
       // Unmatched siblings retain their own normal search/retry schedule.
       if(target.lidarr_artist_id&&hasArtistCache(target.lidarr_artist_id)&&Date.now()<deadline){
@@ -549,7 +553,7 @@ async function searchWork(
         for(const sibling of siblings){
           if(Date.now()>deadline)break;
           const result=await findRelease(sibling,fallback,true).catch(()=>null);
-          if(result?.grabbed)intervene({targetId:sibling.id,action:'cache-match',status:'applied',evidence:{artistId:target.lidarr_artist_id,strategyVersion:2}});
+          if(result?.grabbed)intervene({targetId:sibling.id,action:'cache-match',status:'applied',evidence:{artistId:target.lidarr_artist_id,strategyVersion:3}});
         }
       }
     }
@@ -618,6 +622,7 @@ export async function runAcquisitionCycle(consumeRequest=false) {
   const pulse=setInterval(()=>stateSet('acquisition_lease',String(Date.now()+4*60_000)),30_000);
   stateSet("acquisition_running", "true");
   try {
+    db().prepare("UPDATE download_interventions SET status='interrupted' WHERE action='search' AND status='started' AND created_at<datetime('now','-10 minutes')").run();
     await recoverQualityProfiles();
     const settings = runtimeSettings(),
       paused = stateGet("acquisition_paused") === "true",
@@ -694,7 +699,7 @@ export async function runAcquisitionCycle(consumeRequest=false) {
       idleMinutes = idleSince
         ? Math.max(0, (Date.now() - idleSince) / 60_000)
         : 0;
-    let sourceHealthy = true;
+    let torrentConnectivityHealthy = true;
     if (incomplete.length > 0 && idleMinutes >= 30) {
       stateSet("acquisition_phase", "diagnosing");
       if (
@@ -704,9 +709,9 @@ export async function runAcquisitionCycle(consumeRequest=false) {
         const probe = await connectivityProbe().catch((error) => ({ ok: false, error: String(error) }));
         stateSet("acquisition_probe", JSON.stringify(probe));
         stateSet("acquisition_probe_at", String(Date.now()));
-        sourceHealthy = probe.ok;
+        torrentConnectivityHealthy = probe.ok;
       } else
-        sourceHealthy =
+        torrentConnectivityHealthy =
           JSON.parse(stateGet("acquisition_probe", '{"ok":true}')).ok !== false;
     }
     let staleRepairs = 0;
@@ -730,7 +735,7 @@ export async function runAcquisitionCycle(consumeRequest=false) {
         if(finished){intervene({targetId:target.id,hash:row.item.hash,action:'finish-audio',status:'applied',evidence:{...finished,reason:'All audio files complete; only optional artwork or text was unavailable'}});continue}
       }
       const decision = stalledDecision(target, row.value, row.before, age);
-      if (decision && sourceHealthy && staleRepairs < 5) {
+      if (decision && torrentConnectivityHealthy && staleRepairs < 5) {
         const queued = queueByHash.get(row.item.hash.toLowerCase());
         if (queued) {
           await replace(queued, target, decision.reason, apply);
@@ -769,11 +774,12 @@ export async function runAcquisitionCycle(consumeRequest=false) {
           (item) => item.trackedDownloadState === "importFailed",
         ).length,
         idleMinutes: Math.round(idleMinutes),
-        sourceHealthy,
+        torrentConnectivityHealthy,
+        sourceHealthy: (db().prepare("SELECT count(*) n FROM state WHERE key LIKE 'acquisition_source_error:%' AND value<>'' AND json_extract(value,'$.retryAt')>?").get(iso()) as {n:number}).n===0,
         updatedAt: iso(),
       }),
     );
-    console.log(JSON.stringify({event:"acquisition_cycle_complete",mode,apply,wanted:wanted.length,incomplete:incomplete.length,orphaned,sourceHealthy,at:iso()}));
+    console.log(JSON.stringify({event:"acquisition_cycle_complete",mode,apply,wanted:wanted.length,incomplete:incomplete.length,orphaned,torrentConnectivityHealthy,at:iso()}));
     stateSet("acquisition_last_error", "");
   } catch (error) {
     stateSet("acquisition_last_error", String(error));

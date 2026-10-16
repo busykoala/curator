@@ -22,6 +22,6 @@ export function pruneAcquisitionTelemetry(){
     stateSet('acquisition_maintenance_at',String(Date.now()));
   })();
 }
-export function intervene(decision:{targetId?:number;hash?:string;action:string;status:string;evidence?:unknown}){db().prepare("INSERT INTO download_interventions(target_id,torrent_hash,action,status,evidence_json) VALUES(?,?,?,?,?)").run(decision.targetId??null,decision.hash??null,decision.action,decision.status,JSON.stringify(decision.evidence??{}))}
+export function intervene(decision:{targetId?:number;hash?:string;action:string;status:string;evidence?:unknown}){return db().prepare("INSERT INTO download_interventions(target_id,torrent_hash,action,status,evidence_json) VALUES(?,?,?,?,?)").run(decision.targetId??null,decision.hash??null,decision.action,decision.status,JSON.stringify(decision.evidence??{})).lastInsertRowid}
 export function destructiveAllowed(){const row=db().prepare("SELECT sum(created_at>=datetime('now','-15 minutes')) short,sum(created_at>=datetime('now','-1 hour')) hourly FROM download_interventions WHERE status='applied' AND action IN ('replace','cleanup','disable-source')").get() as{short:number|null;hourly:number|null};return Number(row.short??0)<5&&Number(row.hourly??0)<20}
 export function acquireControllerLease(){return db().transaction(()=>{const until=Number(stateGet("acquisition_lease","0"));if(until>Date.now())return false;stateSet("acquisition_lease",String(Date.now()+4*60_000));return true}).immediate()}

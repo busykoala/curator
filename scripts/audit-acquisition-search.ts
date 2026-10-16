@@ -22,8 +22,8 @@ globalThis.fetch=async(input,init)=>{
  if(/\/album\/[23]$/.test(url)){const id=Number(url.split('/').at(-1));return Response.json({id,artistId:7,title:id===2?'Second':'Third',monitored:true,statistics:{percentOfTracks:0}})}
  if(url.endsWith('/album/1'))return Response.json({id:1,artistId:1,title:'Album',monitored:true,statistics:{percentOfTracks:0}});
  if(url.includes('/album?artistId='))return Response.json([]);
- if(url.endsWith('/indexer'))return Response.json(url.includes('9696')?(mode==='native-outage'?[{id:3,name:'LimeTorrents',enable:true}]:[]):[{id:1,enableInteractiveSearch:true}]);
- if(url.includes('/search?'))return Response.json([{guid:'alternate',title:'Test - Album FLAC',indexerId:3,protocol:'torrent',seeders:10,size:300000000,magnetUrl:'magnet:?xt=urn:btih:0123456789012345678901234567890123456789'}]);
+ if(url.endsWith('/indexer'))return Response.json(url.includes('9696')?(mode==='native-outage'?[{id:3,name:'LimeTorrents',enable:true}]:['native-quota','all-deferred'].includes(mode)?[{id:10,name:'TorrentsCSV',enable:true,capabilities:{categories:[{id:8000}]}}]:[]):[{id:1,enableInteractiveSearch:true}]);
+ if(url.includes('/search?')){if(mode==='native-quota')assert.equal(new URL(url).searchParams.has('categories'),false);return Response.json([{guid:'alternate',title:'Test - Album FLAC',indexerId:3,protocol:'torrent',seeders:10,size:300000000,magnetUrl:'magnet:?xt=urn:btih:0123456789012345678901234567890123456789'}]);}
  assert.match(url,/\/api\/v1\/release/);
  if(init?.method==='POST'){
   const release=JSON.parse(String(init.body));posts.push(release.indexer);
@@ -52,9 +52,23 @@ reset();posts=[];mode='native-outage';assert.equal((await findRelease({...target
 reset();posts=[];mode='shared';
 upsertTarget({albumId:2,artistId:7,origin:'migration',artist:'Test',title:'Second'});
 upsertTarget({albumId:3,artistId:7,origin:'migration',artist:'Test',title:'Third'});
-assert.equal((await findRelease(targetByAlbum(2)!,false,true)).grabbed,true);
+assert.equal((await findRelease(targetByAlbum(2)!,false)).grabbed,true);
 assert.equal((await findRelease(targetByAlbum(3)!,false,true)).grabbed,true);
 assert.equal(artistSearches,1);
+reset();posts=[];mode='native-quota';
+db().exec('DELETE FROM acquisition_requests');
+const exhausted=db().prepare("INSERT INTO acquisition_requests(kind,indexer_id) VALUES('test',-1)");
+db().transaction(()=>{for(let i=0;i<300;i++)exhausted.run()})();
+assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,true);
+assert.deepEqual(posts,['TorrentsCSV (Prowlarr)']);
+reset();posts=[];mode='all-deferred';
+db().prepare("DELETE FROM state WHERE key LIKE 'acquisition_source_%'").run();
+const exhaustedDirect=db().prepare("INSERT INTO acquisition_requests(kind,indexer_id) VALUES('test',10)");
+db().transaction(()=>{for(let i=0;i<300;i++)exhaustedDirect.run()})();
+const previousSearch=targetByAlbum(1)!.last_search_at;
+assert.equal((await findRelease(targetByAlbum(1)!,false)).searchCompleted,false);
+assert.equal(targetByAlbum(1)!.last_search_at,previousSearch);
+assert.deepEqual(posts,[]);
 console.log('Search integration audit passed: no duplicate searches, failing sources are skipped after confirmed conflicts/download errors, and ambiguous timeouts are not retried.');
 }finally{globalThis.fetch=original;db().close();rmSync(dir,{recursive:true,force:true})}
 }

@@ -33,3 +33,37 @@ test('an unavailable preferred provider cannot suppress other sources or turn he
     assert.match(stateGet('acquisition_source_error:3'),/budget exhausted/);
   }finally{globalThis.fetch=original}
 });
+
+test('generic providers are queried without an unsupported music category and record real results',async()=>{
+  db().exec('DELETE FROM state; DELETE FROM acquisition_requests; DELETE FROM source_outcomes');
+  clearDiscoveryCache();
+  const original=globalThis.fetch;
+  let calls=0;
+  globalThis.fetch=async input=>{
+    const url=new URL(String(input));
+    if(url.pathname.endsWith('/indexer'))return Response.json([{id:10,name:'TorrentsCSV',enable:true,capabilities:{categories:[{id:8000}]}}]);
+    calls++;
+    assert.equal(url.searchParams.has('categories'),false);
+    return Response.json([{title:'Fleetwood Mac - Rumours (1977) FLAC',seeders:100,size:500000000}]);
+  };
+  try{
+    assert.equal((await directCandidates('Fleetwood Mac','Rumours')).length,1);
+    assert.equal((await directCandidates('Fleetwood Mac','Rumours')).length,1);
+    assert.equal(calls,1);
+    const events=db().prepare("SELECT * FROM source_outcomes WHERE event='search'").all() as Array<{detail_json:string}>;
+    assert.equal(events.length,1);
+    assert.equal(JSON.parse(events[0].detail_json).results,1);
+    assert.equal(stateGet('acquisition_source_error:10'),'');
+  }finally{globalThis.fetch=original}
+});
+
+test('music-capable providers retain the music category',async()=>{
+  db().exec('DELETE FROM state; DELETE FROM acquisition_requests');clearDiscoveryCache();
+  const original=globalThis.fetch;
+  globalThis.fetch=async input=>{
+    const url=new URL(String(input));
+    if(url.pathname.endsWith('/indexer'))return Response.json([{id:3,name:'LimeTorrents',enable:true,capabilities:{categories:[{id:3000,subCategories:[{id:3040}]}]}}]);
+    assert.equal(url.searchParams.get('categories'),'3000');return Response.json([]);
+  };
+  try{assert.deepEqual(await directCandidates('Test','Album'),[])}finally{globalThis.fetch=original}
+});

@@ -18,14 +18,14 @@ export async function reconcileSubmissions(queue:QueueItem[]){
     const item=torrents.find(t=>ids.has(t.hash.toLowerCase())||names.includes(key(t.name)));
     const possibleUnknown=!ids.size&&torrents.some(t=>t.progress<1&&t.added_on*1000>=created-60_000&&t.added_on*1000<=created+5*60_000);
     if(queue.some(q=>q.downloadId&&ids.has(q.downloadId.toLowerCase()))||(item&&item.progress<1)||possibleUnknown){
-      updateTarget(submission.target_id,{detail_json:JSON.stringify({reason:'Download exists; awaiting Lidarr tracking',strategyVersion:2})});continue;
+      updateTarget(submission.target_id,{detail_json:JSON.stringify({reason:'Download exists; awaiting Lidarr tracking',strategyVersion:3})});continue;
     }
     // No in-flight transfer exists. Completed payloads are retained and the
     // next search still checks actual library files before choosing anything.
     db().transaction(()=>{
       db().prepare('DELETE FROM acquisition_submissions WHERE target_id=?').run(submission.target_id);
       db().prepare("INSERT INTO source_outcomes(indexer_name,event,detail_json) VALUES(?,'submission_failure',?)").run(detail.source??'unknown',JSON.stringify({guid:submission.guid,hash:detail.hash,reason:item?'Completed transfer is absent from Lidarr queue':'No download exists after confirmation grace'}));
-      updateTarget(submission.target_id,{status:'pending',download_hash:null,next_retry_at:null,detail_json:JSON.stringify({reason:item?'Completed payload retained; requested album still missing':'Lidarr approved the release but no transfer was created; trying another source',strategyVersion:2})});
+      updateTarget(submission.target_id,{status:'pending',download_hash:null,next_retry_at:null,detail_json:JSON.stringify({reason:item?'Completed payload retained; requested album still missing':'Lidarr approved the release but no transfer was created; trying another source',strategyVersion:3})});
     })();
   }
 }
