@@ -55,6 +55,7 @@ import { maintainSources } from "./prowlarr";
 import { exactManualImport } from "./manual-import";
 import {recoverImportedIdentities} from './imported-identity';
 import {reconcileSubmissions} from './submissions';
+import {retryBlockedPending} from './pending';
 import type { AcquisitionTarget, DownloadObservation } from "./types";
 
 let running = false,
@@ -636,12 +637,13 @@ export async function runAcquisitionCycle(consumeRequest=false) {
       apply = settings.acquisitionAutomation && !paused && !observeOnly;
     stateSet("acquisition_phase", "observing");
     if(apply)pruneAcquisitionTelemetry();
-    const [wanted, queueItems, torrents, transfer] = await Promise.all([
+    const [wanted, nativeQueueItems, torrents, transfer] = await Promise.all([
       wantedMissing(),
       queue(),
       qbitTorrents(),
       qbitTransfer(),
     ]);
+    const queueItems=await retryBlockedPending(nativeQueueItems,new Set(wanted.map(a=>a.id)),apply);
     await synchronizeTargets(wanted, queueItems);
     const queueByHash = new Map(
       queueItems

@@ -52,7 +52,7 @@ reset();posts=[];mode='repair-quality';assert.equal((await findRelease({...targe
 reset();posts=[];mode='repair-rejected';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,false);assert.equal(db().prepare('SELECT * FROM acquisition_submissions').all().length,0);
 reset();posts=[];mode='capacity';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,false);assert.deepEqual(posts,[]);
 reset();posts=[];mode='wrong-album';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,false);assert.deepEqual(posts,[]);
-reset();posts=[];mode='native-outage';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,true);assert.deepEqual(posts,['LimeTorrents (Prowlarr)']);
+reset();posts=[];mode='native-outage';assert.equal((await findRelease({...targetByAlbum(1)!,last_release_guid:null},false)).grabbed,true);assert.deepEqual(posts,['Curator magnet / LimeTorrents (Prowlarr)']);assert.equal(targetByAlbum(1)!.source_name,'LimeTorrents (Prowlarr)');
 reset();posts=[];mode='shared';
 upsertTarget({albumId:2,artistId:7,origin:'migration',artist:'Test',title:'Second'});
 upsertTarget({albumId:3,artistId:7,origin:'migration',artist:'Test',title:'Third'});
@@ -64,7 +64,7 @@ db().exec('DELETE FROM acquisition_requests');
 const exhausted=db().prepare("INSERT INTO acquisition_requests(kind,indexer_id) VALUES('test',-1)");
 db().transaction(()=>{for(let i=0;i<300;i++)exhausted.run()})();
 assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,true);
-assert.deepEqual(posts,['TorrentsCSV (Prowlarr)']);
+assert.deepEqual(posts,['Curator magnet / TorrentsCSV (Prowlarr)']);assert.equal(targetByAlbum(1)!.source_name,'TorrentsCSV (Prowlarr)');
 reset();posts=[];mode='all-deferred';
 db().prepare("DELETE FROM state WHERE key LIKE 'acquisition_source_%'").run();
 const exhaustedDirect=db().prepare("INSERT INTO acquisition_requests(kind,indexer_id) VALUES('test',10)");

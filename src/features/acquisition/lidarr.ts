@@ -21,10 +21,21 @@ export function releasePushPayload(release:Release):Release {
   // an array, whereas Lidarr requires an integer. Pass transport/identity
   // fields explicitly and let Lidarr re-evaluate quality from the title.
   const fields=['title','guid','downloadUrl','magnetUrl','infoHash','size','seeders','publishDate','protocol','indexer','indexerId','albumId','artistId','downloadClientId'];
+  const hash=releaseInfoHash(release),magnet=String(release.magnetUrl??'');
+  let independentMagnet=false;
+  if(release.direct===true&&hash)try{
+    const url=new URL(magnet),ids=url.searchParams.getAll('xt').filter(value=>/^urn:btih:/i.test(value));
+    independentMagnet=url.protocol==='magnet:'&&ids.length===1&&ids[0].toLowerCase()===`urn:btih:${hash}`;
+  }catch{/* HTTP-only and malformed handles retain their native association. */}
   return {...Object.fromEntries(fields.filter(key=>release[key]!==undefined).map(key=>[key,release[key]])),
     // This Lidarr version derives its push GUID from DownloadUrl, including
     // magnet submissions. Keep distinct torrents from sharing a blank GUID.
     ...(release.downloadUrl||release.magnetUrl?{downloadUrl:release.downloadUrl||release.magnetUrl}:{}),
+    // Native Torznab HTTP health says nothing about a verified DHT magnet.
+    // A matching indexer name otherwise re-associates indexerId=0 with that
+    // stale native endpoint and leaves a usable magnet pending indefinitely.
+    // HTTP-only transports keep their normal indexer association and backoff.
+    ...(independentMagnet?{downloadUrl:magnet,indexerId:0,indexer:`Curator magnet / ${String(release.indexer??'direct source')}`} : {}),
     indexerFlags:typeof release.indexerFlags==='number'?release.indexerFlags:0};
 }
 export const pushRelease=(release:Release)=>call<Release>("/release/push",{method:"POST",body:JSON.stringify(releasePushPayload(release))});

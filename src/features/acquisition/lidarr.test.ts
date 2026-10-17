@@ -14,6 +14,15 @@ test('Prowlarr search resources are adapted to the Lidarr submission contract',(
  assert.equal(r.infoHash,'0123456789012345678901234567890123456789');assert.equal(r.publishDate,'2026-10-16T00:00:00Z');
  assert.equal(r.downloadUrl,r.magnetUrl);
 });
+test('only independently verified direct magnets avoid stale native HTTP indexer cooldowns',()=>{
+ const hash='0123456789012345678901234567890123456789',magnetUrl='magnet:?xt=urn:btih:'+hash;
+ const source={direct:true,indexer:'Knaben (Prowlarr)',indexerId:2,infoHash:hash,magnetUrl,downloadUrl:'https://prowlarr.example/download'};
+ const r=releasePushPayload(source);
+ assert.equal(r.indexer,'Curator magnet / Knaben (Prowlarr)');assert.equal(r.indexerId,0);assert.equal(r.downloadUrl,magnetUrl);
+ for(const item of [{...source,direct:false},{...source,magnetUrl:undefined},{...source,magnetUrl:'https://example.test/?xt=urn:btih:'+hash},{...source,infoHash:'a'.repeat(40)},{...source,magnetUrl:magnetUrl+'&xt=urn:btih:'+'b'.repeat(40)}]){
+  const r=releasePushPayload(item);assert.equal(r.indexer,source.indexer);assert.equal(r.indexerId,2);assert.equal(r.downloadUrl,source.downloadUrl);
+ }
+});
 test('an exhausted native fanout does not prevent a provider-scoped search and retry uses quota expiry',async()=>{
  const original=globalThis.fetch;
  globalThis.fetch=async input=>Response.json(String(input).startsWith(config.PROWLARR_URL)?[{id:3,fields:[{name:'baseSettings.queryLimit',value:60},{name:'baseSettings.limitsUnit',value:1}]}]:[1,3].map((id,i)=>({id:10+i,enableInteractiveSearch:true,fields:[{name:'baseUrl',value:`http://prowlarr:9696/${id}/api`}]})));
