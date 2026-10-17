@@ -84,8 +84,9 @@ export function directRelease(report: Release, sourceName: string, observedAt = 
   const title = String(report.title ?? ''), hash = releaseInfoHash(report);
   const quality = /\bflac\b/i.test(title) ? 'FLAC' : /\bmp3\b.*\b320\b|\b320\s*kbps\b/i.test(title) ? 'MP3-320' : /\bmp3\b.*\bv0\b/i.test(title) ? 'MP3-VBR-V0' : 'Unknown';
   let magnetUrl=report.magnetUrl;
-  if(!magnetUrl&&!report.downloadUrl){
-    if(String(report.guid??'').startsWith('magnet:?'))magnetUrl=report.guid;
+  if(!magnetUrl){
+    if(String(report.downloadUrl??'').startsWith('magnet:?'))magnetUrl=report.downloadUrl;
+    else if(String(report.guid??'').startsWith('magnet:?'))magnetUrl=report.guid;
     else if(hash)magnetUrl=`magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(title)}`;
   }
   const hasDate=typeof report.publishDate==='string'&&Number.isFinite(Date.parse(report.publishDate));

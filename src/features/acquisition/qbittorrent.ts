@@ -34,7 +34,7 @@ export async function finishAudioPayload(hash:string):Promise<false|{skippedExtr
 export const removeTorrent=(hash:string,files:boolean)=>call("/torrents/delete",{hashes:hash,deleteFiles:String(files)});
 export function releaseInfoHash(item:Record<string,unknown>){
   for(const value of [item.infoHash,item.releaseHash])if(/^[a-f\d]{40}$/i.test(String(value??"")))return String(value).toLowerCase();
-  for(const value of [item.magnetUrl,item.guid]){const match=/btih:([a-f\d]{40})(?:[^a-f\d]|$)/i.exec(String(value??""));if(match)return match[1].toLowerCase()}
+  for(const value of [item.magnetUrl,item.guid,String(item.downloadUrl??'').startsWith('magnet:?')?item.downloadUrl:undefined]){const match=/btih:([a-f\d]{40})(?:[^a-f\d]|$)/i.exec(String(value??""));if(match)return match[1].toLowerCase()}
   return "";
 }
 export function ubuntuTorrentFromHtml(html: string, base: string) {

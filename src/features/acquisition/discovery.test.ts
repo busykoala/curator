@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {config} from '@/config';
 import {db,stateGet} from '@/features/db/client';
 import {clearDiscoveryCache,directCandidates,directRelease} from './discovery';
+import {releasePushPayload} from './lidarr';
 const dir=mkdtempSync(join(tmpdir(),'curator-discovery-'));config.DATABASE_PATH=join(dir,'test.sqlite');
 after(()=>{db().close();rmSync(dir,{recursive:true,force:true})});
 test('hash-only search results get an exact magnet and an explicitly observed transport date',()=>{
@@ -17,6 +18,18 @@ test('hash-only search results get an exact magnet and an explicitly observed tr
   const preserved=directRelease(original,'Test',at);
   assert.equal(preserved.magnetUrl,original.magnetUrl);assert.equal(preserved.publishDate,original.publishDate);
   assert.equal(directRelease({title:'Album FLAC',infoHash:'invalid'},'Test',at).magnetUrl,undefined);
+});
+test('magnet transport also works with indexers that use downloadUrl or provide an HTTP alternative',()=>{
+ const hash='0123456789012345678901234567890123456789',magnet='magnet:?xt=urn:btih:'+hash+'&dn=Album';
+ for(const report of [{title:'Artist - Album FLAC',downloadUrl:magnet},{title:'Artist - Album FLAC',downloadUrl:'https://source.example/download',infoHash:hash}]){
+  const release=directRelease(report,'Knaben'),payload=releasePushPayload(release);
+  assert.equal(new URL(String(payload.downloadUrl)).protocol,'magnet:');
+  assert.equal(new URL(String(payload.downloadUrl)).searchParams.get('xt'),'urn:btih:'+hash);
+  assert.equal(payload.indexer,'Curator magnet / Knaben (Prowlarr)');
+  assert.equal(payload.indexerId,0);
+ }
+ const http=directRelease({title:'Artist - Album FLAC',downloadUrl:'https://source.example/download'},'Knaben');
+ assert.equal(http.magnetUrl,undefined);assert.equal(releasePushPayload(http).indexer,'Knaben (Prowlarr)');
 });
 test('an unavailable preferred provider cannot suppress other sources or turn healthy zero results into errors',async()=>{
   const original=globalThis.fetch;const queried:number[]=[];
