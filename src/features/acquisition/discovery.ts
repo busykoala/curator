@@ -83,17 +83,22 @@ async function serializedSource<T>(id: number, work: () => Promise<T>): Promise<
 export function directRelease(report: Release, sourceName: string, observedAt = new Date().toISOString()): Release {
   const title = String(report.title ?? ''), hash = releaseInfoHash(report);
   const quality = /\bflac\b/i.test(title) ? 'FLAC' : /\bmp3\b.*\b320\b|\b320\s*kbps\b/i.test(title) ? 'MP3-320' : /\bmp3\b.*\bv0\b/i.test(title) ? 'MP3-VBR-V0' : 'Unknown';
-  let magnetUrl=report.magnetUrl;
+  // Prowlarr can rewrite even its magnetUrl field to an HTTP proxy URL.
+  // Inspect the actual protocol; an exact info hash still identifies a DHT
+  // magnet independently of that proxy. Keep genuine HTTP-only routes as HTTP.
+  const rawMagnet=String(report.magnetUrl??'');
+  let magnetUrl=/^magnet:\?/i.test(rawMagnet)?rawMagnet:undefined;
+  const downloadUrl=report.downloadUrl??(/^https?:\/\//i.test(rawMagnet)?rawMagnet:undefined);
   if(!magnetUrl){
-    if(String(report.downloadUrl??'').startsWith('magnet:?'))magnetUrl=report.downloadUrl;
-    else if(String(report.guid??'').startsWith('magnet:?'))magnetUrl=report.guid;
+    if(String(downloadUrl??'').startsWith('magnet:?'))magnetUrl=String(downloadUrl);
+    else if(String(report.guid??'').startsWith('magnet:?'))magnetUrl=String(report.guid);
     else if(hash)magnetUrl=`magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(title)}`;
   }
   const hasDate=typeof report.publishDate==='string'&&Number.isFinite(Date.parse(report.publishDate));
   // Hash-only indexers omit both download links and publication dates. Use the
   // verified hash as the magnet and record observation time explicitly; this
   // timestamp is transport metadata, never the library album's release date.
-  return {...report,...(magnetUrl?{magnetUrl}:{}),publishDate:hasDate?report.publishDate:observedAt,
+  return {...report,magnetUrl,...(downloadUrl?{downloadUrl}:{}),publishDate:hasDate?report.publishDate:observedAt,
     publicationDateSource:hasDate?'indexer':'observed',quality:{quality:{name:quality}},indexer:`${sourceName} (Prowlarr)`,direct:true};
 }
 async function sourceCandidates(source: Indexer, query: string) {

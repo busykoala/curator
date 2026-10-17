@@ -31,6 +31,16 @@ test('magnet transport also works with indexers that use downloadUrl or provide 
  const http=directRelease({title:'Artist - Album FLAC',downloadUrl:'https://source.example/download'},'Knaben');
  assert.equal(http.magnetUrl,undefined);assert.equal(releasePushPayload(http).indexer,'Knaben (Prowlarr)');
 });
+test('Prowlarr HTTP proxies in magnetUrl are normalized by protocol using the exact info hash',()=>{
+ const hash='0123456789012345678901234567890123456789',proxy='http://prowlarr.test/4/download?link=opaque&apikey=secret';
+ const r=directRelease({title:'Artist - Album FLAC',magnetUrl:proxy,infoHash:hash},'Knaben'),p=releasePushPayload(r);
+ assert.equal(new URL(String(p.downloadUrl)).protocol,'magnet:');
+ assert.equal(new URL(String(p.downloadUrl)).searchParams.get('xt'),'urn:btih:'+hash);
+ assert.equal(p.indexer,'Curator magnet / Knaben (Prowlarr)');assert.equal(p.indexerId,0);
+ const http=directRelease({title:'Artist - Album FLAC',magnetUrl:proxy},'Knaben');
+ assert.equal(http.magnetUrl,undefined);assert.equal(http.downloadUrl,proxy);
+ assert.equal(releasePushPayload(http).indexer,'Knaben (Prowlarr)');
+});
 test('an unavailable preferred provider cannot suppress other sources or turn healthy zero results into errors',async()=>{
   const original=globalThis.fetch;const queried:number[]=[];
   clearDiscoveryCache();
