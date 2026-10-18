@@ -1,10 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {incompleteExtras,type TorrentFile} from './qbittorrent';
-import {connectivityProbeInterval,needsReplacementSearch,stalledDecision,productiveTransfer} from './policy';
+import {connectivityProbeInterval,needsReplacementSearch,stalledDecision,productiveTransfer,orderImportReviews} from './policy';
 import type {AcquisitionTarget,DownloadObservation} from './types';
 import {retainMismatchedQueue} from './lidarr';
 const files:TorrentFile[]=[{index:0,name:'01.mp3',size:1000,progress:1,priority:1},{index:1,name:'Folder.jpg',size:500,progress:.5,priority:1},{index:2,name:'Album.nfo',size:100,progress:0,priority:1}];
+test('a persistent first page of import failures cannot starve the remaining queue',()=>{
+ const items=Array.from({length:10},(_,i)=>({id:i+1})),reviewed=new Map<number,number>();
+ const first=orderImportReviews(items,reviewed).slice(0,5);
+ first.forEach((item,i)=>reviewed.set(item.id,i+1));
+ const second=orderImportReviews(items,reviewed).slice(0,5);
+ assert.deepEqual(second.map(item=>item.id),[6,7,8,9,10]);
+ second.forEach((item,i)=>reviewed.set(item.id,i+6));
+ assert.deepEqual(orderImportReviews(items,reviewed).slice(0,5).map(item=>item.id),[1,2,3,4,5]);
+ assert.equal(orderImportReviews([...items,{id:11}],reviewed)[0].id,11);
+});
 test('stalled replacements get one prompt search instead of waiting behind the migration backlog',()=>{
   assert.equal(needsReplacementSearch(JSON.stringify({reason:'No byte progress or reachable source for 4 hours'})),true);
   assert.equal(needsReplacementSearch(JSON.stringify({recoveryRetry:true})),true);

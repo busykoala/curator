@@ -67,6 +67,11 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string,
     if(!counts.some(n=>new RegExp(`\\b${n}\\s*(?:x\\s*)?(?:cd|discs?|lp)\\b`,'i').test(raw)))return false;
   }
   const metadata = `${album.title} ${(album.secondaryTypes ?? []).join(" ")}`;
+  // An abbreviated catalogue alias must not erase the recording's identity.
+  // A studio American Idiot cannot satisfy the Broadway cast release even if
+  // the latter has an alias named simply American Idiot.
+  for(const [expected,actual] of [[/\bbroadway\b/i,/\bbroadway\b/i],[/\bcast\s+recording\b/i,/\bcast\b/i],[/\bspoken\s+word\b/i,/\bspoken\s+word\b/i]])
+    if(expected.test(album.title)&&!actual.test(raw))return false;
   const knownTitles=[album.title,album.disambiguation??'',...(album.releases??[]).flatMap(r=>[r.title,r.disambiguation??''])];
   const technical=new Set([...technicalDescriptors,...'album plus bonus track tracks limited sacd eac web mqa dsd'.split(' ')]);
   for(const part of raw.matchAll(/\(([^)]*)\)/g)){
@@ -76,7 +81,7 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string,
     // formatting. Only known edition/format/year descriptors can be discarded.
     if(significant(part[1]).some(w=>!technical.has(w)&&!/^\d+(?:st|nd|rd|th|bit|kbps|khz)?$/.test(w)))return false;
   }
-  for (const variant of ["instrumental", "karaoke", "tribute", "live", "remix", "acoustic"]){
+  for (const variant of ["instrumental", "karaoke", "tribute", "live", "remix", "acoustic", "meditation"]){
     const suffix=variant==='remix'?'(?:es|ed)?':'s?';
     if (new RegExp(`\\b${variant}${suffix}\\b`, "i").test(raw) && !new RegExp(`\\b${variant}${suffix}\\b`, "i").test(metadata)) return false;
   }

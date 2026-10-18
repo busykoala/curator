@@ -31,6 +31,7 @@ import {
   isStaleOrphan,
   isPriorityTarget,
   orderSearchTargets,
+  orderImportReviews,
   retryDelay,
   searchBudget,
   stalledDecision,
@@ -242,14 +243,24 @@ async function replace(
   });
 }
 async function repairImports(items: QueueItem[], apply: boolean) {
-  for (const item of items
+  const candidates=items
     .filter((value) =>
       value.trackedDownloadState === "importFailed" ||
       (value.status === 'completed' && value.trackedDownloadState === 'importPending' && Number(value.sizeleft??0)===0) ||
       (value.status === "completed" && value.trackedDownloadStatus === "warning" && Number(value.sizeleft ?? 0) === 0 &&
         value.statusMessages?.some((status) => status.messages?.some((message) => /unable to import automatically/i.test(message))))
-    )
-    .slice(0, 5)) {
+    );
+  let saved:Record<string,number>={};
+  try{saved=JSON.parse(stateGet('acquisition_import_reviews','{}'))}catch{/* A malformed cursor cannot prevent imports. */}
+  const reviewed=new Map(candidates.map(item=>[item.id,Number(saved?.[item.id])||0]));
+  for (const item of orderImportReviews(candidates,reviewed).slice(0,5)) {
+    if(apply){
+      // Persist attempts before scanning, and retain only live queue IDs. A
+      // failed scan or restart cannot keep the same first five in front of
+      // unknown artists or multi-album downloads further down the queue.
+      reviewed.set(item.id,Date.now());
+      stateSet('acquisition_import_reviews',JSON.stringify(Object.fromEntries(reviewed)));
+    }
     let target = item.albumId ? targetByAlbum(item.albumId) : undefined;
     if (!target && item.albumId) {
       upsertTarget({

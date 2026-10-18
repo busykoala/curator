@@ -6,6 +6,9 @@ import type {
 } from "./types";
 const hour = 3_600_000;
 const priorityWindow = 24 * hour;
+export function orderImportReviews<T extends {id:number}>(items:T[],lastReview:Map<number,number>) {
+  return [...items].sort((a,b)=>(lastReview.get(a.id)??0)-(lastReview.get(b.id)??0));
+}
 // A failed diagnostic HTTP fetch says nothing about reachable torrent peers.
 // Keep destructive recovery conservative, but retry an inconclusive probe soon.
 export const connectivityProbeInterval=(probe:{error?:unknown})=>probe.error?5*60_000:30*60_000;

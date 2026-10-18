@@ -3,6 +3,16 @@ import assert from "node:assert/strict";
 import {conflictingAlbum,matchesAlbum,releaseQuality,repairedTitle, type CatalogAlbum} from "./matching";
 const album=(title:string,releaseDate='1975-01-01'):CatalogAlbum=>({id:1,artistId:1,title,releaseDate,monitored:true});
 const item=(title:string,extra={})=>({title,...extra});
+test('short catalogue aliases cannot turn studio audio into a cast recording or a meditation edition into the standard album',()=>{
+ const broadway={...album('American Idiot: The Original Broadway Cast Recording','2010-01-01'),releases:[{title:'American Idiot'}]};
+ const raw=item('Green Day - American Idiot (2004) [2012 Remastered Hi-Res 24-48] FLAC 88');
+ assert.equal(matchesAlbum(raw,broadway,'Green Day'),false);
+ assert.equal(matchesAlbum(raw,broadway,'Green Day',{artist:{id:1},albums:[{id:1}]}),false);
+ assert.equal(matchesAlbum(item('Green Day - American Idiot The Original Broadway Cast Recording (2010) FLAC'),broadway,'Green Day'),true);
+ assert.equal(matchesAlbum(item('Green Day - American Idiot Original Broadway Cast (2010) FLAC'),broadway,'Green Day'),true);
+ assert.equal(matchesAlbum(item('Above & Beyond - Flow State Meditations (2020) FLAC'),album('Flow State','2019-01-01'),'Above & Beyond'),false);
+ assert.equal(matchesAlbum(item('Above & Beyond - Flow State (2019) FLAC'),album('Flow State','2019-01-01'),'Above & Beyond'),true);
+});
 test('a shared studio title is insufficient evidence for a multi-album box set',()=>{
   const box={...album('Catch a Fire','2006-10-04'),disambiguation:'Disk Union box set',releases:[{title:'Catch a Fire',mediumCount:11}]};
   assert.equal(matchesAlbum(item('Bob Marley & The Wailers - Catch A Fire (50th Anniversary) (2023 Reggae) FLAC'),box,'Bob Marley & The Wailers'),false);
