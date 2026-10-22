@@ -49,4 +49,44 @@ test('empty and duplicate selections cannot touch the native API',async()=>{
   for(const ids of [[],['a','a']])await assert.rejects(publishVerifiedPlaylist(f.p,ids,undefined,f.adapter,()=>{}),/empty or duplicate/);
   assert.equal(f.native.size,0);
 });
+test('a newer configuration adopts a lost-response create instead of creating a second native playlist',async()=>{
+  const f=fixture(),create=f.adapter.create;
+  f.adapter.create=async(name,ids)=>{await create(name,ids);throw Error('Lost create response')};
+  await assert.rejects(publishVerifiedPlaylist(f.p,['old'],undefined,f.adapter,()=>{}),/Lost create/);
+  f.adapter.create=create;
+  const changed={...f.p,name:'New direction',revision:(f.p.revision??1)+1};
+  const result=await publishVerifiedPlaylist(changed,['new-a','new-b'],undefined,f.adapter,()=>{});
+  assert.equal(f.native.size,1);assert.equal(f.counts().creates,1);assert.equal(f.native.get(result.playlistId)?.name,changed.name);assert.deepEqual(f.native.get(result.playlistId)?.ids,['new-a','new-b']);
+  assert.equal((database.prepare('SELECT status FROM playlist_publications WHERE playlist_id=? ORDER BY rowid LIMIT 1').get(f.p.id) as {status:string}).status,'superseded');
+});
+test('renaming a playlist with unchanged songs still updates the remote name and a failed rename restores it',async()=>{
+  const f=fixture();f.native.set('existing',{name:'Previous name',ids:['a','b']});
+  const changed={...f.p,name:'Changed name'};
+  await publishVerifiedPlaylist(changed,['a','b'],'existing',f.adapter,()=>{});assert.equal(f.native.get('existing')?.name,changed.name);assert.equal(f.counts().writes,1);
+  f.adapter.verify=async()=>['wrong'];
+  await assert.rejects(publishVerifiedPlaylist({...changed,revision:(changed.revision??1)+1,name:'Failed rename'},['a','b'],'existing',f.adapter,()=>{}),/verification failed/);
+  assert.equal(f.native.get('existing')?.name,changed.name);assert.deepEqual(f.native.get('existing')?.ids,['a','b']);
+});
+test('an unverified new playlist remains a recoverable pending draft rather than a named published mix',async()=>{
+  const f=fixture();f.adapter.verify=async()=>['wrong'];
+  await assert.rejects(publishVerifiedPlaylist(f.p,['a','b'],undefined,f.adapter,()=>{}),/verification failed/);
+  assert.equal(f.native.size,1);assert.ok([...f.native.values()][0].name.startsWith('Curator pending '));
+  delete f.adapter.verify;
+  const result=await publishVerifiedPlaylist(f.p,['a','b'],undefined,f.adapter,()=>{});assert.equal(f.native.size,1);assert.equal(f.counts().creates,1);assert.equal(f.native.get(result.playlistId)?.name,f.p.name);
+});
+test('a stale worker cannot roll back a newer selection or overwrite the successor journal',async()=>{
+  const f=fixture();f.native.set('existing',{name:f.p.name,ids:['old']});let owned=true;
+  const update=f.adapter.update;
+  f.adapter.update=async(...args)=>{await update(...args);owned=false;f.native.set('existing',{name:'Newer publication',ids:['newer']})};
+  await assert.rejects(publishVerifiedPlaylist(f.p,['a','b'],'existing',f.adapter,()=>{if(!owned)throw Error('Lease expired')},()=>{if(!owned)throw Error('Lease expired')}));
+  assert.deepEqual(f.native.get('existing')?.ids,['newer']);assert.equal(f.counts().writes,1);
+  assert.notEqual((database.prepare('SELECT status FROM playlist_publications WHERE playlist_id=?').get(f.p.id) as {status:string}).status,'rolled_back');
+});
+test('a deleted remote playlist is recreated once and multiple known native identities fail safely',async()=>{
+  const f=fixture(),first=await publishVerifiedPlaylist(f.p,['a','b'],undefined,f.adapter,()=>{});f.native.delete(first.playlistId);
+  const replacement=await publishVerifiedPlaylist(f.p,['a','b'],undefined,f.adapter,()=>{});assert.notEqual(replacement.playlistId,first.playlistId);assert.equal(f.native.size,1);
+  const prior=database.prepare('SELECT id FROM playlist_publications WHERE playlist_id=?').get(f.p.id) as {id:string};
+  f.native.set('duplicate',{name:`Curator pending ${f.p.id} ${prior.id}`,ids:['a','b']});
+  await assert.rejects(publishVerifiedPlaylist({...f.p,revision:(f.p.revision??1)+1},['c'],undefined,f.adapter,()=>{}),/Multiple native playlists/);assert.equal(f.counts().creates,2);
+});
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

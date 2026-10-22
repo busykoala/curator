@@ -6,7 +6,7 @@ import {
   trackAlbumMatches,
   trackPositionMatches,
 } from "./navidrome-identity";
-import {publishVerifiedPlaylist} from "@/features/playlists/publication";
+import {publishVerifiedPlaylist,recoverPublicationPlaylist} from "@/features/playlists/publication";
 import {listenerMusicSnapshot} from '@/features/playlists/listening-snapshot';
 import { jellyfinCall } from "@/features/auth/navidrome";
 import { db } from "@/features/db/client";
@@ -379,10 +379,30 @@ async function verifiedJellyfinIds(
   return actual;
 }
 
+export async function nativeOwnerPlaylists(ownerId:number){
+  const output:JellyItem[]=[],seen=new Set<string>();let total:number|undefined;
+  for(let offset=0;offset<10000;){
+    const query=new URLSearchParams({IncludeItemTypes:'Playlist',Recursive:'true',Limit:'500',StartIndex:String(offset),Fields:'Overview'});
+    const page=await jellyfinCall<JellyItems>(ownerId,'Items?'+query),items=page.Items??[];
+    if(page.TotalRecordCount!=null){
+      if(!Number.isInteger(page.TotalRecordCount)||page.TotalRecordCount<0||total!=null&&page.TotalRecordCount!==total)throw Error('Native playlist inventory changed during pagination; retrying safely');
+      total=page.TotalRecordCount;
+    }
+    for(const item of items){if(!item.Id||seen.has(item.Id))throw Error('Native playlist inventory repeated a page; refusing an uncertain create');seen.add(item.Id);output.push(item)}
+    offset+=items.length;
+    if(total!=null&&offset>total)throw Error('Native playlist inventory exceeds its declared count');
+    if(total!=null&&offset===total)return output;
+    if(!items.length){if(total!=null)throw Error('Native playlist inventory is incomplete');return output}
+    if(total==null&&items.length<500)return output;
+  }
+  throw Error('Native playlist inventory exceeds the pagination safety limit');
+}
+
 async function replaceUserPlaylist(
   definition: PlaylistDefinition,
   items: PlaylistCandidate[],
   assertCurrent:()=>void,
+  assertOwnership:()=>void,
 ) {
   const userId = definition.ownerUserId,
     mapped: Array<{ fileId: number; songId: string }> = [];
@@ -395,11 +415,7 @@ async function replaceUserPlaylist(
     mapped.push({ fileId: item.fileId, songId: id });
   }
   const ids = mapped.map((item) => item.songId);
-  const listed = await jellyfinCall<JellyItems>(
-      userId,
-      "Items?IncludeItemTypes=Playlist&Recursive=true&Limit=1000&Fields=Overview",
-    ),
-    playlists = listed.Items ?? [];
+  const playlists=await nativeOwnerPlaylists(userId);
   let existing = definition.navidromePlaylistId
     ? playlists.find((item) => item.Id === definition.navidromePlaylistId)
     : undefined;
@@ -407,6 +423,7 @@ async function replaceUserPlaylist(
     const journal=db().prepare('SELECT native_id FROM playlist_publications WHERE playlist_id=? AND owner_user_id=? AND revision=? AND song_ids_json=?').get(definition.id,userId,definition.revision??1,JSON.stringify(ids)) as {native_id:string|null}|undefined;
     if(journal?.native_id)existing=playlists.find(item=>item.Id===journal.native_id);
   }
+  if(!existing){const recovered=recoverPublicationPlaylist(definition,playlists.map(item=>({id:item.Id,name:item.Name??''})));if(recovered)existing=playlists.find(item=>item.Id===recovered)}
   if (
     !existing &&
     definition.navidromePlaylistId &&
@@ -431,7 +448,7 @@ async function replaceUserPlaylist(
       `An unmanaged Navidrome playlist named ${definition.name} already exists`,
     );
   const published=await publishVerifiedPlaylist(definition,ids,existing?.Id,{
-    list:async()=>((await jellyfinCall<JellyItems>(userId,"Items?IncludeItemTypes=Playlist&Recursive=true&Limit=1000&Fields=Overview")).Items??[]).map(p=>({id:p.Id,name:p.Name??""})),
+    list:async()=>(await nativeOwnerPlaylists(userId)).map(p=>({id:p.Id,name:p.Name??""})),
     items:async id=>(await jellyfinPlaylistItems(userId,id)).map(item=>item.Id),
     verify:async(id,expected)=>verifiedJellyfinIds(userId,id,expected),
     create:async(name,songs)=>{
@@ -439,7 +456,7 @@ async function replaceUserPlaylist(
       return result.Id??"";
     },
     update:async(id,name,songs)=>{await jellyfinCall(userId,`Playlists/${id}`,{method:"POST",body:JSON.stringify({Name:name,Ids:songs,IsPublic:false})})},
-  },assertCurrent);
+  },assertCurrent,assertOwnership);
   return {...published,tracks:ids.length,songIds:new Map(mapped.map(item=>[item.fileId,item.songId]))};
 }
 
@@ -447,8 +464,9 @@ export async function replaceManagedPlaylist(
   definition: PlaylistDefinition,
   items: PlaylistCandidate[],
   assertCurrent:()=>void=()=>{},
+  assertOwnership:()=>void=()=>{},
 ) {
-  if (definition.ownerUserId) return replaceUserPlaylist(definition, items,assertCurrent);
+  if (definition.ownerUserId) return replaceUserPlaylist(definition, items,assertCurrent,assertOwnership);
   throw new Error("Playlist owner must sign in to Navidrome again");
 }
 export async function deleteManagedPlaylist(definition: PlaylistDefinition) {

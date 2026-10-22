@@ -333,7 +333,7 @@ async function generatePlaylistRun(
           `Only ${items.length - unresolved.length} of ${definition.config.targetTracks} tracks have unambiguous Navidrome identity`,
         );
       }
-      const synced = await replaceManagedPlaylist(definition, items,assertCurrent);
+      const synced = await replaceManagedPlaylist(definition, items,assertCurrent,()=>assertPlaylistLease(id,lease));
       navidromeId = synced.playlistId;
       songIds = synced.songIds;
     }
@@ -515,7 +515,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
       throw new Error(
         "Some preview songs have unresolved Navidrome identity. Your saved playlist has not changed.",
       );
-    const synced = await replaceManagedPlaylist(definition, items,assertCurrent);
+    const synced = await replaceManagedPlaylist(definition, items,assertCurrent,()=>assertPlaylistLease(id,lease));
     assertCurrent();
     db().transaction(() => {
       assertCurrent();

@@ -283,6 +283,7 @@ function migrate(instance: Database.Database) {
       instance.prepare('UPDATE playlist_discovery_releases SET evidence_json=? WHERE id=?').run(JSON.stringify(evidence.filter(item=>item&&['musicbrainz','official-release'].includes(item.provider??''))),row.id);
     }
   });
+  migration(24,()=>addColumns(instance,'playlist_publications',[['previous_name','TEXT']]));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

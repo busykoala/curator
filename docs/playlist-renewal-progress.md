@@ -347,3 +347,11 @@ changes in the infrastructure repository. Update this record at each handoff.
   The full 72 initial replays, independent 40-case improvement gate, real-library
   simulation, recovery/cooldown review and staged production nights are still
   outstanding. Production image and pipeline mode remain unchanged.
+- Publication recovery now follows owner/playlist journal identities across
+  configuration revisions, preserving an uncertain create rather than creating
+  a duplicate after an edit. Additive migration 24 records the previous remote
+  name so failed renames restore both name and songs. Lost mutation ownership
+  fences rollback as well as confirmation. Native playlist inventory follows
+  pagination and rejects incomplete, repeated or changing results before a
+  create. Ten focused publication/inventory regressions and TypeScript pass.
+  This is pre-deployment evidence; production remains unchanged.
