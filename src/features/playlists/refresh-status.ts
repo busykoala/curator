@@ -16,6 +16,10 @@ export function playlistRefreshView(playlist:Pick<PlaylistDefinition,'id'|'owner
   const detail=JSON.parse(published?.detail_json??'{}'),attempt=JSON.parse(job?.detail_json??'{}');
   const shortage=job&&job.status!=='completed'?Number(attempt.evaluation?.shortage??0):0;
   const lastSuccessfulRefresh=iso(published?.finished_at??playlist.lastRunAt);
+  const completed=db().prepare("SELECT coalesce(max(updated_at),0) at FROM playlist_refresh_jobs WHERE playlist_id=? AND owner_user_id=? AND kind<>'shadow' AND status='completed'").get(playlist.id,playlist.ownerUserId) as {at:number};
+  const successAt=Math.max(completed.at,lastSuccessfulRefresh?Date.parse(lastSuccessfulRefresh):0);
+  const unresolved=db().prepare(`SELECT error FROM playlist_refresh_jobs WHERE playlist_id=? AND owner_user_id=? AND kind<>'shadow' AND error<>'' AND status<>'completed'
+    AND revision=(SELECT revision FROM smart_playlists WHERE id=?) AND updated_at>? ORDER BY updated_at DESC,rowid DESC LIMIT 1`).get(playlist.id,playlist.ownerUserId,playlist.id,successAt) as {error:string}|undefined;
   const active=managed&&job&&['queued','running','retry','auth_wait','failed'].includes(job.status);
   const refreshStatus:PlaylistRefreshView['refreshStatus']=active?
     job.status==='queued'?'queued':job.status==='running'?'refreshing':job.status==='retry'?'retrying':job.status==='auth_wait'?'auth_required':'failed':playlist.enabled?'ready':'disabled';
@@ -31,5 +35,5 @@ export function playlistRefreshView(playlist:Pick<PlaylistDefinition,'id'|'owner
   else if(refreshStatus==='auth_required')changeSummary=refreshAuthService==='inference'?'The AI connection needs renewed credentials':'Sign in to Navidrome again to refresh';
   else if(refreshStatus==='failed')changeSummary='The last refresh needs a retry';
   const pending=(db().prepare("SELECT count(*) n FROM playlist_discovery_recommendations WHERE playlist_id=? AND owner_user_id=? AND status IN ('queued','downloading','deferred')").get(playlist.id,playlist.ownerUserId) as {n:number}).n;
-  return{lastSuccessfulRefresh,nextRefresh,refreshStatus,refreshAuthService,shortage,changeSummary,refreshError:active?job.error:'',pendingDiscoveries:pending,refreshPipelineEnabled:managed};
+  return{lastSuccessfulRefresh,nextRefresh,refreshStatus,refreshAuthService,shortage,changeSummary,refreshError:managed?(active&&job.error||unresolved?.error||''):'',pendingDiscoveries:pending,refreshPipelineEnabled:managed};
 }

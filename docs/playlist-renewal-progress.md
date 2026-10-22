@@ -493,3 +493,9 @@ changes in the infrastructure repository. Update this record at each handoff.
   use zero network requests and do not restore the dismissed recommendation.
   The remaining slot must be filled by future evidenced research, not a weaker
   genre rule. Production image/flag and recommendations remain unchanged.
+- Pushed implementation checkpoint `1bd4237` to main; GitHub CI/container runs
+  started. No production rollout or feature enablement has occurred.
+- A queued replacement night now retains the previous unresolved error until
+  actual success; configuration revision changes still fence obsolete failures.
+  Validation v16: 280/280 tests, TypeScript and production/worker build passed.
+  The required acquisition audits passed at v14; acquisition code is unchanged.

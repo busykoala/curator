@@ -40,4 +40,12 @@ test('an inference credential failure does not ask the listener to renew their N
   requestPlaylistRefresh(p.id,1,randomUUID());const job=claimRefreshJob()!;finishRefreshJob(job,{},'Local AI request failed (401): unauthorized');
   const view=getPlaylist(p.id)!;assert.equal(view.refreshAuthService,'inference');assert.match(view.changeSummary!,/AI connection/);assert.equal(view.nextRefresh,null);
 });
+test('a new queued night keeps the previous failure visible until a successful result',()=>{
+  const previous=requestPlaylistRefresh(p.id,1,randomUUID()),failed=claimRefreshJob()!;
+  finishRefreshJob(failed,{},'Native service unavailable');
+  database.prepare("UPDATE playlist_refresh_jobs SET status='failed',updated_at=? WHERE id=?").run(Date.now()-1000,previous);
+  const next=requestPlaylistRefresh(p.id,1,randomUUID());assert.notEqual(next,previous);
+  assert.equal(getPlaylist(p.id)!.refreshStatus,'queued');assert.equal(getPlaylist(p.id)!.refreshError,'Native service unavailable');
+  const job=claimRefreshJob()!;finishRefreshJob(job,{published:true});assert.equal(getPlaylist(p.id)!.refreshError,'');
+});
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});
