@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {canonicalSemanticField,canonicalSemanticValue} from '@/features/categorization/vocabulary';
-import {norm} from './candidate-score';
+import {identityName as norm} from '@/features/integrations/navidrome-identity';
 import {semanticListFields} from '@/features/categorization/types';
 
 export type EvidenceConfidence='high'|'medium'|'low'|'unknown';
@@ -18,7 +18,7 @@ export function buildTrackEvidence(input:Input):TrackEvidenceView{
   const manual=Object.fromEntries(Object.entries(input.manual??{}).map(([k,v])=>[canonicalSemanticField(k),v]));
   const fields:Record<string,FieldEvidence>={},conflicts:string[]=[];
   const semanticFields=new Set<string>([...semanticListFields,'bpm','energy','valence','musicalKey','mode','tempoFeel','danceability','acousticElectronicCharacter']);
-  for(const field of new Set([...Object.keys(profile),...Object.keys(manual),...Object.keys(tags).filter(k=>semanticFields.has(k))])){
+  for(const field of new Set([...Object.keys(profile),...Object.keys(manual),...Object.keys(tags).filter(k=>semanticFields.has(k)),...(input.external??[]).map(f=>canonicalSemanticField(f.field))])){
     const inferred=profile[field];
     if(Object.hasOwn(manual,field)){fields[field]={value:manual[field],source:'user_override',scope:'recording',confidence:'high',references:[]};continue}
     const facts=(input.external??[]).filter(f=>canonicalSemanticField(f.field)===field&&f.scope==='recording');
@@ -35,6 +35,9 @@ export function buildTrackEvidence(input:Input):TrackEvidenceView{
     fields[field]={value:inferred??null,source:inferred==null?'unknown':'model_inference',scope:'recording',confidence:inferred==null?'unknown':'low',references:[],note:generated?'Semantic tag mirrors the generated profile; independent support is not established':undefined};
   }
   const vocal=values(fields.vocalProfile?.value).map(v=>canonicalSemanticValue('vocalProfile',v));
+  if(fields.vocalPresence?.value===true&&vocal.includes('instrumental')&&fields.vocalProfile.source!=='user_override'){
+    fields.vocalProfile={...fields.vocalProfile,value:null,source:'conflict',confidence:'unknown',note:'Verified vocal credits contradict instrumental inference'};conflicts.push('vocalProfile');
+  }
   if(vocal.includes('instrumental')&&vocal.some(v=>/^(spoken|rap|clean_sung|sung|chant|choir)$/.test(v))&&fields.vocalProfile.source!=='user_override'){
     fields.vocalProfile={...fields.vocalProfile,value:null,source:'conflict',confidence:'unknown',note:'Instrumental and vocal/spoken claims conflict'};conflicts.push('vocalProfile');
   }

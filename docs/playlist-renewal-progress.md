@@ -89,9 +89,12 @@ changes in the infrastructure repository. Update this record at each handoff.
 
 ## Next continuation
 
-- Finish package E with an evidence-backed targeted metadata review queue (cap
-  100 distinct tracks/day, priority to active selections/new imports; yield to
-  chat). Do not rerun classification across the entire library.
+- Package E's targeted review queue is implemented: at most 100 attempts/day,
+  active-selection/new-import priority and chat yielding. Recording facts bind
+  title, artist and duration; absent vocal credits never prove instrumental.
+  Identity changes invalidate facts, and the import watermark preserves gaps.
+  Full tests 159/159, TypeScript and production build passed. External facts and
+  actual musical accuracy still require runtime/evaluation verification.
 - Implement F and G fully: compiled intent, per-type ranking, exposure/rotation,
   representative discovery tracks, actual chat nightly changes, local retrieval,
   reranking, validated bounded tools/repair, interactive inference priority.

@@ -1,13 +1,16 @@
 import {db} from '@/features/db/client';
 import {buildTrackEvidence,trackEvidenceHash,type ExternalTrackFact,type TrackEvidenceView} from './track-evidence';
+import {reviewIdentity,reviewIdentityHash} from './metadata-review';
 
 export function playlistTrackEvidence(fileId:number):TrackEvidenceView|null{
-  const row=db().prepare(`SELECT f.artist_name,f.album_key,f.tags_json,p.profile_json,p.provenance_json,o.patch_json,m.release_group_mbid
+  const row=db().prepare(`SELECT f.id,f.artist_name,f.album_key,f.tags_json,f.properties_json,p.profile_json,p.provenance_json,o.patch_json,m.release_group_mbid
     FROM files f LEFT JOIN track_profiles p ON p.file_id=f.id LEFT JOIN track_profile_overrides o ON o.file_id=f.id
     LEFT JOIN manual_overrides m ON m.album_key=f.album_key AND m.confirmed=1 WHERE f.id=?`).get(fileId) as
-    {artist_name:string;album_key:string;tags_json:string;profile_json:string|null;provenance_json:string|null;patch_json:string|null;release_group_mbid:string|null}|undefined;
+    {id:number;artist_name:string;album_key:string;tags_json:string;properties_json:string;profile_json:string|null;provenance_json:string|null;patch_json:string|null;release_group_mbid:string|null}|undefined;
   if(!row)return null;
   const tags=JSON.parse(row.tags_json),external:ExternalTrackFact[]=[];
+  const reviewed=db().prepare("SELECT facts_json FROM playlist_metadata_reviews WHERE file_id=? AND source_hash=? AND status='complete'").get(fileId,reviewIdentityHash(reviewIdentity(row))) as {facts_json:string}|undefined;
+  if(reviewed)external.push(...JSON.parse(reviewed.facts_json));
   const groupId=row.release_group_mbid??Object.entries(tags).filter(([k])=>k.toLowerCase().replace(/[^a-z]/g,'')==='musicbrainzreleasegroupid').flatMap(([,v])=>Array.isArray(v)?v:[v])[0];
   if(groupId){
     const sources=db().prepare("SELECT payload_json FROM evidence WHERE entity_key=? AND provider='musicbrainz' ORDER BY fetched_at DESC LIMIT 8").all(row.album_key) as Array<{payload_json:string}>;

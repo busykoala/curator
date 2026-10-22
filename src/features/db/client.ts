@@ -225,6 +225,13 @@ function migrate(instance: Database.Database) {
     error TEXT NOT NULL DEFAULT '',lease_token TEXT,lease_until INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS playlist_track_evidence(file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
     version INTEGER NOT NULL,source_hash TEXT NOT NULL,evidence_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`));
+  migration(17,()=>instance.exec(`CREATE TABLE IF NOT EXISTS playlist_metadata_reviews(
+    file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,priority INTEGER NOT NULL DEFAULT 0,
+    reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'queued',source_hash TEXT NOT NULL DEFAULT '',
+    facts_json TEXT NOT NULL DEFAULT '[]',next_retry_at INTEGER NOT NULL DEFAULT 0,lease_token TEXT,lease_until INTEGER NOT NULL DEFAULT 0,
+    error TEXT NOT NULL DEFAULT '',updated_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS playlist_metadata_review_attempts(id INTEGER PRIMARY KEY,file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,created_at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS playlist_metadata_review_daily ON playlist_metadata_review_attempts(created_at);`));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;
