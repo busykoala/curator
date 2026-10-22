@@ -1,3 +1,4 @@
+import {selectionRecordingKey} from './recording-groups';
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import {db} from '@/features/db/client';
@@ -84,7 +85,7 @@ ${canonicalPrompt}`,
         minBpm:Math.max(base.hard.minBpm,compiled.hard.minBpm),maxBpm:upperBound(base.hard.maxBpm,compiled.hard.maxBpm),
         exclusions:[...new Set([...base.hard.exclusions,...compiled.hard.exclusions])]},
       soft:{...compiled.soft,styles:[...new Set([...base.soft.styles,...compiled.soft.styles])],moods:[...new Set([...base.soft.moods,...compiled.soft.moods])],contexts:[...new Set([...base.soft.contexts,...compiled.soft.contexts])]},
-      pinnedRecordings:[...base.pinnedRecordings,...compiled.pinFileIds.filter(fileId=>!base.pinnedRecordings.some(pin=>pin.fileId===fileId)).map(fileId=>({fileId,recordingKey:currentById.get(fileId)!.evidence.recordingKey}))],
+      pinnedRecordings:[...base.pinnedRecordings,...compiled.pinFileIds.filter(fileId=>!base.pinnedRecordings.some(pin=>pin.fileId===fileId)).map(fileId=>({fileId,recordingKey:selectionRecordingKey(currentById.get(fileId)!)}))],
       positionLocks:[...base.positionLocks,...compiled.positionLocks.filter(lock=>!base.positionLocks.some(existing=>existing.position===lock.position))],
       trackRequests:[...base.trackRequests,...compiled.trackRequests.filter(request=>!base.trackRequests.some(existing=>existing.title===request.title&&existing.artist===request.artist&&existing.action===request.action&&existing.position===request.position))],
     });

@@ -34,3 +34,18 @@ test('legacy shared discovery evidence migrates only to a unique playlist and am
     }finally{migrated.close()}
   }finally{rmSync(directory,{recursive:true,force:true})}
 });
+test('the additive exposure migration preserves old cooldowns when files or runs are later removed',async()=>{
+  const directory=mkdtempSync(join(tmpdir(),'curator-exposure-migration-')),path=join(directory,'test.sqlite');
+  const run=()=>promisify(execFile)(process.execPath,['--import','tsx','--input-type=module','-e',"import {db} from './src/features/db/client.ts';db().close()"],{cwd:process.cwd(),env:{...process.env,CURATOR_DB_PATH:path}});
+  try{
+    await run();const database=new Database(path);
+    database.exec(`DROP TRIGGER playlist_exposure_remember_insert;DROP TRIGGER playlist_exposure_remember_removal;DROP TABLE playlist_recording_exposure;DELETE FROM schema_migrations WHERE version=25;
+      INSERT INTO curator_users(id,navidrome_user_id,username,display_name) VALUES(1,'one','one','One');
+      INSERT INTO smart_playlists(id,name,category,owner_user_id) VALUES(1,'One','mood',1);
+      INSERT INTO files(id,path,album_key,artist_name,album_name,format,inode,link_count,size,mtime_ms,tags_json,properties_json,artwork_json,status) VALUES(1,'/one','one','Artist','Album','flac',1,1,1,1,'{}','{}','{}','written');
+      INSERT INTO playlist_runs(id,playlist_id,owner_user_id,config_hash,status) VALUES(1,1,1,'test','complete');
+      INSERT INTO playlist_exposure(owner_user_id,playlist_id,run_id,file_id,recording_key,exposed_at,removed_at) VALUES(1,1,1,1,'text:artist|song|live',1000,2000);`);database.close();
+    await run();const migrated=new Database(path);migrated.pragma('foreign_keys=ON');
+    try{migrated.exec('DELETE FROM files;DELETE FROM playlist_runs');assert.deepEqual(migrated.prepare('SELECT recording_key,fallback_key,exposed_at,removed_at FROM playlist_recording_exposure').get(),{recording_key:'text:artist|song|live',fallback_key:'text:artist|song|live',exposed_at:1000,removed_at:2000});assert.deepEqual(migrated.pragma('foreign_key_check'),[])}finally{migrated.close()}
+  }finally{rmSync(directory,{recursive:true,force:true})}
+});

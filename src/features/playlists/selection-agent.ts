@@ -1,3 +1,4 @@
+import {selectionRecordingKey} from './recording-groups';
 import {z} from 'zod';
 import type {AiTool,AiAttempt,CuratorAiClient,AiUsage} from '@/features/ai/client';
 import {identityName as norm} from '@/features/integrations/navidrome-identity';
@@ -30,7 +31,7 @@ export async function choosePlaylistAdditions(input:SelectionAgentInput){
   input.signal.throwIfAborted();
   if(input.target<1||input.target>60||input.candidates.length>60)throw Error('Selection must contain 1–60 requested songs and at most 60 candidates');
   const byId=new Map(input.candidates.map(track=>[track.fileId,track]));
-  if(new Set(input.candidates.map(track=>track.evidence.recordingKey)).size<input.target)throw Error('Insufficient distinct candidate recordings');
+  if(new Set(input.candidates.map(track=>selectionRecordingKey(track))).size<input.target)throw Error('Insufficient distinct candidate recordings');
   // The application has already retrieved this bounded batch. The model sees
   // every candidate once up front instead of spending repeated search rounds
   // rediscovering the same songs. Tools remain available for inspection.
@@ -46,7 +47,7 @@ export async function choosePlaylistAdditions(input:SelectionAgentInput){
       const track=byId.get(id);
       if(!track){problems.push(`ID ${id} is outside the supplied eligible candidates`);continue}
       if(requireSeen&&!seen.has(id))problems.push(`ID ${id} was not inspected`);
-      if(keys.has(track.evidence.recordingKey))problems.push(`Duplicate recording: ${id}`);keys.add(track.evidence.recordingKey);
+      if(keys.has(selectionRecordingKey(track)))problems.push(`Duplicate recording: ${id}`);keys.add(selectionRecordingKey(track));
       const artist=norm(track.artist),album=artist+'|'+norm(track.album);artists.set(artist,(artists.get(artist)??0)+1);albums.set(album,(albums.get(album)??0)+1);
     }
     if(input.limits&&distribution){
@@ -111,11 +112,11 @@ Examples: warm dinner jazz favours calm warm tracks over hectic free jazz; elect
     for(const track of input.limits?.retained??[]){const artist=norm(track.artist),album=artist+'|'+norm(track.album);artists.set(artist,(artists.get(artist)??0)+1);albums.set(album,(albums.get(album)??0)+1)}
     for(const id of ranked){
       const track=byId.get(id)!,artist=norm(track.artist),album=artist+'|'+norm(track.album);
-      if(recordings.has(track.evidence.recordingKey))continue;
+      if(recordings.has(selectionRecordingKey(track)))continue;
       if(input.limits&&((artists.get(artist)??0)>=input.limits.maxPerArtist||(albums.get(album)??0)>=input.limits.maxPerAlbum))continue;
       const adjacent=ids.filter(id=>byId.get(id)?.adjacent).length,needed=input.adjacentTarget==null?0:input.adjacentTarget-adjacent;
       if(input.adjacentTarget!=null&&(track.adjacent&&needed<=0||!track.adjacent&&input.target-ids.length<=needed))continue;
-      ids.push(id);recordings.add(track.evidence.recordingKey);artists.set(artist,(artists.get(artist)??0)+1);albums.set(album,(albums.get(album)??0)+1);if(ids.length===input.target)break;
+      ids.push(id);recordings.add(selectionRecordingKey(track));artists.set(artist,(artists.get(artist)??0)+1);albums.set(album,(albums.get(album)??0)+1);if(ids.length===input.target)break;
     }
     const repairedIds=validate(ids).length?input.feasibleIds??[]:ids;
     if(validate(repairedIds).length)return null;

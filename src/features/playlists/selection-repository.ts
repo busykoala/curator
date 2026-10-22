@@ -1,3 +1,4 @@
+import {selectionRecordingKey,withRecordingGroups} from './recording-groups';
 import {createHash} from 'node:crypto';
 import {db,stateGet,stateSet} from '@/features/db/client';
 import {identityName as norm,trackAlbumMatches,trackArtistMatches,trackPositionMatches,nativePathMatches} from '@/features/integrations/navidrome-identity';
@@ -15,6 +16,8 @@ import {aiClient,aiModel,type CuratorAiClient} from '@/features/ai/client';
 import {recordAiUsage} from '@/features/ai/usage';
 import {playlistAttemptRecorder} from './inference-metrics';
 import {resolveIntentTrackRequests} from './intent-track-requests';
+import {ownerRecordingExposure,rememberExposureFallback,exposureIdentityKeys} from './exposure-history';
+import {fallbackRecordingKey} from './track-evidence';
 
 type CatalogRow={id:number;path:string;artist_name:string;album_name:string;tags_json:string;profile_json:string;jellyfin_song_id:string|null;identity_hash:string|null};
 const list=(value:unknown)=>Array.isArray(value)?value.map(String):value==null?[]:[String(value)];
@@ -47,9 +50,7 @@ export function previousSelectionIds(playlistId:number){
   return(db().prepare("SELECT file_id FROM playlist_items WHERE run_id=(SELECT id FROM playlist_runs WHERE playlist_id=? AND status='complete' AND preview=0 ORDER BY id DESC LIMIT 1) ORDER BY position").all(playlistId) as Array<{file_id:number}>).map(row=>row.file_id);
 }
 export function playlistExposure(ownerId:number){
-  const rows=db().prepare(`SELECT recording_key,sum(exposed_at>=?) exposure_count,max(removed_at) removed_at
-    FROM playlist_exposure WHERE owner_user_id=? GROUP BY recording_key`).all(Date.now()-7*86400_000,ownerId) as Array<{recording_key:string;exposure_count:number;removed_at:number|null}>;
-  return new Map(rows.map(row=>[row.recording_key,row]));
+  return ownerRecordingExposure(ownerId);
 }
 export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:ListenerSnapshot){
   ensurePlaylistExposureHistory(definition.ownerUserId);
@@ -84,7 +85,7 @@ export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:L
     if(!song)continue;
     if(!cached||cached.id!==song.id)mappings.push({fileId:row.id,hash:identityHash(title,row.artist_name,row.album_name),songId:song.id});
     const evidence=playlistTrackEvidence(row.id);if(!evidence)continue;
-    const history=exposure.get(evidence.recordingKey);
+    const history=exposure(row.id,row.artist_name,title,evidence);
     const groupId=Object.entries(tags).find(([key])=>key.toLowerCase().replace(/[^a-z]/g,'')==='musicbrainzreleasegroupid')?.[1];
     const releaseId=list(groupId)[0],boost=boosts.get(releaseId),recommendation=recommendations.find(rec=>rec.id===releaseId);
     pool.push({fileId:row.id,title,artist:row.artist_name,album:row.album_name,year:evidence.originalYear??0,
@@ -98,7 +99,7 @@ export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:L
     });
   }
   const nativeGroups=new Map<string,EvidencedCandidate[]>();for(const track of pool)nativeGroups.set(track.songId,[...(nativeGroups.get(track.songId)??[]),track]);
-  const ambiguous=new Set([...nativeGroups].filter(([,tracks])=>new Set(tracks.map(track=>track.evidence.recordingKey)).size>1).map(([id])=>id));
+  const ambiguous=new Set([...nativeGroups].filter(([,tracks])=>new Set(tracks.map(track=>selectionRecordingKey(track))).size>1).map(([id])=>id));
   const safe=pool.filter(track=>!ambiguous.has(track.songId)),safeIds=new Set(safe.map(track=>track.fileId));
   db().transaction(()=>{
     const insert=db().prepare(`INSERT INTO navidrome_track_map(file_id,song_id,identity_hash,jellyfin_song_id) VALUES(?,'',?,?)
@@ -106,7 +107,7 @@ export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:L
       identity_hash=excluded.identity_hash,jellyfin_song_id=excluded.jellyfin_song_id,verified_at=CURRENT_TIMESTAMP`);
     for(const mapping of mappings)if(safeIds.has(mapping.fileId))insert.run(mapping.fileId,mapping.hash,mapping.songId);
   })();
-  return safe;
+  return withRecordingGroups(safe);
 }
 
 export async function generateIntentSelection(definition:PlaylistDefinition,options:{client?:Pick<CuratorAiClient,'structured'>;provider?:RetrievalProvider;signal?:AbortSignal;snapshot?:ListenerSnapshot;chat?:ChatIntentContext;interactive?:boolean}={}){
@@ -127,12 +128,12 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
   const feedback=db().prepare(`SELECT file_id,artist,action FROM playlist_feedback WHERE owner_user_id=? AND (playlist_id=? OR playlist_id IS NULL)
     AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)`).all(definition.ownerUserId,definition.id) as Array<{file_id:number;artist:string;action:string}>;
   const excluded=new Set(feedback.filter(row=>row.action==='exclude'||row.action==='snooze').map(row=>row.file_id));
-  const excludedKeys=new Set(pool.filter(track=>excluded.has(track.fileId)).map(track=>track.evidence.recordingKey));
+  const excludedKeys=new Set(pool.filter(track=>excluded.has(track.fileId)).map(track=>selectionRecordingKey(track)));
   // These fields are application-owned, rebuilt from current owner feedback.
   // Never freeze an expired snooze into the saved conversational intent.
   compiled.intent.excludedFileIds=[...excluded];compiled.intent.excludedRecordings=[...excludedKeys];
   compiled.intent.hard.excludeArtists.push(...feedback.filter(row=>row.action==='artist_exclude').map(row=>row.artist));
-  for(const pin of feedback.filter(row=>row.action==='pin')){const track=pool.find(t=>t.fileId===pin.file_id);if(track)compiled.intent.pinnedRecordings.push({fileId:track.fileId,recordingKey:track.evidence.recordingKey})}
+  for(const pin of feedback.filter(row=>row.action==='pin')){const track=pool.find(t=>t.fileId===pin.file_id);if(track)compiled.intent.pinnedRecordings.push({fileId:track.fileId,recordingKey:selectionRecordingKey(track)})}
   // One representative per researched release receives the temporary boost,
   // chosen by track-level fit before the boost, rather than filesystem order.
   const groups=new Map<string,EvidencedCandidate[]>();
@@ -143,24 +144,24 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
     const representative=[...tracks].filter(track=>assessCandidate(track,definition,compiled.intent,snapshot).eligible).sort((a,b)=>assessCandidate({...b,discoveryBoost:0},definition,compiled.intent,snapshot).score-assessCandidate({...a,discoveryBoost:0},definition,compiled.intent,snapshot).score)[0];
     for(const track of tracks)if(track!==representative){track.discoveryBoost=0;track.origin='catalog'}
   }
-  const available=pool.filter(track=>!excludedKeys.has(track.evidence.recordingKey));
+  const available=pool.filter(track=>!excludedKeys.has(selectionRecordingKey(track)));
   const trackRequests=resolveIntentTrackRequests(compiled.intent,selectionDefinition,available,current,snapshot);
   db().prepare("UPDATE playlist_intents SET intent_json=? WHERE playlist_id=? AND json_extract(intent_json,'$.sourceRevision')=?").run(JSON.stringify(compiled.intent),definition.id,compiled.intent.sourceRevision);
   let selected=selectPlaylist({definition:selectionDefinition,intent:compiled.intent,pool:available,previous:current,snapshot});
-  const previousKeys=new Set(current.map(track=>track.evidence.recordingKey));
+  const previousKeys=new Set(current.map(track=>selectionRecordingKey(track)));
   const lockedIds=new Set([...compiled.intent.pinnedRecordings.map(pin=>pin.fileId),...compiled.intent.positionLocks.map(lock=>lock.fileId)]);
   const fixed=selected.items.filter(track=>track.retained||lockedIds.has(track.fileId));
   const proposed=selected.items.filter(track=>!fixed.some(kept=>kept.fileId===track.fileId));
   const aiDetails:Array<Record<string,unknown>>=[];
   let retrievalDetail:Record<string,unknown>|null=null;
   if(!selected.evaluation.shortage&&!selected.evaluation.violations.length&&proposed.length){
-    const fixedKeys=new Set(fixed.map(track=>track.evidence.recordingKey)),canonical=new Map<string,EvidencedCandidate>();
+    const fixedKeys=new Set(fixed.map(track=>selectionRecordingKey(track))),canonical=new Map<string,EvidencedCandidate>();
     const allowedArtists=compiled.intent.hard.singleArtist?new Set(selected.items.map(track=>norm(track.artist))):null;
     for(const track of available){
       if(allowedArtists&&!allowedArtists.has(norm(track.artist)))continue;
-      if(previousKeys.has(track.evidence.recordingKey)||fixedKeys.has(track.evidence.recordingKey)||track.removedAt&&Date.now()-track.removedAt<14*86400_000)continue;
+      if(previousKeys.has(selectionRecordingKey(track))||fixedKeys.has(selectionRecordingKey(track))||track.removedAt&&Date.now()-track.removedAt<14*86400_000)continue;
       const assessment=assessCandidate(track,definition,compiled.intent,snapshot);
-      if(assessment.eligible&&!canonical.has(track.evidence.recordingKey))canonical.set(track.evidence.recordingKey,{...track,score:assessment.score,reason:assessment.reasons.join(' · ')});
+      if(assessment.eligible&&!canonical.has(selectionRecordingKey(track)))canonical.set(selectionRecordingKey(track),{...track,score:assessment.score,reason:assessment.reasons.join(' · ')});
     }
     const retrieved=await retrievePlaylistCandidates(compiled.intent.summary+'\n'+[...compiled.intent.soft.styles,...compiled.intent.soft.moods,...compiled.intent.soft.contexts].join(', '),[...canonical.values()],{provider:options.provider,signal,mandatoryIds:proposed.map(track=>track.fileId)});
     retrievalDetail=retrieved.detail;
@@ -196,12 +197,18 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
 // Called in the local publication transaction only after native verification.
 // UNIQUE(run_id,file_id) makes crash-recovery confirmation idempotent.
 export function recordPlaylistExposure(definition:PlaylistDefinition,runId:number,items:PlaylistCandidate[],now=Date.now()){
-  const current=items.flatMap(item=>{const evidence=playlistTrackEvidence(item.fileId);return evidence?[{item,key:evidence.recordingKey}]:[]});
-  const keys=new Set(current.map(row=>row.key));
-  const active=db().prepare('SELECT DISTINCT recording_key FROM playlist_exposure WHERE owner_user_id=? AND playlist_id=? AND removed_at IS NULL').all(definition.ownerUserId,definition.id) as Array<{recording_key:string}>;
-  for(const row of active)if(!keys.has(row.recording_key))db().prepare('UPDATE playlist_exposure SET removed_at=? WHERE owner_user_id=? AND playlist_id=? AND recording_key=? AND removed_at IS NULL').run(now,definition.ownerUserId,definition.id,row.recording_key);
+  const current=items.flatMap(item=>{const evidence=playlistTrackEvidence(item.fileId);return evidence?[{item,evidence,key:evidence.recordingKey,fallback:fallbackRecordingKey(item.artist,item.title,evidence.fields)}]:[]});
+  const keys=new Set(current.flatMap(row=>exposureIdentityKeys(row.item.fileId,row.key,row.fallback)));
+  // Hydrate legacy verified IDs before a future file deletion can remove the
+  // only available artist/title/version association.
+  ownerRecordingExposure(definition.ownerUserId,now);
+  const active=db().prepare('SELECT run_id,file_id,recording_key,fallback_key FROM playlist_recording_exposure WHERE owner_user_id=? AND playlist_id=? AND removed_at IS NULL').all(definition.ownerUserId,definition.id) as Array<{run_id:number;file_id:number;recording_key:string;fallback_key:string}>;
+  for(const row of active)if(!exposureIdentityKeys(row.file_id,row.recording_key,row.fallback_key).some(key=>keys.has(key))){
+    db().prepare('UPDATE playlist_recording_exposure SET removed_at=? WHERE run_id=? AND file_id=?').run(now,row.run_id,row.file_id);
+    db().prepare('UPDATE playlist_exposure SET removed_at=? WHERE run_id=? AND file_id=?').run(now,row.run_id,row.file_id);
+  }
   const insert=db().prepare('INSERT OR IGNORE INTO playlist_exposure(owner_user_id,playlist_id,run_id,file_id,recording_key,exposed_at) VALUES(?,?,?,?,?,?)');
-  for(const row of current)insert.run(definition.ownerUserId,definition.id,runId,row.item.fileId,row.key,now);
+  for(const row of current){insert.run(definition.ownerUserId,definition.id,runId,row.item.fileId,row.key,now);rememberExposureFallback(runId,row.item.fileId,row.item.artist,row.item.title,row.evidence)}
   const releases=db().prepare("SELECT d.id,r.id release_id FROM playlist_discovery_recommendations d JOIN playlist_discovery_releases r ON r.id=d.release_id WHERE d.playlist_id=? AND d.owner_user_id=? AND d.status='ready'").all(definition.id,definition.ownerUserId) as Array<{id:number;release_id:string}>;
   for(const rec of releases){
     const presented=items.some(item=>{const row=db().prepare('SELECT tags_json FROM files WHERE id=?').get(item.fileId) as {tags_json:string};const tags=JSON.parse(row.tags_json);return Object.entries(tags).some(([key,value])=>key.toLowerCase().replace(/[^a-z]/g,'')==='musicbrainzreleasegroupid'&&list(value).includes(rec.release_id))});

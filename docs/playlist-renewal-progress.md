@@ -362,3 +362,17 @@ changes in the infrastructure repository. Update this record at each handoff.
   excluded. The model's Retry-After deadline is persisted across processes so
   recovery checks cannot bypass it. Fourteen focused recovery/client tests and
   TypeScript pass. No live outage or production rollout has been claimed.
+- Additive migration 25 preserves owner-scoped recording exposure independently
+  of files, playlist runs and playlist deletion. Existing rows are copied;
+  compatibility triggers retain subsequent insert/removal events. Alias lookup
+  keeps cooldowns through recording-ID verification and reimport, without
+  double-counting the same event. Owner deletion still removes private history.
+- Selection groups now deduplicate verified/unverified physical copies without
+  changing either copy's factual identity/provenance. Distinct verified recording
+  IDs and live/remix/acoustic versions survive; an unverified copy ambiguous
+  between multiple verified recordings is withheld. Pins resolve by current file
+  identity even after a grouping-key upgrade.
+- Full checkpoint: 260/260 tests and production/worker build passed
+  (`/private/tmp/curator-renewal-v11-{tests,build}.log`), followed by TypeScript.
+  A subsequently added legacy exposure migration test also passes. The metadata
+  evidence version/content is unchanged, preserving the running vector index.

@@ -16,6 +16,10 @@ const uuid=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const comparable=(field:string,value:unknown)=>JSON.stringify(values(value).map(v=>canonicalSemanticValue(field==='genre'?'style':field,v)).sort());
 const year=(v:unknown)=>{const n=Number(values(v)[0]?.slice(0,4));return n>=1000&&n<=2100?n:null};
 const hasValue=(value:unknown)=>value!=null&&(Array.isArray(value)?value.some(item=>String(item).trim()):typeof value==='string'?Boolean(value.trim()):true);
+export function fallbackRecordingKey(artist:string,title:string,fields:Record<string,FieldEvidence>){
+  const version=values(fields.recordingTypes?.value).map(v=>canonicalSemanticValue('recordingTypes',v)).filter(v=>/live|remix|acoustic|alternate/.test(v)).sort().join('|');
+  return `text:${norm(artist)}|${norm(title)}|${version||'unspecified'}`;
+}
 export function buildTrackEvidence(input:Input):TrackEvidenceView{
   const tags=Object.fromEntries(Object.entries(input.tags).map(([k,v])=>[canonicalSemanticField(k),v]));
   const profile=Object.fromEntries(Object.entries(input.profile).map(([k,v])=>[canonicalSemanticField(k),v]));
@@ -54,8 +58,7 @@ export function buildTrackEvidence(input:Input):TrackEvidenceView{
   const verifiedRecording=(input.external??[]).find(f=>f.field==='recordingId'&&f.scope==='recording'&&uuid.test(String(f.value)));
   const recordingId=verifiedRecording?String(verifiedRecording.value):undefined;
   if(recordingId||embeddedRecordingId)fields.recordingId={value:recordingId??embeddedRecordingId,source:verifiedRecording?'external':'embedded',scope:'recording',confidence:verifiedRecording?'high':'medium',references:verifiedRecording?[verifiedRecording.url]:[],note:verifiedRecording?undefined:'ID syntax is valid; recording identity has not been independently verified'};
-  const version=values(fields.recordingTypes?.value).map(v=>canonicalSemanticValue('recordingTypes',v)).filter(v=>/live|remix|acoustic|alternate/.test(v)).sort().join('|');
-  const recordingKey=recordingId?`mb:${recordingId.toLowerCase()}`:`text:${norm(input.artist)}|${norm(input.title)}|${version||'unspecified'}`;
+  const recordingKey=recordingId?`mb:${recordingId.toLowerCase()}`:fallbackRecordingKey(input.artist,input.title,fields);
   const originals=(input.external??[]).filter(f=>['originalDate','originalYear'].includes(f.field)&&f.scope!=='artist'&&year(f.value));
   const recordingDates=originals.filter(f=>f.scope==='recording'),dates=recordingDates.length?recordingDates:originals,original=dates[0];
   const dateConflict=new Set(dates.map(f=>year(f.value))).size>1;

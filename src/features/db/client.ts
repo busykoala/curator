@@ -284,6 +284,23 @@ function migrate(instance: Database.Database) {
     }
   });
   migration(24,()=>addColumns(instance,'playlist_publications',[['previous_name','TEXT']]));
+  migration(25,()=>instance.exec(`
+    CREATE TABLE IF NOT EXISTS playlist_recording_exposure(
+      owner_user_id INTEGER NOT NULL REFERENCES curator_users(id) ON DELETE CASCADE,
+      playlist_id INTEGER NOT NULL,run_id INTEGER NOT NULL,file_id INTEGER NOT NULL,
+      recording_key TEXT NOT NULL,fallback_key TEXT NOT NULL DEFAULT '',
+      exposed_at INTEGER NOT NULL,removed_at INTEGER,PRIMARY KEY(run_id,file_id));
+    CREATE INDEX IF NOT EXISTS playlist_recording_exposure_owner ON playlist_recording_exposure(owner_user_id,exposed_at);
+    INSERT OR IGNORE INTO playlist_recording_exposure(owner_user_id,playlist_id,run_id,file_id,recording_key,fallback_key,exposed_at,removed_at)
+      SELECT owner_user_id,playlist_id,run_id,file_id,recording_key,CASE WHEN recording_key LIKE 'text:%' THEN recording_key ELSE '' END,exposed_at,removed_at FROM playlist_exposure;
+    CREATE TRIGGER IF NOT EXISTS playlist_exposure_remember_insert AFTER INSERT ON playlist_exposure BEGIN
+      INSERT OR IGNORE INTO playlist_recording_exposure(owner_user_id,playlist_id,run_id,file_id,recording_key,fallback_key,exposed_at,removed_at)
+      VALUES(NEW.owner_user_id,NEW.playlist_id,NEW.run_id,NEW.file_id,NEW.recording_key,CASE WHEN NEW.recording_key LIKE 'text:%' THEN NEW.recording_key ELSE '' END,NEW.exposed_at,NEW.removed_at);
+    END;
+    CREATE TRIGGER IF NOT EXISTS playlist_exposure_remember_removal AFTER UPDATE OF removed_at ON playlist_exposure BEGIN
+      UPDATE playlist_recording_exposure SET removed_at=NEW.removed_at WHERE run_id=NEW.run_id AND file_id=NEW.file_id;
+    END;
+  `));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;
