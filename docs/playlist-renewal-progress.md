@@ -376,3 +376,29 @@ changes in the infrastructure repository. Update this record at each handoff.
   (`/private/tmp/curator-renewal-v11-{tests,build}.log`), followed by TypeScript.
   A subsequently added legacy exposure migration test also passes. The metadata
   evidence version/content is unchanged, preserving the running vector index.
+- Discovery now classifies a small, documented set of neighbouring local styles
+  from actual track genre/style evidence, with explicit provenance as Curator's
+  product policy rather than an external recommendation claim. It reserves the
+  agreed 30% among additions and reports unavailable adjacent slots. Every hard
+  style filter/exclusion remains enforced. Compiler v6 expresses ordinary
+  Discovery preferences as a centre, preserving explicit “only” restrictions.
+  The independent Discovery oracle now recognises the agreed neighbouring styles
+  rather than incorrectly requiring every Discovery track to be in the centre.
+  Tests prove the 70/30 balance, strict-filter precedence and visible shortage.
+- The source proof has resolved only one stored private recommendation so far;
+  another real MusicBrainz 503 activated its shared five-minute cooldown.
+  `discovery/live-pool-v2-partial.json` preserves this incomplete result. The
+  cumulative proof cap is now 60 requests, within the global 100-request limit;
+  no production recommendation or acquisition was created. Tag radio requests
+  at most twelve recordings and stops at ten verified release groups.
+- The original 120-track sample mistook curly punctuation for non-Latin names.
+  The corrected deterministic sample uses Unicode letters/scripts and includes
+  all seven available non-Latin-labelled tracks (one may be an encoding issue).
+  Its complete embedded tags are preserved in `metadata-audit-v2/input.json`,
+  sample hash bf1dabe136176032c56781627f14c73ddd3d9fd5dd919f3e7a332c049628c9be.
+  The original baseline/report remains intact. The corrected evidence audit is
+  still provenance/uncertainty analysis, not verification of every musical claim.
+- Added the real-library fourteen-night simulation runner. It consumes a live
+  replay's exact compiled intent and listener hash, evolves hypothetical exposure
+  only, and reports retained shortages, feasible rotation, locks and cooldown
+  violations. It has not yet run against the final stable-index replay.

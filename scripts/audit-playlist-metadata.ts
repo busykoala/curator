@@ -15,7 +15,7 @@ const tracks=snapshot.fixture.metadataSample.map((track:Record<string,unknown>)=
     verification:'Evidence/provenance audit only; musical correctness requires independently supported reference checks.'};
 });
 await mkdir(output,{recursive:true});
-const report={at:new Date().toISOString(),input,fixtureHash:snapshot.fixtureHash,tracks:tracks.length,conflictingTracks:tracks.filter((t:{evidence:{conflicts:string[]}})=>t.evidence.conflicts.length).length,
+const report={at:new Date().toISOString(),input,fixtureHash:snapshot.fixtureHash,sampleHash:snapshot.sampleHash,sampleScope:snapshot.scope,tracks:tracks.length,conflictingTracks:tracks.filter((t:{evidence:{conflicts:string[]}})=>t.evidence.conflicts.length).length,
   scope:'No audio files, tags, profiles, or production data were changed. Uncorroborated model claims are not counted as verified facts.',results:tracks};
 await writeFile(join(output,'report.json'),JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify({tracks:report.tracks,conflictingTracks:report.conflictingTracks,output:join(output,'report.json')}));

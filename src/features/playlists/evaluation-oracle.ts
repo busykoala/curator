@@ -16,9 +16,9 @@ export function scenarioViolations(id:string,items:EvidencedCandidate[],options:
     const vocal=field(track,'vocalProfile'),instrumental=vocal.length>0&&vocal.every(value=>value==='instrumental'||value==='no vocals')&&(track.evidence.fields.vocalProfile?.source==='user_override'||track.evidence.fields.vocalPresence?.value!==true);
     const live=field(track,'recordingTypes').some(value=>matches([value],'live'))||/(?:\(|\[|[-–—]\s*)live(?:\s|[,):\]–—-]|$)/i.test(track.title);
     const jazz=['discovery-jazz','depth-piano','mood-jazz','journey-descent','rediscovery-favourites','chat-hard-correction'].includes(id);
-    if(jazz&&!has('jazz'))violations.add('Expected jazz direction');
+    if(jazz&&!has('jazz')&&!(id==='discovery-jazz'&&['neo soul','nu jazz','jazz funk','afrobeat'].some(has)))violations.add('Expected jazz direction or an agreed Discovery neighbour');
     if(['depth-rock','depth-versions','journey-ascent','journey-steady','chat-artist-decade'].includes(id)&&!has('rock')&&!(id==='chat-artist-decade'&&has('punk')))violations.add('Expected rock/punk direction');
-    if(id==='discovery-techno'&&!has('melodic techno')&&!has('ambient techno'))violations.add('Expected requested techno styles');
+    if(id==='discovery-techno'&&!['melodic techno','ambient techno','minimal techno','dub techno','deep house','progressive house','ambient','microhouse'].some(has))violations.add('Expected requested techno centre or an agreed neighbouring style');
     if(['depth-downtempo'].includes(id)&&!has('downtempo'))violations.add('Electronic alone is not downtempo');
     if(['mood-late-night','chat-keep-order'].includes(id)&&!has('trip hop'))violations.add('Expected trip-hop direction');
     if(id==='discovery-unicode'&&!has('jazz')&&!has('electronic'))violations.add('Expected jazz or electronic direction');

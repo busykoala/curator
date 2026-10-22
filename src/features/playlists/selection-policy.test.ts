@@ -52,6 +52,18 @@ test('a scene or artist association cannot substitute for track genre/style evid
   const trackStyle=track(2,{genre:['electronic'],style:['trip_hop'],scenes:['bristol_trip_hop_scene']});
   assert.equal(assessCandidate(trackStyle,def,intent,snapshot,now).eligible,true);
 });
+test('Discovery reserves 30% for evidenced neighbouring styles while strict requests and shortages stay visible',()=>{
+  const def=definition('discovery'),intent=configuredIntent(def,'adjacency');intent.soft.styles=['melodic_techno'];
+  const familiar=Array.from({length:20},(_,i)=>track(i+1,{genre:['electronic'],style:['melodic_techno']}));
+  const adjacent=Array.from({length:20},(_,i)=>track(i+21,{genre:['electronic'],style:['dub_techno']}));
+  const unrelated=track(99,{genre:['rock'],style:['alternative_rock']});
+  const result=selectPlaylist({definition:def,intent,pool:[...familiar,...adjacent,unrelated],previous:[],snapshot,now});
+  assert.equal(result.items.length,10);assert.equal(result.items.filter(track=>track.adjacent).length,3);assert.ok(!result.items.some(track=>track.fileId===99));
+  assert.ok(result.items.filter(track=>track.adjacent).every(track=>track.reason.includes('Curator’s documented style map')));
+  const shortage=selectPlaylist({definition:def,intent,pool:familiar,previous:[],snapshot,now});assert.equal(shortage.items.length,10);assert.ok(shortage.evaluation.relaxations.some(reason=>reason.includes('Adjacent-style share reduced')));
+  intent.hard.requirements=[{field:'style',values:['melodic_techno'],match:'all'}];
+  const strict=selectPlaylist({definition:def,intent,pool:[...familiar,...adjacent],previous:[],snapshot,now});assert.ok(strict.items.every(track=>!track.adjacent));
+});
 test('strict instrumental piano requirements reject missing, contradictory and spoken evidence',()=>{
   const def=definition('depth'),intent=configuredIntent(def,'1');
   intent.hard.vocal='instrumental';intent.hard.requirements=[{field:'instrumentation',values:['piano'],match:'all'}];

@@ -1,4 +1,5 @@
 import {selectionRecordingKey} from './recording-groups';
+import {discoveryDirection} from './discovery-directions';
 import {createHash} from 'node:crypto';
 import {canonicalSemanticValue,semanticTermVariants} from '@/features/categorization/vocabulary';
 import {identityName as norm,trackArtistMatches} from '@/features/integrations/navidrome-identity';
@@ -8,7 +9,7 @@ import type {PlaylistIntent,SemanticRequirement} from './intent-schema';
 import {energyTarget,energyValue} from './sequence';
 import type {PlaylistCandidate,PlaylistDefinition} from './types';
 
-export type EvidencedCandidate=PlaylistCandidate&{evidence:TrackEvidenceView;recordingGroupKey?:string;songId:string;listener:ListenerSong|null;exposureCount:number;removedAt:number|null;artistPlayCount?:number;albumLastPlayed?:string|null;discoveryBoost?:number;adjacent?:boolean};
+export type EvidencedCandidate=PlaylistCandidate&{evidence:TrackEvidenceView;recordingGroupKey?:string;songId:string;listener:ListenerSong|null;exposureCount:number;removedAt:number|null;artistPlayCount?:number;albumLastPlayed?:string|null;discoveryBoost?:number;adjacent?:boolean;adjacencyReason?:string};
 export type CandidateAssessment={eligible:boolean;score:number;reasons:string[];violations:string[];uncertainty:string[]};
 export type PlaylistEvaluation={eligible:number;selected:number;requested:number;changed:number;retained:number;artistDiversity:number;albumDiversity:number;unheard:number|null;uncertainty:string[];relaxations:string[];shortage:number;violations:string[];diversityLimits?:{artist:number;album:number}};
 const values=(v:unknown):string[]=>Array.isArray(v)?v.map(String):v==null?[]:[String(v)];
@@ -73,15 +74,18 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
     if(known&&!violations.length)reasons.push(listener?.favourite?'A saved favourite, not heard recently':`Last heard ${Math.floor(age!)} days ago`);
   }
   const directionValues=evidenceValues(track,'genre');
+  const direction=definition.category==='discovery'?discoveryDirection(track,intent):{adjacent:Boolean(track.adjacent),adjacencyReason:track.adjacencyReason};
+  const adjacent=direction.adjacent;
   const styleHits=soft.styles.filter(term=>matches(term,directionValues));
   const sceneHits=soft.styles.filter(term=>matches(term,evidenceValues(track,'scenes')));
   const moodHits=soft.moods.filter(term=>matches(term,evidenceValues(track,'mood')));
   const contextHits=soft.contexts.filter(term=>matches(term,evidenceValues(track,'listeningContexts')));
   // Soft styles express the playlist's centre; adjacent candidates must have
   // a validated, explicit relationship, not merely match an unrelated mood.
-  if(soft.styles.length&&!styleHits.length&&!track.adjacent)violations.push('Outside the requested musical direction');
+  if(soft.styles.length&&!styleHits.length&&!adjacent)violations.push('Outside the requested musical direction');
   if(definition.category==='mood'&&(soft.moods.length||soft.contexts.length)&&!moodHits.length&&!contextHits.length)violations.push('No mood or listening-context fit');
   if(styleHits.length)reasons.push(`Style: ${styleHits.slice(0,2).join(', ')}`);
+  if(adjacent&&!styleHits.length)reasons.push(direction.adjacencyReason==='local-style-map'?'Adjacent style from Curator’s documented style map':'Adjacent style supported by a discovery-source relationship');
   if(moodHits.length)reasons.push(`Mood: ${moodHits.slice(0,2).join(', ')}`);
   if(contextHits.length)reasons.push(`Context: ${contextHits.slice(0,2).join(', ')}`);
   let score=40+styleHits.length*14+moodHits.length*14+contextHits.length*10+Math.min(2,sceneHits.length)*3;
@@ -113,6 +117,7 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
 const tie=(seed:string,fileId:number)=>parseInt(createHash('sha256').update(seed+':'+fileId).digest('hex').slice(0,8),16);
 export function selectPlaylist(input:{definition:PlaylistDefinition;intent:PlaylistIntent;pool:EvidencedCandidate[];previous:EvidencedCandidate[];snapshot:Pick<ListenerSnapshot,'complete'|'stale'>;now?:number;seed?:string}){
   const {definition,intent}=input,now=input.now??Date.now(),seed=input.seed??new Date(now).toISOString().slice(0,10),target=definition.config.targetTracks;
+  if(definition.category==='discovery')input={...input,pool:input.pool.map(track=>({...track,...discoveryDirection(track,intent)}))};
   const assessments=new Map(input.pool.map(track=>[track.fileId,assessCandidate(track,definition,intent,input.snapshot,now)]));
   const priorIds=new Set(input.previous.map(track=>track.fileId)),protectedIds=new Set([...intent.pinnedRecordings.map(pin=>pin.fileId),...intent.positionLocks.map(lock=>lock.fileId)]),canonical=new Map<string,EvidencedCandidate>();
   for(const track of input.pool.filter(track=>assessments.get(track.fileId)!.eligible)){
@@ -187,6 +192,7 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
   // Prefer keeping more suitable current tracks to violating exclusions or
   // recycling a recording removed during the last 14 days.
   if(chosen.length<target){fill(prior);if(chosen.length>=target)relaxations.push('Rotation reduced because too few suitable replacements were available')}
+  if(definition.category==='discovery'&&chosen.filter(track=>track.adjacent&&!track.retained).length<adjacentTarget)relaxations.push('Adjacent-style share reduced because too few suitable adjacent recordings were available');
   const ordered:EvidencedCandidate[]=[],remaining=[...chosen],locks=new Map(intent.positionLocks.filter(lock=>byId.has(lock.fileId)&&chosen.some(t=>t.fileId===lock.fileId)).map(lock=>[lock.position,lock.fileId]));
   const curve=intent.energyCurve==='configured'?definition.config.energyCurve:intent.energyCurve,assignedEnergy=new Map<number,number>();
   if(definition.category==='journey'&&curve!=='steady'){

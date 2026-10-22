@@ -5,6 +5,7 @@ import {db} from '../src/features/db/client';
 import {getPlaylist} from '../src/features/playlists/repository';
 import {listenBrainzCandidates,listenBrainzTagCandidates} from '../src/features/playlists/discovery-providers';
 import {discoveryReleaseFit} from '../src/features/playlists/discovery-fit';
+import {discoveryRecommendations,storeDiscoveryRecommendation,verifiedDiscoveryRecommendation,type DiscoveryRelease} from '../src/features/playlists/discovery-repository';
 async function main(){
   const target=process.env.PLAYLIST_EVAL_DB_PATH,ratePath=process.env.PLAYLIST_EVAL_SHARED_RATE_DB;
   if(!target?.startsWith('/tmp/curator-renewal-eval-')||!target.endsWith('.sqlite')||config.DATABASE_PATH!==target||ratePath!=='/app/data/curator.sqlite')throw Error('Requires an isolated evaluation database and the explicitly supplied production rate-state path');
@@ -12,7 +13,7 @@ async function main(){
   if(!playlist||playlist.category!=='discovery')throw Error('Expected the existing Discovery canary');
   const read=rates.prepare('SELECT value FROM state WHERE key=?'),write=rates.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP');
   const day=new Date().toISOString().slice(0,10),budgetKey='playlist_renewal_probe_requests:'+day,original=globalThis.fetch;
-  const cap=Math.max(1,Math.min(40,Number(process.env.PLAYLIST_EVAL_PROOF_CAP??20))),requests:Array<Record<string,unknown>>=[];
+  const cap=Math.max(1,Math.min(60,Number(process.env.PLAYLIST_EVAL_PROOF_CAP??20))),requests:Array<Record<string,unknown>>=[];
   globalThis.fetch=async(input,options)=>{
     const url=new URL(typeof input==='string'?input:input instanceof URL?input.toString():input.url);
     if(url.hostname==='musicbrainz.org')for(;;){
@@ -36,8 +37,13 @@ async function main(){
   };
   const started=Date.now();
   try{
-    const mode=process.env.PLAYLIST_EVAL_SOURCE_MODE==='tags'?'tags':'artist',candidates=await(mode==='tags'?listenBrainzTagCandidates:listenBrainzCandidates)(playlist,false),output=process.env.PLAYLIST_EVAL_OUTPUT??'/tmp/curator-renewal-eval-code/discovery-probe';mkdirSync(output,{recursive:true});
-    const report={at:new Date().toISOString(),mode,cap,scope:'Live free-provider resolution only; caches in the isolated copy; no playlist/acquisition mutations. Production writes are limited to existing shared MusicBrainz timing/cooldown state and the bounded proof request counter.',durationMs:Date.now()-started,requests,
+    const mode=process.env.PLAYLIST_EVAL_SOURCE_MODE??'artist',all=new Map<string,DiscoveryRelease>();
+    for(const provider of mode==='both'?[listenBrainzCandidates,listenBrainzTagCandidates]:[mode==='tags'?listenBrainzTagCandidates:listenBrainzCandidates])for(const release of await provider(playlist,false))all.set(release.id,release);
+    const candidates=[...all.values()],before=discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(verifiedDiscoveryRecommendation).length;
+    if(process.env.PLAYLIST_EVAL_FILL_POOL==='true')for(const release of candidates){const fit=discoveryReleaseFit(playlist,release);if(fit)storeDiscoveryRecommendation(playlist,release,fit.reason,'proof-'+fit.lane)}
+    const after=discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(verifiedDiscoveryRecommendation).length;
+    const output=process.env.PLAYLIST_EVAL_OUTPUT??'/tmp/curator-renewal-eval-code/discovery-probe';mkdirSync(output,{recursive:true});
+    const report={at:new Date().toISOString(),mode,cap,scope:'Live free-provider resolution; caches and optional recommendation associations in the isolated copy; no production playlist or acquisition mutations. Production writes are limited to existing shared MusicBrainz timing/cooldown state and the bounded proof request counter.',pool:{before,after},durationMs:Date.now()-started,requests,
       candidates:candidates.map(release=>({...release,fit:discoveryReleaseFit(playlist,release)}))};
     writeFileSync(output+'/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify({durationMs:report.durationMs,requests:requests.length,candidates:candidates.length,fit:candidates.filter(release=>discoveryReleaseFit(playlist,release)).length,statuses:requests.map(request=>request.status??request.error)}));
   }finally{globalThis.fetch=original;rates.close();database.close()}

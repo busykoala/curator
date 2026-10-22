@@ -33,7 +33,7 @@ function fixedMetadataSample(tracks, count = 120) {
     ['energetic_jazz', t=>t.profile.genre?.includes('jazz') && /high/.test(t.profile.energy)],
     ['live', t=>/live/.test(JSON.stringify(t.profile.recordingTypes))],
     ['compilation', t=>/various|compilation/i.test(t.artist+' '+t.album)],
-    ['non_latin', t=>/[^\u0000-\u024f]/.test(t.artist+t.title)],
+    ['non_latin', t=>[...t.artist+t.title].some(c=>/\p{L}/u.test(c)&&!/\p{Script=Latin}/u.test(c))],
   ];
   const ranked = tracks.slice().sort((a,b)=>digest(a.fileId).localeCompare(digest(b.fileId)));
   const selected = new Map();
@@ -96,7 +96,7 @@ function audit(database, now = new Date(), fixture = false) {
   })();
 }
 module.exports={audit,summarizeRuns,fixedMetadataSample};
-if(require.main===module || process.argv[1]==='-'){
+if(require.main===module || process.argv[1]==='-'&&!module.parent){
   const database=new Database(process.env.CURATOR_DB_PATH||process.env.DATABASE_PATH||'/app/data/curator.sqlite',{readonly:true,fileMustExist:true});
   try{console.log(JSON.stringify(audit(database,new Date(),process.argv.includes('--fixture')),null,2));}finally{database.close();}
 }

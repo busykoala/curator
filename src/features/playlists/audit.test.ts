@@ -27,3 +27,8 @@ test('fixed metadata audit is deterministic, unique and covers difficult strata'
   assert.deepEqual(sample,fixedMetadataSample(tracks.slice().reverse()));
   assert.ok(sample.some((t:{strata:string[]})=>t.strata.includes('non_latin')));
 });
+test('Unicode punctuation does not masquerade as a non-Latin music identity',()=>{
+  const sample=fixedMetadataSample([{fileId:1,artist:'OutKast',title:'Cruisin’',album:'Album',profile:{}},{fileId:2,artist:'IC3PEAK',title:'Червь',album:'Album',profile:{}}]);
+  assert.ok(!sample.find((track:{fileId:number})=>track.fileId===1).strata.includes('non_latin'));
+  assert.ok(sample.find((track:{fileId:number})=>track.fileId===2).strata.includes('non_latin'));
+});

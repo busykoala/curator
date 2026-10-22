@@ -13,7 +13,7 @@ import type {PlaylistDefinition} from './types';
 import {playlistAttemptRecorder} from './inference-metrics';
 import {enforceSoftPreferences} from './intent-preferences';
 
-const compilerVersion=5;
+const compilerVersion=6;
 export type ChatIntentContext=ReturnType<typeof chatState>;
 const compiledSchema=playlistIntentSchema.omit({version:true,sourceRevision:true,pinnedRecordings:true,excludedFileIds:true,excludedRecordings:true}).extend({
   pinFileIds:z.array(z.number().int().positive()).max(100),conflicts:z.array(z.string().max(240)).max(10),
@@ -52,6 +52,7 @@ Set replaceUnpinned=true only when the latest real user correction explicitly as
 For a Journey, interpret an explicit energy arc: quiet opening, middle peak, calm landing => energyCurve wave; steadily building => ascent; winding down => descent; steady running => steady. Use configured when no arc is expressed, preserving the existing control. A clear textual arc takes precedence over a default control. Energy and relevance are separate: never include unrelated music merely to hit an energy target.
 For explicitly named songs, use trackRequests rather than inventing IDs or ignoring songs outside the current selection. Each request needs the real song title, artist when specified, include/exclude, zero-based position (-1 means no position), required (false for "if available"), and a short exact quote from a real user direction containing that title. The application searches the eligible native library and resolves identities. "Put Basket Case first if available" => include Basket Case, position 0, required false. Do not convert general musical references into mandatory named-song requests. Keep/include requests must not be inferred merely because a song appears in current selections; use actual user instructions.
 Use availableVocabulary to express optional direction in terms actually present in the library. Keep moods, geography, instruments and styles separate: do not invent composite styles such as calm_electronic, guitar_rock or atmospheric_trip_hop. Japanese jazz and quiet electronic music are alternative directions, not a requirement that every electronic track be Japanese jazz. Express that optional centre as styles jazz/electronic and mood serene; regional preference belongs in scenes. Preserve real specific styles such as melodic_techno and trip_hop. Unavailable explicit hard requirements remain hard, with an honest shortage; vocabulary is never permission to weaken them.
+Discovery's agreed default is roughly 70% familiar styles and 30% nearby styles among new additions, across all years. Put its stylistic centre in soft.styles so the application can use evidenced neighbours. Do not invent a strict positive style requirement solely from an ordinary Discovery preference such as "melodic techno new to me". A real "only melodic techno" instruction or an explicit factual restriction remains hard. Configured genre filters still apply, as do every explicit exclusion, instrument, vocal, version and date requirement. Other playlist types keep their ordinary interpretation.
 Use this canonical semantic vocabulary; preserve specific genre/style names rather than broadening them:
 ${canonicalPrompt}`,
       input:JSON.stringify({category:definition.category,targetTracks:definition.config.targetTracks,configured:base,direction:definition.intent,

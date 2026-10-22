@@ -73,17 +73,18 @@ export async function listenBrainzCandidates(playlist:PlaylistDefinition,recent:
 
 export async function listenBrainzTagCandidates(playlist:PlaylistDefinition,recent:boolean){
   const tags=[...new Set((playlist.config.tasteLanes.length?playlist.config.tasteLanes:playlist.config.genres).map(norm))].slice(0,3);if(!tags.length)return[];
-  const query=new URLSearchParams({operator:'OR',pop_begin:'0',pop_end:'85',count:'6'});for(const tag of tags)query.append('tag',tag);
+  const query=new URLSearchParams({operator:'OR',pop_begin:'0',pop_end:'85',count:'12'});for(const tag of tags)query.append('tag',tag);
   const endpoint='https://api.listenbrainz.org/1/lb-radio/tags?'+query;
   // Artist and tag radio share one provider limiter, cooldown and cache budget.
   const result=await discoveryJson('listenbrainz',endpoint,7,'api',undefined,raw=>tagRadioRecordings.parse(raw)),output=new Map<string,DiscoveryRelease>();
-  for(const item of result.value){
+  for(const item of result.value.slice(0,12)){
     try{
       const recording=await mb(`recording/${item.recording_mbid}?inc=artist-credits+releases+release-groups`,raw=>recommendedRecording.parse(raw));
       const artistId=recording.value['artist-credit'][0].artist.id,groupId=recommendedAlbumGroup(recording.value,item.recording_mbid,artistId);if(!groupId)continue;
       const evidence:DiscoveryEvidence={provider:'listenbrainz-tags',url:endpoint,fetchedAt:result.fetchedAt,scope:'recording',claims:{recordingId:item.recording_mbid,requestedTags:tags,tagMatch:'any',recommendedArtistId:artistId}};
       const release=await verifiedDiscoveryRelease(groupId,[evidence]);
       if(release&&release.artistId===artistId&&(!recent||release.releaseDate&&Date.parse(release.releaseDate)>=Date.now()-120*86400_000))output.set(release.id,release);
+      if(output.size>=10)break;
     }catch(error){if(/budget|cooling|retry/i.test(String(error)))break}
   }
   return[...output.values()];

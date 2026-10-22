@@ -18,6 +18,7 @@ import {playlistAttemptRecorder} from './inference-metrics';
 import {resolveIntentTrackRequests} from './intent-track-requests';
 import {ownerRecordingExposure,rememberExposureFallback,exposureIdentityKeys} from './exposure-history';
 import {fallbackRecordingKey} from './track-evidence';
+import {discoveryDirection} from './discovery-directions';
 
 type CatalogRow={id:number;path:string;artist_name:string;album_name:string;tags_json:string;profile_json:string;jellyfin_song_id:string|null;identity_hash:string|null};
 const list=(value:unknown)=>Array.isArray(value)?value.map(String):value==null?[]:[String(value)];
@@ -124,6 +125,7 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
     return[field,[...counts].sort((a,b)=>b[1]-a[1]).slice(0,field==='style'?160:60).map(([value])=>value)];
   }));
   const compiled=await compilePlaylistIntent(definition,current,{client:options.client,signal,chat:options.chat,interactive:options.interactive,vocabulary});
+  if(definition.category==='discovery')for(const track of pool)Object.assign(track,discoveryDirection(track,compiled.intent));
   const selectionDefinition=options.interactive&&compiled.detail.replaceUnpinned?{...definition,config:{...definition.config,rotationPercent:100}}:definition;
   const feedback=db().prepare(`SELECT file_id,artist,action FROM playlist_feedback WHERE owner_user_id=? AND (playlist_id=? OR playlist_id IS NULL)
     AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)`).all(definition.ownerUserId,definition.id) as Array<{file_id:number;artist:string;action:string}>;
