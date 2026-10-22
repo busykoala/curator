@@ -1,9 +1,10 @@
 import {z} from 'zod';
 const id=z.string().uuid();
+const optionalText=z.string().nullish().transform(value=>value??undefined);
 export const musicBrainzCredit=z.object({name:z.string().optional(),artist:z.object({id,name:z.string().min(1)}),joinphrase:z.string().optional()});
-export const musicBrainzGroup=z.object({id,title:z.string().min(1),'first-release-date':z.string().optional(),'primary-type':z.string().optional(),'secondary-types':z.array(z.string()).optional(),'artist-credit':z.array(musicBrainzCredit).optional(),genres:z.array(z.object({name:z.string()})).optional(),relations:z.array(z.object({type:z.string(),url:z.object({resource:z.string().url()}).optional()})).optional()});
+export const musicBrainzGroup=z.object({id,title:z.string().min(1),'first-release-date':optionalText,'primary-type':optionalText,'secondary-types':z.array(z.string()).nullish().transform(value=>value??undefined),'artist-credit':z.array(musicBrainzCredit).optional(),genres:z.array(z.object({name:z.string()})).optional(),relations:z.array(z.object({type:z.string(),url:z.object({resource:z.string().url()}).optional()})).optional()});
 export const radioRecordings=z.record(z.string(),z.array(z.object({recording_mbid:id,similar_artist_mbid:id,similar_artist_name:z.string().min(1)})));
-export const recommendedRecording=z.object({id,title:z.string().min(1),'artist-credit':z.array(musicBrainzCredit).min(1),releases:z.array(z.object({id,status:z.string().optional(),date:z.string().optional(),'release-group':musicBrainzGroup.pick({id:true,title:true,'primary-type':true,'secondary-types':true}).optional()})).optional()});
+export const recommendedRecording=z.object({id,title:z.string().min(1),'artist-credit':z.array(musicBrainzCredit).min(1),releases:z.array(z.object({id,status:optionalText,date:optionalText,'release-group':musicBrainzGroup.pick({id:true,title:true,'primary-type':true,'secondary-types':true}).optional()})).optional()});
 export function recommendedAlbumGroup(raw:unknown,recordingId:string,artistId:string){
   const recording=recommendedRecording.parse(raw);
   if(recording.id!==recordingId||!recording['artist-credit'].some(credit=>credit.artist.id===artistId))return null;

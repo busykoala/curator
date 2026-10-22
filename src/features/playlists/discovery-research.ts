@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {stateGet,stateSet} from '@/features/db/client';
 import {listPlaylists} from './repository';
-import {discoveryRecommendations,discoveryPoolTarget,storeDiscoveryRecommendation,type DiscoveryRelease} from './discovery-repository';
+import {discoveryRecommendations,discoveryPoolTarget,storeDiscoveryRecommendation,verifiedDiscoveryRecommendation,type DiscoveryRelease} from './discovery-repository';
 import {editorialCandidates,lastFmCandidates,listenBrainzCandidates} from './discovery-providers';
 import {queueDiscoveryRecommendations,refreshDiscoveryLifecycle} from './discovery-lifecycle';
 import type {PlaylistDefinition} from './types';
@@ -11,7 +11,7 @@ import {discoveryReleaseFit} from './discovery-fit';
 
 const providers=[{name:'listenbrainz',load:listenBrainzCandidates},{name:'editorial',load:editorialCandidates},{name:'lastfm',load:lastFmCandidates}];
 export function discoveryPoolNeedsResearch(playlist:PlaylistDefinition,now=Date.now()){
-  return discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(r=>['researched','queued','downloading','ready'].includes(r.status)).length<discoveryPoolTarget&&Number(stateGet(`playlist_research_next:${playlist.id}`,'0'))<=now;
+  return discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(r=>verifiedDiscoveryRecommendation(r)&&['researched','queued','downloading','ready'].includes(r.status)).length<discoveryPoolTarget&&Number(stateGet(`playlist_research_next:${playlist.id}`,'0'))<=now;
 }
 function usableEvidence(release:DiscoveryRelease){
   if(!release.identityVerified||!release.evidence.length)return false;
@@ -40,7 +40,7 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
         if(recent&&(!release.releaseDate||Date.parse(release.releaseDate)<now.getTime()-120*86400_000))continue;
         const existing=discoveryRecommendations(playlist.id,playlist.ownerUserId);
         if(existing.some(r=>r.release_id===release.id))continue;
-        if(existing.filter(r=>['researched','queued','downloading','ready'].includes(r.status)).length>=discoveryPoolTarget)break;
+        if(existing.filter(r=>verifiedDiscoveryRecommendation(r)&&['researched','queued','downloading','ready'].includes(r.status)).length>=discoveryPoolTarget)break;
         const recommendation=release.evidence.find(e=>e.provider!=='musicbrainz')!;
         const reason=recommendation.claims.seedArtist?`Recommended from ${String(recommendation.claims.seedArtist)} by ${recommendation.provider}`:`Supported by ${recommendation.provider} release evidence`;
         const origin=fit.lane==='adjacent'?provider.name+'-adjacent':provider.name;

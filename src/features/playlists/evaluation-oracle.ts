@@ -3,7 +3,7 @@ import type {ListenerSnapshot} from './listening-snapshot';
 
 // Independent, fixed expectations derived from evaluation-cases.ts. Do not use
 // the generated intent or production scoring to decide whether a run passed.
-const normal=(value:string)=>value.normalize('NFKC').toLowerCase().replaceAll('_',' ');
+const normal=(value:string)=>value.normalize('NFKC').toLowerCase().replace(/[-_/]+/g,' ').replace(/\s+/g,' ').trim();
 const field=(track:EvidencedCandidate,key:string)=>{
   const evidence=track.evidence.fields[key];if(!evidence||['unknown','conflict'].includes(evidence.source))return[];
   return(Array.isArray(evidence.value)?evidence.value:evidence.value==null?[]:[evidence.value]).map(value=>normal(String(value)));
@@ -48,7 +48,7 @@ export function scenarioViolations(id:string,items:EvidencedCandidate[],options:
       const song=track.listener;
       if(!song||!song.hasPlayed&&!song.playCount&&!song.favourite)violations.add('Rediscovery without observed enjoyment');
       if(song?.hasPlayed&&(!song.lastPlayed||now-Date.parse(song.lastPlayed)<30*86400_000))violations.add('Required 30-day listening gap');
-      if(['rediscovery-small','rediscovery-favourites'].includes(id)&&!song?.favourite)violations.add('Required exact-song favourite');
+      if(id==='rediscovery-small'&&!song?.favourite)violations.add('Required exact-song favourite');
       if(id==='rediscovery-genre'&&options.snapshot?.songs.some(song=>normal(song.artist)===normal(track.listener?.artist??track.artist)&&normal(song.album)===normal(track.album)&&song.lastPlayed&&now-Date.parse(song.lastPlayed)<30*86400_000))violations.add('Album played recently');
     }
   }

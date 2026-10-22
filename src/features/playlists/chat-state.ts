@@ -39,5 +39,5 @@ export function currentChatItems(id:number):PlaylistCandidate[]{
 // conversational turn or rewriting the listener's saved corrections.
 export function storeRefreshedChatSelection(id:number,lease:string,items:PlaylistCandidate[]){
   const state=chatState(id);if(!state.result)throw Error('The saved conversation intent is unavailable');
-  storeChatResult(id,lease,state.messages,{...state.result,items:items.map(item=>({...item,retained:Boolean(item.retained)}))});
+  storeChatResult(id,lease,state.messages,{...state.result,items:items.map(item=>({...item,retained:Boolean(item.retained)})),detail:{...state.result.detail,tracks:items.length,pending:0}});
 }

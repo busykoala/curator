@@ -4,7 +4,7 @@ import {db,stateGet,stateSet} from '@/features/db/client';
 import {recordAiUsage} from '@/features/ai/usage';
 import {playlistTrackEvidence} from './evidence-repository';
 import type {PlaylistCandidate} from './types';
-import type {TrackEvidenceView} from './track-evidence';
+import {trackEvidenceVersion,type TrackEvidenceView} from './track-evidence';
 import type {EvidencedCandidate} from './selection-policy';
 
 const dimensions=1024,descriptionVersion=1;
@@ -131,15 +131,19 @@ export async function retrievePlaylistCandidates(query:string,pool:EvidencedCand
   return{candidates:candidates.slice(0,120),detail:{embeddingModel:config.CURATOR_EMBEDDING_VERSION,rerankerModel:config.CURATOR_RERANKER_VERSION,eligible:pool.length,embeddingCoverage:coverage,retrieved:retrieved.length,embeddingError,rerankingError,latencyMs:Date.now()-started}};
 }
 
-export async function preparePlaylistEmbeddings(limit=128,provider=localRetrievalProvider){
-  if(stateGet('paused')==='true')return 0;
-  const rows=db().prepare(`SELECT f.id,f.artist_name,f.album_name,f.tags_json,e.content_hash FROM files f JOIN track_profiles p ON p.file_id=f.id
+const embeddingSources=`FROM files f JOIN track_profiles p ON p.file_id=f.id
     LEFT JOIN track_profile_overrides o ON o.file_id=f.id LEFT JOIN playlist_metadata_reviews r ON r.file_id=f.id
     LEFT JOIN playlist_track_evidence v ON v.file_id=f.id
-    LEFT JOIN playlist_track_embeddings e ON e.file_id=f.id AND e.model_version=?
-    WHERE f.status='written' AND p.status='complete' AND (e.file_id IS NULL OR e.updated_at<
-      max(coalesce(unixepoch(p.updated_at)*1000,0),coalesce(unixepoch(f.updated_at)*1000,0),coalesce(unixepoch(o.updated_at)*1000,0),coalesce(unixepoch(v.updated_at)*1000,0),coalesce(r.updated_at,0)))
-    ORDER BY e.file_id IS NOT NULL,f.id LIMIT ?`).all(config.CURATOR_EMBEDDING_VERSION,Math.max(0,Math.min(128,limit))) as Array<{id:number;artist_name:string;album_name:string;tags_json:string;content_hash:string|null}>;
+    LEFT JOIN playlist_track_embeddings e ON e.file_id=f.id AND e.model_version=?`;
+const embeddingDue=`WHERE f.status='written' AND p.status='complete' AND (e.file_id IS NULL OR coalesce(v.version,0)<>? OR e.updated_at<
+      max(coalesce(unixepoch(p.updated_at)*1000+999,0),coalesce(unixepoch(f.updated_at)*1000+999,0),coalesce(unixepoch(o.updated_at)*1000+999,0),coalesce(unixepoch(v.updated_at)*1000+999,0),coalesce(r.updated_at,0)))`;
+export function playlistEmbeddingBacklog(){
+  return(db().prepare(`SELECT count(*) n ${embeddingSources} ${embeddingDue}`).get(config.CURATOR_EMBEDDING_VERSION,trackEvidenceVersion) as {n:number}).n;
+}
+export async function preparePlaylistEmbeddings(limit=128,provider=localRetrievalProvider){
+  if(stateGet('paused')==='true')return 0;
+  const rows=db().prepare(`SELECT f.id,f.artist_name,f.album_name,f.tags_json,e.content_hash ${embeddingSources} ${embeddingDue}
+    ORDER BY e.file_id IS NOT NULL,f.id LIMIT ?`).all(config.CURATOR_EMBEDDING_VERSION,trackEvidenceVersion,Math.max(0,Math.min(128,limit))) as Array<{id:number;artist_name:string;album_name:string;tags_json:string;content_hash:string|null}>;
   let completed=0;
   // The deployed four-thread, single-slot embedding server processes texts
   // sequentially. Eight descriptions fit its 12-second request deadline;

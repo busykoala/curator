@@ -18,7 +18,7 @@ export function evidenceValues(track:EvidencedCandidate,field:string):string[]{
   return fields.flatMap(key=>{
     const evidence=track.evidence.fields[key];
     if(!evidence||['unknown','conflict'].includes(evidence.source)||evidence.scope==='artist')return[];
-    return values(evidence.value).map(value=>canonicalSemanticValue(field==='genre'?'style':field,value));
+    return values(evidence.value).flatMap(value=>field==='genre'?[canonicalSemanticValue('style',value),canonicalSemanticValue('genre',value)]:[canonicalSemanticValue(field,value)]);
   });
 }
 // Phrase boundaries prevent rock matching hard rock's antonym-like substrings
@@ -75,8 +75,7 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
   const contextHits=soft.contexts.filter(term=>matches(term,evidenceValues(track,'listeningContexts')));
   // Soft styles express the playlist's centre; adjacent candidates must have
   // a validated, explicit relationship, not merely match an unrelated mood.
-  const factualDirection=hard.artists.length||hard.requirements.some(rule=>rule.match!=='none'&&['genre','style','instrumentation','scenes'].includes(rule.field));
-  if(soft.styles.length&&!styleHits.length&&!track.adjacent&&!factualDirection)violations.push('Outside the requested musical direction');
+  if(soft.styles.length&&!styleHits.length&&!track.adjacent)violations.push('Outside the requested musical direction');
   if(definition.category==='mood'&&(soft.moods.length||soft.contexts.length)&&!moodHits.length&&!contextHits.length)violations.push('No mood or listening-context fit');
   if(styleHits.length)reasons.push(`Style: ${styleHits.slice(0,2).join(', ')}`);
   if(moodHits.length)reasons.push(`Mood: ${moodHits.slice(0,2).join(', ')}`);

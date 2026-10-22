@@ -269,6 +269,20 @@ function migrate(instance: Database.Database) {
     job_id TEXT NOT NULL REFERENCES playlist_refresh_jobs(id) ON DELETE CASCADE);`));
   migration(21,()=>instance.exec('CREATE INDEX IF NOT EXISTS evidence_playlist_lookup ON evidence(entity_key,provider,fetched_at DESC)'));
   migration(22,()=>addColumns(instance,'listener_music_snapshots',[['identity_version','INTEGER NOT NULL DEFAULT 1']]));
+  migration(23,()=>{
+    addColumns(instance,'playlist_discovery_recommendations',[['evidence_json',"TEXT NOT NULL DEFAULT '[]'"]]);
+    instance.exec(`CREATE TABLE IF NOT EXISTS playlist_discovery_evidence_review(
+      release_id TEXT PRIMARY KEY REFERENCES playlist_discovery_releases(id),evidence_json TEXT NOT NULL,
+      reason TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
+    const rows=instance.prepare('SELECT id,evidence_json FROM playlist_discovery_releases').all() as Array<{id:string;evidence_json:string}>;
+    for(const row of rows){
+      const count=(instance.prepare('SELECT count(*) n FROM playlist_discovery_recommendations WHERE release_id=?').get(row.id) as {n:number}).n;
+      let evidence:Array<{provider?:string}>=[];try{const value=JSON.parse(row.evidence_json);if(Array.isArray(value))evidence=value}catch{/* Preserve malformed legacy data for review below. */}
+      if(count===1)instance.prepare('UPDATE playlist_discovery_recommendations SET evidence_json=? WHERE release_id=?').run(row.evidence_json,row.id);
+      else if(row.evidence_json!=='[]')instance.prepare('INSERT OR IGNORE INTO playlist_discovery_evidence_review(release_id,evidence_json,reason) VALUES(?,?,?)').run(row.id,row.evidence_json,'Shared legacy recommendation evidence has no unique playlist association');
+      instance.prepare('UPDATE playlist_discovery_releases SET evidence_json=? WHERE id=?').run(JSON.stringify(evidence.filter(item=>item&&['musicbrainz','official-release'].includes(item.provider??''))),row.id);
+    }
+  });
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

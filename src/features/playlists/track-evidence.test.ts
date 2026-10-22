@@ -7,6 +7,7 @@ test('canonical fields and values agree across metadata, tools and scoring',()=>
   assert.equal(canonicalSemanticField('BPM'),'bpm');assert.equal(canonicalSemanticField('VOCALPROFILE'),'vocalProfile');
   assert.equal(canonicalSemanticValue('instruments','electric guitars'),'electric_guitar');
   assert.equal(canonicalSemanticValue('genre','Hip-Hop'),'hip_hop');
+  assert.equal(canonicalSemanticValue('genre','Trip-Hop'),'electronic');assert.equal(canonicalSemanticValue('style','Trip-Hop'),'trip_hop');
 });
 test('model-generated tags do not corroborate their own inference',()=>{
   const result=buildTrackEvidence({artist:'A',title:'T',profile:{instrumentation:['piano'],vocalProfile:['instrumental']},tags:{instrumentation:['piano'],vocalProfile:['instrumental']},provenance:{model:'curator'}});

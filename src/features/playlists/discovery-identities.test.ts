@@ -13,6 +13,7 @@ test('recording and artist identities must match the recommendation before resol
   assert.equal(recommendedAlbumGroup({...base,releases:[release(group)]},other,artist),null);
   assert.equal(recommendedAlbumGroup({...base,releases:[release(group)]},recording,other),null);
   assert.equal(recommendedAlbumGroup({...base,releases:[{...release(group),status:'Bootleg'}]},recording,artist),null);
+  assert.equal(recommendedAlbumGroup({...base,releases:[{...release(other),status:null,date:null},release(group)]},recording,artist),group,'A legitimate unknown release status cannot poison the other official editions');
   assert.throws(()=>recommendedAlbumGroup({id:recording},recording,artist));
 });
 test('malformed radio payloads are errors rather than a cached empty recommendation result',()=>{

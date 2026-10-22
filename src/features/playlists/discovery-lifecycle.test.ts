@@ -22,7 +22,7 @@ const playlists=Array.from({length:4},(_,i)=>createPlaylist({name:'Pool '+i,cate
 let serial=0;
 function recommend(p=playlists[0],id='release-'+(++serial)){
   storeDiscoveryRecommendation(p,{id,artistId:'artist',artist:'Artist',album:'Album '+id,genres:['electronic'],identityVerified:true,
-    evidence:[{provider:'fixture',url:'https://example.com/recommendation',fetchedAt:new Date().toISOString(),scope:'release',claims:{releaseGroupId:id}}]},'Fits the style','fixture');
+    evidence:[{provider:'fixture',url:'https://example.com/recommendation',fetchedAt:new Date().toISOString(),scope:'release',claims:{releaseGroupId:id,seedArtist:'private-seed-'+p.ownerUserId}}]},'Fits the style','fixture');
   return discoveryRecommendations(p.id,p.ownerUserId).find(r=>r.release_id===id)!;
 }
 test.beforeEach(()=>{database.exec('DELETE FROM playlist_discovery_admissions;DELETE FROM playlist_discovery_recommendations;DELETE FROM playlist_discovery_releases')});
@@ -36,6 +36,9 @@ test('legacy names bind only to a unique owner/playlist and survive later rename
 test('shared release evidence never shares recommendations, dismissal or feedback between owners',()=>{
   const first=recommend(playlists[0],'shared'),second=recommend(playlists[1],'shared');
   assert.notEqual(first.id,second.id);assert.equal((database.prepare('SELECT count(*) n FROM playlist_discovery_releases').get() as {n:number}).n,1);
+  assert.equal(JSON.parse(discoveryRecommendations(playlists[0].id,playlists[0].ownerUserId)[0].evidence_json)[0].claims.seedArtist,'private-seed-'+playlists[0].ownerUserId);
+  assert.equal(JSON.parse(discoveryRecommendations(playlists[1].id,playlists[1].ownerUserId)[0].evidence_json)[0].claims.seedArtist,'private-seed-'+playlists[1].ownerUserId);
+  assert.doesNotMatch((database.prepare('SELECT evidence_json FROM playlist_discovery_releases').get() as {evidence_json:string}).evidence_json,/private-seed/);
   assert.deepEqual(discoveryRecommendations(playlists[0].id,playlists[1].ownerUserId),[]);
   assert.equal(dismissDiscoveryRecommendation(first.id,playlists[0].id,playlists[1].ownerUserId),false);
   assert.equal(dismissDiscoveryRecommendation(first.id,playlists[0].id,playlists[0].ownerUserId),true);

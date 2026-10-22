@@ -6,7 +6,7 @@ import {semanticListFields} from '@/features/categorization/types';
 export type EvidenceConfidence='high'|'medium'|'low'|'unknown';
 export type FieldEvidence={value:unknown;source:'user_override'|'embedded'|'external'|'audio'|'model_inference'|'unknown'|'conflict';scope:'recording'|'release'|'artist';confidence:EvidenceConfidence;references:string[];note?:string};
 export type ExternalTrackFact={field:string;value:unknown;scope:FieldEvidence['scope'];url:string;recordingId?:string};
-export const trackEvidenceVersion=2;
+export const trackEvidenceVersion=3;
 export type TrackEvidenceView={version:typeof trackEvidenceVersion;fields:Record<string,FieldEvidence>;recordingKey:string;originalYear:number|null;editionYear:number|null;conflicts:string[]};
 type Input={artist:string;title:string;profile:Record<string,unknown>;tags:Record<string,unknown>;manual?:Record<string,unknown>;provenance?:Record<string,unknown>;audio?:Record<string,unknown>;external?:ExternalTrackFact[]};
 const values=(v:unknown):string[]=>Array.isArray(v)?v.map(String):v==null||v===''?[]:[String(v)];

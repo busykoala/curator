@@ -40,6 +40,11 @@ test('mood fit and specific style eligibility cannot be replaced by a broad genr
   intent.hard.requirements=[{field:'genre',values:['downtempo'],match:'any'}];
   assert.equal(assessCandidate(track(3,{genre:['electronic'],style:['techno'],mood:['warm']}),def,intent,snapshot,now).eligible,false);
 });
+test('broad genres include known substyles without weakening a specific style requirement',()=>{
+  const def=definition('depth'),intent=configuredIntent(def,'hierarchy');intent.hard.requirements=[{field:'genre',values:['electronic'],match:'any'}];
+  const tripHop=track(1,{genre:['Trip-Hop'],style:['downtempo']});assert.equal(assessCandidate(tripHop,def,intent,snapshot,now).eligible,true);
+  intent.hard.requirements=[{field:'style',values:['melodic_techno'],match:'any'}];assert.equal(assessCandidate(tripHop,def,intent,snapshot,now).eligible,false);
+});
 test('strict instrumental piano requirements reject missing, contradictory and spoken evidence',()=>{
   const def=definition('depth'),intent=configuredIntent(def,'1');
   intent.hard.vocal='instrumental';intent.hard.requirements=[{field:'instrumentation',values:['piano'],match:'all'}];

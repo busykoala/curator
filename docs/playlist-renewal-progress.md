@@ -247,3 +247,54 @@ changes in the infrastructure repository. Update this record at each handoff.
   (`/private/tmp/curator-renewal-v7-{tests,build}.log`). Final TypeScript check is
   sequential after build because both access Next's generated type files.
   No push, deployment, new production migrations or feature enablement yet.
+- Full initial 24-case exploratory replay completed at
+  `evaluation/initial-24-v3-exploratory.json`: 20/24 passed the then-current
+  assertions. This is not the acceptance gate. Two false shortages came from
+  invented styles; the single-artist scenario needs collection-level sufficiency,
+  and the piano assertion incorrectly rejected electric piano. The newer oracle
+  distinguishes those cases and also normalises hyphens in embedded Trip-Hop
+  tags. Preserve the original failures; do not retroactively call the old run a
+  pass. The fixed “forgotten favourites” rubric accepts observed enjoyment or a
+  favourite as stated in the goal; “Only my favourites” remains a strict filter.
+- Live source proof exposed a substantive relevance bug: the old seed selector
+  treated broad electronic as an alternative to the specific techno lanes and
+  chose Imagine Dragons, leading to unrelated pop releases. No acquisitions
+  were submitted. Specific lanes now gate seed eligibility, and each artist
+  uses its best matching track. Similarity claims carry the matched seed styles;
+  clearly unrelated release genres are rejected. Sparse coverage tries other
+  relevant seeds within caps. Original evidence is retained in
+  `discovery/live-provider-proof-v1-wrong-seed.json`.
+- Follow-up source proof resolved Groove Armada’s “Latenight Mixes, Part 2” from
+  a style-matching Leftfield seed as an explicitly adjacent recommendation.
+  A genuine MusicBrainz 503 stopped further work and set the live shared
+  cooldown; it was honoured. Tests also caught a legitimate nullable MusicBrainz
+  release status incorrectly poisoning a whole recording response; fixed and
+  regression-tested. Provider proof has used 19 of its separately capped 20
+  uncached requests today, coordinated with production’s existing rate state.
+  A replenishing ten-candidate production pool is still unproven.
+- Additive migration 23 separates recommendation evidence per owner/playlist
+  from shared canonical release facts. A second owner can no longer overwrite
+  the first owner’s seed/provenance. Unique legacy associations migrate; ambiguous
+  shared evidence is preserved in a review table instead of copied to listeners.
+  Unverified legacy evidence neither fills the verified pool nor permits new
+  automatic acquisition. Cross-owner and migration regressions pass.
+- Evidence view v3 includes the taxonomy correction for electronic substyles;
+  broad genre matching retains specific style distinctions. Central style fit
+  is enforced even when another factual requirement also matches. Embedding
+  backlog tracking now checks evidence version and source freshness, rather
+  than declaring success from vector row count alone; second-resolution source
+  timestamps cannot hide an edit within the embedding’s timestamp second.
+- Latest checkpoint: 234/234 full tests and production/worker build passed
+  (`/private/tmp/curator-renewal-v8-{tests,build}.log`). TypeScript is checked
+  after the build. No production code/migration/playlist deployment yet.
+- Next: finish/preserve the current real correction/nightly replay; its
+  Trip-Hop assertion failures are oracle punctuation mismatches, while actual
+  selections all carried trip-hop evidence. Restart the private embedding
+  evaluator with evidence v3 and the new backlog guard (the currently running
+  evaluator is older). Complete the stable-index 24×3 gate, actual-library
+  fourteen-night simulation and independent 40-case quality comparison.
+- Additional required review before rollout: the current long retry backoffs
+  need dependency-recovery detection to guarantee the stated 30-minute recovery;
+  recording-key upgrades and file deletion must not erase recent exposure or
+  removal cooldown. Provider tag-radio fallback would improve sparse artist
+  coverage. None of these should be hidden by calling the goal complete.

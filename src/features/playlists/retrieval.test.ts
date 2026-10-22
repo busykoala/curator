@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {config} from '@/config';
 import {db} from '@/features/db/client';
 import {buildTrackEvidence} from './track-evidence';
-import {canonicalTrackDescription,mergeHybridRanks,preparePlaylistEmbeddings,retrievePlaylistCandidates,storeTrackEmbeddings,type RetrievalProvider} from './retrieval';
+import {canonicalTrackDescription,mergeHybridRanks,preparePlaylistEmbeddings,playlistEmbeddingBacklog,retrievePlaylistCandidates,storeTrackEmbeddings,type RetrievalProvider} from './retrieval';
 import type {EvidencedCandidate} from './selection-policy';
 
 const directory=mkdtempSync(join(tmpdir(),'curator-retrieval-'));config.DATABASE_PATH=join(directory,'db.sqlite');const database=db();
@@ -46,6 +46,17 @@ test('invalid vectors are rejected atomically before any cache mutation',()=>{
   assert.throws(()=>storeTrackEmbeddings([{fileId:1,description:'changed'}],[[NaN]]),/invalid embedding/);
   assert.throws(()=>storeTrackEmbeddings([{fileId:1,description:'changed'}],[Array.from({length:1024},()=>1e100)]),/numeric range/);
   assert.equal((database.prepare('SELECT count(*) n FROM playlist_track_embeddings').get() as {n:number}).n,count);
+});
+test('vector row counts cannot claim a complete index when evidence was never checked or its version changed',async()=>{
+  assert.ok(playlistEmbeddingBacklog()>0);
+  const provider:RetrievalProvider={async embed(texts){return texts.map(()=>v(0))},async rerank(){return[]}};
+  await preparePlaylistEmbeddings(128,provider);
+  // Fixture timestamps are fixed beyond the enclosing source second, matching
+  // a completed real embedding request rather than a zero-latency mock.
+  database.prepare('UPDATE playlist_track_embeddings SET updated_at=?').run(Date.now()+2000);
+  assert.equal(playlistEmbeddingBacklog(),0);
+  database.prepare('UPDATE playlist_track_evidence SET version=1 WHERE file_id=1').run();
+  assert.equal(playlistEmbeddingBacklog(),1);
 });
 test('backfill caps batches, retains profiles and yields between batches to chat',async()=>{
   for(let id=5;id<=160;id++)file(id);

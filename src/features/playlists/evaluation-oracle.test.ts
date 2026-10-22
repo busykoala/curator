@@ -12,6 +12,7 @@ test('independent checks accept piano variants and reject vocals even if a compi
   assert.deepEqual(scenarioViolations('depth-piano',[piano]),[]);
   const sung=track(2,{genre:['jazz'],instrumentation:['piano'],vocalProfile:['clean_sung']});
   assert.ok(scenarioViolations('depth-piano',[sung]).includes('Required consistent instrumental evidence'));
+  assert.deepEqual(scenarioViolations('chat-keep-order',[track(3,{genre:['Trip-Hop'],style:['downtempo']})]),[]);
 });
 test('single-artist sufficiency uses the largest eligible group instead of summing unrelated favourites',()=>{
   const pool=Array.from({length:10},(_,i)=>track(i+1,{},i<4?'One':'Two'));

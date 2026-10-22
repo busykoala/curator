@@ -32,32 +32,40 @@ export function discoverySeedArtists(playlist:PlaylistDefinition){
   const clusters=db().prepare('SELECT evidence_json FROM listening_clusters WHERE user_id=? ORDER BY weight DESC LIMIT 5').all(playlist.ownerUserId) as Array<{evidence_json:string}>;
   const familiar=new Set(clusters.flatMap(c=>{try{return(JSON.parse(c.evidence_json).albums??[]).map((a:string)=>norm(a.split(' / ')[0]))}catch{return[]}}));
   const rows=db().prepare("SELECT f.artist_name,f.tags_json,p.profile_json,m.artist_mbid FROM files f JOIN track_profiles p ON p.file_id=f.id AND p.status='complete' LEFT JOIN manual_overrides m ON m.album_key=f.album_key AND m.confirmed=1 WHERE f.status='written' ORDER BY f.id").all() as Array<{artist_name:string;tags_json:string;profile_json:string;artist_mbid:string|null}>;
-  const wanted=[...playlist.config.tasteLanes,...playlist.config.genres].map(norm),seen=new Set<string>();
-  return rows.flatMap(row=>{
-    const tags=JSON.parse(row.tags_json),profile=JSON.parse(row.profile_json),text=norm([...(profile.genre??[]),...(profile.style??[]),...(profile.scenes??[])].join(' '));
-    const ids=Object.entries(tags).filter(([k])=>['musicbrainz_artistid','musicbrainzartistid'].includes(k.toLowerCase())).flatMap(([,v])=>Array.isArray(v)?v:[v]).map(String);
-    const id=row.artist_mbid??ids.find(id=>uuid.test(id));if(!id||seen.has(id)||wanted.length&&!wanted.some(t=>text.includes(t)))return[];
-    seen.add(id);return[{id,artist:row.artist_name,score:wanted.filter(t=>text.includes(t)).length+(familiar.has(norm(row.artist_name))?5:0)}];
-  }).sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id));
+  const wanted=(playlist.config.tasteLanes.length?playlist.config.tasteLanes:playlist.config.genres).map(norm),best=new Map<string,{id:string;artist:string;score:number;styles:string[]}>();
+  for(const row of rows){
+    const tags=JSON.parse(row.tags_json),profile=JSON.parse(row.profile_json),text=' '+norm([...(profile.genre??[]),...(profile.style??[]),...(profile.scenes??[])].join(' '))+' ';
+    const styles=wanted.filter(term=>text.includes(' '+term+' '));
+    const ids=Object.entries(tags).filter(([key])=>['musicbrainz_artistid','musicbrainzartistid'].includes(key.toLowerCase())).flatMap(([,value])=>Array.isArray(value)?value:[value]).map(String);
+    const id=row.artist_mbid??ids.find(id=>uuid.test(id));if(!id||!uuid.test(id)||wanted.length&&!styles.length)continue;
+    const candidate={id,artist:row.artist_name,styles,score:styles.length+(familiar.has(norm(row.artist_name))?5:0)};
+    if(!best.has(id)||candidate.score>best.get(id)!.score)best.set(id,candidate);
+  }
+  return[...best.values()].sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id));
 }
 export async function listenBrainzCandidates(playlist:PlaylistDefinition,recent:boolean){
   const seeds=discoverySeedArtists(playlist);if(!seeds.length)return[];
-  const day=Math.floor(Date.now()/86400_000),cycle=Number(stateGet(`playlist_research_cycles:${playlist.id}`,'0')),seed=seeds[(day+cycle)%Math.min(seeds.length,12)];
+  const day=Math.floor(Date.now()/86400_000),cycle=Number(stateGet(`playlist_research_cycles:${playlist.id}`,'0')),output=new Map<string,DiscoveryRelease>(),seen=new Set<string>();
   const query=new URLSearchParams({mode:[2,5,8].includes(cycle%10)?'medium':'easy',max_similar_artists:'5',max_recordings_per_artist:'2',pop_begin:'0',pop_end:'85'});
-  const endpoint=`https://api.listenbrainz.org/1/lb-radio/artist/${seed.id}?${query}`;
-  const result=await discoveryJson<Record<string,Array<{recording_mbid:string;similar_artist_mbid:string;similar_artist_name:string}>>>('listenbrainz',endpoint,7,'api',undefined,raw=>radioRecordings.parse(raw));
-  const records=Object.values(result.value).flat().filter(r=>uuid.test(r.recording_mbid)&&r.similar_artist_mbid!==seed.id).slice(0,10),output:DiscoveryRelease[]=[];
-  for(const item of records){
-    try{
-      const recording=await mb(`recording/${item.recording_mbid}?inc=artist-credits+releases+release-groups`,raw=>recommendedRecording.parse(raw));
-      const groupId=recommendedAlbumGroup(recording.value,item.recording_mbid,item.similar_artist_mbid);
-      if(!groupId)continue;
-      const evidence:DiscoveryEvidence={provider:'listenbrainz',url:endpoint,fetchedAt:result.fetchedAt,scope:'recording',claims:{seedArtistId:seed.id,seedArtist:seed.artist,recordingId:item.recording_mbid,recommendedArtist:item.similar_artist_name,recommendedArtistId:item.similar_artist_mbid,explorationMode:query.get('mode')!}};
-      const verified=await verifiedDiscoveryRelease(groupId,[evidence]);
-      if(verified&&verified.artistId===item.similar_artist_mbid&&(!recent||verified.releaseDate&&Date.parse(verified.releaseDate)>=Date.now()-120*86400_000))output.push(verified);
-    }catch(error){if(/budget|cooling|retry/i.test(String(error)))break}
+  // Sparse radio coverage for one relevant artist must not stop the provider.
+  const rotation=seeds.slice(0,12),start=(day+cycle)%rotation.length;
+  for(let offset=0;offset<Math.min(3,rotation.length);offset++){
+    const seed=rotation[(start+offset)%rotation.length],endpoint=`https://api.listenbrainz.org/1/lb-radio/artist/${seed.id}?${query}`;
+    const result=await discoveryJson<Record<string,Array<{recording_mbid:string;similar_artist_mbid:string;similar_artist_name:string}>>>('listenbrainz',endpoint,7,'api',undefined,raw=>radioRecordings.parse(raw));
+    const records=Object.values(result.value).flat().filter(record=>record.similar_artist_mbid!==seed.id&&!seen.has(record.recording_mbid)).slice(0,10);
+    for(const item of records){
+      if(seen.size>=12)return[...output.values()];seen.add(item.recording_mbid);
+      try{
+        const recording=await mb(`recording/${item.recording_mbid}?inc=artist-credits+releases+release-groups`,raw=>recommendedRecording.parse(raw));
+        const groupId=recommendedAlbumGroup(recording.value,item.recording_mbid,item.similar_artist_mbid);if(!groupId)continue;
+        const evidence:DiscoveryEvidence={provider:'listenbrainz',url:endpoint,fetchedAt:result.fetchedAt,scope:'recording',claims:{seedArtistId:seed.id,seedArtist:seed.artist,seedStyleTerms:seed.styles,recordingId:item.recording_mbid,recommendedArtist:item.similar_artist_name,recommendedArtistId:item.similar_artist_mbid,explorationMode:query.get('mode')!}};
+        const verified=await verifiedDiscoveryRelease(groupId,[evidence]);
+        if(verified&&verified.artistId===item.similar_artist_mbid&&(!recent||verified.releaseDate&&Date.parse(verified.releaseDate)>=Date.now()-120*86400_000))output.set(verified.id,verified);
+        if(output.size>=10)return[...output.values()];
+      }catch(error){if(/budget|cooling|retry/i.test(String(error)))return[...output.values()]}
+    }
   }
-  return [...new Map(output.map(r=>[r.id,r])).values()];
+  return[...output.values()];
 }
 
 const editorialSources=[{provider:'bandcamp',url:'https://daily.bandcamp.com/',paths:/\/(album-of-the-day|best-|lists\/|features\/|scene-report\/)/},
@@ -118,7 +126,7 @@ export async function lastFmCandidates(playlist:PlaylistDefinition,recent:boolea
     if(!uuid.test(artist.mbid))continue;
     const groups=await mb<{'release-groups':MbGroup[]}>(`release-group?artist=${artist.mbid}&type=album&limit=3`);
     for(const group of groups.value['release-groups']){
-      const release=await verifiedDiscoveryRelease(group.id,[{provider:'lastfm',url:artist.url,fetchedAt:result.fetchedAt,scope:'artist',claims:{seedArtistId:seed.id,seedArtist:seed.artist,recommendedArtist:artist.name,recommendedArtistId:artist.mbid}}]);
+      const release=await verifiedDiscoveryRelease(group.id,[{provider:'lastfm',url:artist.url,fetchedAt:result.fetchedAt,scope:'artist',claims:{seedArtistId:seed.id,seedArtist:seed.artist,seedStyleTerms:seed.styles,recommendedArtist:artist.name,recommendedArtistId:artist.mbid}}]);
       if(release&&(!recent||release.releaseDate&&Date.parse(release.releaseDate)>=Date.now()-120*86400_000))output.push(release);
     }
   }
