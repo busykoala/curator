@@ -42,3 +42,19 @@ export function enforceDiscoveryStylePreferences(intent:PlaylistIntent,userDirec
   });
   return demoted;
 }
+
+// Keep the listener's qualified festival exclusion precise. A bare model
+// token "edm" both over-excludes compatible music and misses known big-room
+// aliases. An explicit general EDM ban in configuration or directions wins.
+export function groundFestivalExclusion(intent:PlaylistIntent,userDirections:string[],preserved:PlaylistIntent['hard']){
+  const normal=(value:string)=>text(value).replace(/[_-]+/g,' ');
+  if(preserved.exclusions.some(value=>normal(value)==='edm')||preserved.requirements.some(rule=>rule.match==='none'&&rule.values.some(value=>normal(value)==='edm')))return false;
+  const directions=userDirections.map(normal),qualified=/\bfestival\s+edm\b/g;
+  if(!preserved.exclusions.some(value=>normal(value)==='festival edm')&&!directions.some(direction=>/\bfestival\s+edm\b/.test(direction)))return false;
+  if(directions.some(direction=>/\bedm\b/.test(direction.replace(qualified,''))))return false;
+  let changed=false;
+  const grounded=(value:string)=>{if(normal(value)!=='edm')return value;changed=true;return'festival_edm'};
+  intent.hard.exclusions=[...new Set(intent.hard.exclusions.map(grounded))];
+  intent.hard.requirements=intent.hard.requirements.map(rule=>['genre','style'].includes(rule.field)&&rule.match==='none'?{...rule,values:[...new Set(rule.values.map(grounded))]}:rule);
+  return changed;
+}

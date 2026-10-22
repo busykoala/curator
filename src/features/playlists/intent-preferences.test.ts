@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {configuredIntent,canonicalIntent} from './intent-schema';import {defaultConfig,type PlaylistDefinition} from './types';
-import {enforceSoftPreferences,enforceDiscoveryStylePreferences} from './intent-preferences';
+import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion} from './intent-preferences';
 const base=()=>configuredIntent({config:defaultConfig('mood'),intent:''} as PlaylistDefinition,'revision');
 test('ordinary mood/context preferences cannot become mandatory all-term filters',()=>{
   const intent=base();intent.hard.requirements=[{field:'genre',values:['trip_hop'],match:'all'},{field:'mood',values:['dark','atmospheric'],match:'all'},{field:'listeningContexts',values:['late_night'],match:'all'},{field:'mood',values:['aggressive'],match:'none'}];
@@ -48,4 +48,16 @@ test('nightly interpretation cannot demote a saved explicit mood requirement',()
   const intent=base();intent.hard.requirements=[{field:'mood',values:['dark'],match:'all'}];
   assert.deepEqual(enforceSoftPreferences(intent,[],['Every song must be dark.'],intent.hard.requirements),[]);
   assert.equal(intent.hard.requirements.length,1);
+});
+test('a qualified festival exclusion grounds bare model EDM in the actual direction and its canonical aliases',()=>{
+  const intent=base();intent.hard.exclusions=['edm'];intent.hard.requirements=[{field:'style',values:['edm'],match:'none'}];
+  assert.equal(groundFestivalExclusion(intent,['Hypnotic rather than festival EDM.'],base().hard),true);
+  assert.deepEqual(intent.hard.exclusions,['festival_edm']);assert.deepEqual(intent.hard.requirements[0].values,['festival_edm']);
+});
+test('grounding never narrows a real general EDM exclusion',()=>{
+  for(const configured of [false,true]){
+    const intent=base();intent.hard.exclusions=['edm'];const preserved=base().hard;if(configured)preserved.exclusions=['edm'];
+    assert.equal(groundFestivalExclusion(intent,[configured?'No festival EDM.':'No EDM, especially festival EDM.'],preserved),false);
+    assert.deepEqual(intent.hard.exclusions,['edm']);
+  }
 });

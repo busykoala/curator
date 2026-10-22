@@ -11,9 +11,9 @@ import {canonicalIntent,configuredIntent,playlistIntentSchema,type PlaylistInten
 import type {EvidencedCandidate} from './selection-policy';
 import type {PlaylistDefinition} from './types';
 import {playlistAttemptRecorder} from './inference-metrics';
-import {enforceSoftPreferences,enforceDiscoveryStylePreferences} from './intent-preferences';
+import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion} from './intent-preferences';
 
-const compilerVersion=10;
+const compilerVersion=11;
 export type ChatIntentContext=ReturnType<typeof chatState>;
 const compiledSchema=playlistIntentSchema.omit({version:true,sourceRevision:true,pinnedRecordings:true,excludedFileIds:true,excludedRecordings:true}).extend({
   pinFileIds:z.array(z.number().int().positive()).max(100),conflicts:z.array(z.string().max(240)).max(10),
@@ -99,7 +99,8 @@ ${canonicalPrompt}`,
     const preserved=canonicalIntent(base).hard.requirements;
     const demoted=enforceSoftPreferences(intent,compiled.mandatoryPreferences,directions,preserved);
     if(definition.category==='discovery')demoted.push(...enforceDiscoveryStylePreferences(intent,directions,preserved));
-    detail={...detail,usage:output.usage,latencyMs:Date.now()-started,demotedPreferences:demoted,replaceUnpinned:compiled.replaceUnpinned};
+    const groundedFestivalExclusion=groundFestivalExclusion(intent,directions,base.hard);
+    detail={...detail,usage:output.usage,latencyMs:Date.now()-started,demotedPreferences:demoted,groundedFestivalExclusion,replaceUnpinned:compiled.replaceUnpinned};
   }
   intent=canonicalIntent(intent);
   db().prepare('INSERT INTO playlist_intents(playlist_id,source_hash,intent_json,detail_json) VALUES(?,?,?,?) ON CONFLICT(playlist_id) DO UPDATE SET source_hash=excluded.source_hash,intent_json=excluded.intent_json,detail_json=excluded.detail_json,updated_at=CURRENT_TIMESTAMP')

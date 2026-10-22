@@ -541,3 +541,16 @@ changes in the infrastructure repository. Update this record at each handoff.
   Updated compiler requires its final fixed-rubric replay too. Production remains
   unchanged; infrastructure pins currently refer to the earlier 98ba4ee image and
   MUST be updated to the final evaluated build before any deploy/commit there.
+- The v10 live Discovery example achieves eight familiar plus four adjacent
+  additions, all twelve unheard, with minimal album-variety relaxation (2→2
+  tracks per artist, 1→2 per album). Its model still emitted bare `edm`, which
+  misses canonical big-room aliases and over-bans otherwise compatible music.
+  Preserved that intermediate result as
+  `evaluation/full-replay-v3-balance-fixed-before-festival-grounding.json`.
+- Compiler v11 grounds bare model EDM exclusions in a literal festival-EDM
+  direction and the canonical alias family. A genuine configured/general EDM ban
+  is preserved. Two regressions pass. Code is now frozen for the final complete
+  replay (`results-final-v4`), followed by the final rubric and real-library
+  14-night simulation. v20 validation: 287/287 tests, TypeScript and full build
+  passed. Production is unchanged and no required real-night observation has
+  occurred yet.
