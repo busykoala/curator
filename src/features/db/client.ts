@@ -218,6 +218,13 @@ function migrate(instance: Database.Database) {
     CREATE TABLE IF NOT EXISTS playlist_source_requests(id INTEGER PRIMARY KEY,provider TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'started',detail TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS playlist_source_requests_daily ON playlist_source_requests(created_at,kind);
   `));
+  migration(16,()=>instance.exec(`CREATE TABLE IF NOT EXISTS listener_music_snapshots(
+    owner_user_id INTEGER PRIMARY KEY REFERENCES curator_users(id) ON DELETE CASCADE,
+    songs_json TEXT NOT NULL DEFAULT '[]',complete INTEGER NOT NULL DEFAULT 0,
+    captured_at INTEGER NOT NULL DEFAULT 0,last_attempt_at INTEGER NOT NULL DEFAULT 0,next_retry_at INTEGER NOT NULL DEFAULT 0,
+    error TEXT NOT NULL DEFAULT '',lease_token TEXT,lease_until INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS playlist_track_evidence(file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+    version INTEGER NOT NULL,source_hash TEXT NOT NULL,evidence_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);`));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

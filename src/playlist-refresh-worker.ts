@@ -9,8 +9,9 @@ const research=setInterval(()=>{if(playlistRefreshMode()==='enabled'||playlistRe
 process.once('SIGTERM',()=>{stopping=true;clearInterval(timer);clearInterval(research)});
 process.once('SIGINT',()=>{stopping=true;clearInterval(timer);clearInterval(research)});
 console.log(JSON.stringify({event:'worker_start',component:'playlist_refresh',at:new Date().toISOString()}));
-while(!stopping){
+async function main(){while(!stopping){
   try{if(await runNextRefreshJob())continue}
   catch(error){console.error(JSON.stringify({event:'playlist_refresh_worker_error',error:String(error)}))}
   await new Promise(resolve=>setTimeout(resolve,2_000));
-}
+}}
+void main().catch(error=>{console.error(String(error));process.exitCode=1});

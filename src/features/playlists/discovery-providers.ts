@@ -12,7 +12,7 @@ const uuid=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 type MbCredit={name?:string;artist:{id:string;name:string};joinphrase?:string};
 type MbGroup={id:string;title:string;'first-release-date'?:string;'primary-type'?:string;'secondary-types'?:string[];'artist-credit'?:MbCredit[];genres?:Array<{name:string}>;relations?:Array<{type:string;url?:{resource:string}}>};
 const credit=(value:MbCredit[]=[])=>value.map(c=>(c.name??c.artist.name)+(c.joinphrase??'')).join('');
-async function mb<T>(path:string){return withMusicBrainzRequestLimit(()=>discoveryJson<T>('musicbrainz',`https://musicbrainz.org/ws/2/${path}${path.includes('?')?'&':'?'}fmt=json`,30,'identity'))}
+async function mb<T>(path:string){return discoveryJson<T>('musicbrainz',`https://musicbrainz.org/ws/2/${path}${path.includes('?')?'&':'?'}fmt=json`,30,'identity',withMusicBrainzRequestLimit)}
 export async function verifiedDiscoveryRelease(id:string,evidence:DiscoveryEvidence[]):Promise<DiscoveryRelease|null>{
   if(!uuid.test(id)||!evidence.length)return null;
   const result=await mb<MbGroup>(`release-group/${id}?inc=artist-credits+genres+url-rels`),group=result.value;

@@ -50,14 +50,17 @@ export async function cachedDiscoveryRequest<T>(provider:string,key:string,kind:
     throw error;
   }
 }
-export async function discoveryJson<T>(provider:string,url:string,ttlDays=7,kind:DiscoveryRequestKind='api'){
+export async function discoveryJson<T>(provider:string,url:string,ttlDays=7,kind:DiscoveryRequestKind='api',gate?:(load:()=>Promise<T>)=>Promise<T>){
   const keyUrl=new URL(url);for(const key of ['api_key','token'])keyUrl.searchParams.delete(key);
   return cachedDiscoveryRequest<T>(provider,keyUrl.toString(),kind,ttlDays,async()=>{
+    const request=async()=>{
     const response=await fetch(url,{headers:{Accept:'application/json','User-Agent':'MusicCurator/3.0 (+https://curator.blizzard.busykoala.io/)'},signal:AbortSignal.timeout(15_000)});
     if(response.status===429||response.status===503){stateSet(`playlist_source_cooldown:${provider}`,String(retryAt(response)));throw new DiscoverySourceDeferred(`${provider} returned ${response.status}; retry scheduled`)}
     if(!response.ok)throw Error(`${provider} returned HTTP ${response.status}`);
     if(response.headers.get('x-ratelimit-remaining')==='0')stateSet(`playlist_source_cooldown:${provider}`,String(retryAt(response)));
     return await response.json() as T;
+    };
+    return gate?gate(request):request();
   });
 }
 export function discoveryPage(provider:string,url:string){return cachedDiscoveryRequest<OpenedPage>(provider,url,'editorial',7,()=>openWebPage(url))}

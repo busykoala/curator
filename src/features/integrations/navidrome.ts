@@ -7,6 +7,7 @@ import {
   trackPositionMatches,
 } from "./navidrome-identity";
 import {publishVerifiedPlaylist} from "@/features/playlists/publication";
+import {listenerMusicSnapshot} from '@/features/playlists/listening-snapshot';
 import { jellyfinCall } from "@/features/auth/navidrome";
 import { db } from "@/features/db/client";
 import {
@@ -169,27 +170,20 @@ export async function navidromePlaylist(id: string) {
 
 export async function navidromeListeningProfile(userId?: number) {
   if (userId) {
-    const [frequent, starred] = await Promise.all([
-      jellyfinCall<JellyItems>(
-        userId,
-        "Items?IncludeItemTypes=Audio&Recursive=true&SortBy=PlayCount&SortOrder=Descending&Limit=500&Fields=UserData",
-      ),
-      jellyfinCall<JellyItems>(
-        userId,
-        "Items?IncludeItemTypes=Audio&Recursive=true&Filters=IsFavorite&Limit=500&Fields=UserData",
-      ),
-    ]);
+    const snapshot=await listenerMusicSnapshot(userId);
     return {
-      frequent: (frequent.Items ?? []).map((item) => ({
-        artist: item.Artists?.[0] ?? "",
-        name: item.Album ?? "",
-        playCount: item.UserData?.PlayCount ?? 0,
-        played: item.UserData?.LastPlayedDate ?? "",
+      songs:snapshot.songs,complete:snapshot.complete,stale:snapshot.stale,capturedAt:snapshot.capturedAt,error:snapshot.error,
+      frequent: snapshot.songs.filter(item=>item.hasPlayed||item.playCount>0||item.lastPlayed).map((item) => ({
+        songId:item.id,title:item.title,
+        artist: item.artist,
+        name: item.album,
+        playCount: item.playCount,
+        played: item.lastPlayed ?? "",
       })),
-      starred: (starred.Items ?? []).map((item) => ({
-        title: item.Name ?? "",
-        artist: item.Artists?.[0] ?? "",
-        album: item.Album ?? "",
+      starred: snapshot.songs.filter(item=>item.favourite).map((item) => ({
+        songId:item.id,title: item.title,
+        artist: item.artist,
+        album: item.album,
       })),
     };
   }

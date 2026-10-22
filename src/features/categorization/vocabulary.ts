@@ -44,6 +44,15 @@ function genre(value:string):string{
   if(/metal/.test(value))return"metal";if(/punk|hardcore|emo|screamo/.test(value))return"punk_hardcore";if(/reggae|dub|ska|dancehall|rocksteady/.test(value))return"reggae_dub_ska";if(/hip_hop|(^|_)rap($|_)|trap|drill|grime/.test(value))return"hip_hop";if(/rnb|soul|funk|motown|disco|boogie/.test(value))return"rnb_soul_funk";if(/jazz|swing|bebop/.test(value))return"jazz";if(/classical|baroque|opera|orchestral|chamber|choral/.test(value))return"classical";if(/country|americana|bluegrass|honky_tonk/.test(value))return"country_americana";if(/folk|acoustic|singer_songwriter/.test(value))return"folk_acoustic";
   if(/ambient|drone|new_age/.test(value))return"ambient";if(/experimental|avant|noise|musique_concrete|sound_art/.test(value))return"experimental_avant_garde";if(/electronic|house|techno|trance|electro|breakbeat|jungle|drum_and_bass|garage|dubstep|synthwave|industrial|ebm|idm|glitch/.test(value))return"electronic";if(/pop/.test(value))return"pop";if(/rock|alternative|indie|grunge|shoegaze|krautrock/.test(value))return"rock";return value;
 }
+export function canonicalSemanticField(field:string){
+  const normalized=field.toLowerCase().replace(/[^a-z]/g,'');
+  const aliases:Record<string,string>={instruments:'instrumentation',instrumentation:'instrumentation',vocals:'vocalProfile',vocalprofile:'vocalProfile',context:'listeningContexts',contexts:'listeningContexts',listeningcontext:'listeningContexts',listeningcontexts:'listeningContexts',recordingtype:'recordingTypes',recordingtypes:'recordingTypes',musicalkey:'musicalKey',key:'musicalKey',bpm:'bpm',energy:'energy',valence:'valence',mode:'mode',tempofeel:'tempoFeel',danceability:'danceability',acousticelectroniccharacter:'acousticElectronicCharacter'};
+  return aliases[normalized]??semanticListFields.find(key=>key.toLowerCase()===normalized)??field;
+}
+export function canonicalSemanticValue(field:string,value:unknown){
+  const key=canonicalSemanticField(field),token=canonicalToken(value);
+  return fieldAliases[key]?.[token]??(key==='genre'?genre(token):token);
+}
 
 function production(value:string):string{
   if(/studio.*polish|polish.*studio/.test(value))return"studio_polished";if(/polish/.test(value))return"polished";if(/compress/.test(value))return"compressed";if(/lo_fi|lo_fidel/.test(value))return"lo_fi";if(/hi_fi|high_fidel/.test(value))return"hi_fi";if(/reverb/.test(value))return"reverb_heavy";if(/delay/.test(value))return"delay_heavy";if(/spacious|wide_stereo/.test(value))return"spacious";if(/analog/.test(value))return"analog_feel";if(/digital.*clean|clean.*digital/.test(value))return"digital_clean";if(/sample/.test(value))return"sample_based";if(/heavy.*process/.test(value))return"heavily_processed";if(/live.*feel|live_band/.test(value))return"live_feel";if(/\bdry\b/.test(value))return"dry";if(/\braw\b/.test(value))return"raw";if(/dynamic/.test(value))return"dynamic";if(/vintage/.test(value))return"vintage";if(/modern/.test(value))return"modern";return value;

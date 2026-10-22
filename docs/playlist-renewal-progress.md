@@ -65,3 +65,39 @@ changes in the infrastructure repository. Update this record at each handoff.
   `d6089f9094132ff934521aad385dda168da2f75c7897b10b3d62dc366d5ba228`.
   Preserve both original and supplemental snapshots. Full regression suite after
   C/D passed; next work is source integration verification and package E.
+- 2026-10-22: Packages C/D committed as `7c003bd`; 144 full tests and production
+  build passed. No code has been pushed or deployed yet. Worker mode in
+  production remains the existing legacy pipeline.
+- 2026-10-22: Package E foundation now includes complete owner-specific native
+  pagination, stable song IDs, per-track plays/favourites/ratings, cached last
+  good snapshots, and explicit incomplete/stale flags. Live read-only probes
+  verified different pages and real last-played timestamps on played songs;
+  native count was 16,359 (the fixed Curator baseline remains 16,344).
+  Added canonical field/value aliases, a versioned field-evidence view/cache,
+  recording-aware keys, separate original/edition years, conflict handling,
+  and provenance in newly classified profiles. Completed the fixed 120-track
+  provenance audit at `metadata-audit/report.json`: zero internal conflicts,
+  3,214 model-inference fields, 263 unknown and 123 embedded fields (including
+  edition years, which do not establish original recording years).
+  This does not prove musical accuracy. Targeted external fact gathering,
+  the 100-track/day review queue, and selection integration remain outstanding.
+- Package E foundation validation: full suite 154/154, TypeScript and
+  production/worker build passed. Evidence/date/recording-identity checks
+  distinguish syntax-valid embedded MBIDs from independently verified recording
+  identities. Numeric analyzer features do not establish vocals,
+  instrumentation, or categorical musical intensity.
+
+## Next continuation
+
+- Finish package E with an evidence-backed targeted metadata review queue (cap
+  100 distinct tracks/day, priority to active selections/new imports; yield to
+  chat). Do not rerun classification across the entire library.
+- Implement F and G fully: compiled intent, per-type ranking, exposure/rotation,
+  representative discovery tracks, actual chat nightly changes, local retrieval,
+  reranking, validated bounded tools/repair, interactive inference priority.
+- Finish owner-scoped status/retry/dismiss/evidence UI and perform all stated
+  live evaluations, simulations and quality gates. Current passing tests prove
+  foundations only. Provider adapters still need live end-to-end validation.
+- Deploy/observe only after the remaining packages pass. Preserve the original
+  rollout: unpublished nightly comparison, Discovery canary, then three verified
+  full nights. Goal completion remains unproven.
