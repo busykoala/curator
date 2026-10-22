@@ -32,6 +32,7 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
   const recent=cycle%4===3;let researched=0;
   const outcomes:Array<{provider:string;candidates:number;error?:string}>=[];
   for(const provider of adapters){
+    if(discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(row=>verifiedDiscoveryRecommendation(row)&&['researched','queued','downloading','ready'].includes(row.status)).length>=discoveryPoolTarget)break;
     try{
       const releases=await provider.load(direction,recent);let accepted=0;
       for(const release of releases){

@@ -140,6 +140,18 @@ const embeddingDue=`WHERE f.status='written' AND p.status='complete' AND (e.file
 export function playlistEmbeddingBacklog(){
   return(db().prepare(`SELECT count(*) n ${embeddingSources} ${embeddingDue}`).get(config.CURATOR_EMBEDDING_VERSION,trackEvidenceVersion) as {n:number}).n;
 }
+export function revalidateUnchangedPlaylistEmbeddings(limit=512){
+  const rows=db().prepare(`SELECT f.id,f.artist_name,f.album_name,f.tags_json,e.content_hash ${embeddingSources} ${embeddingDue}
+    AND e.file_id IS NOT NULL ORDER BY f.id LIMIT ?`).all(config.CURATOR_EMBEDDING_VERSION,trackEvidenceVersion,Math.max(0,Math.min(2048,limit))) as Array<{id:number;artist_name:string;album_name:string;tags_json:string;content_hash:string}>;
+  let unchanged=0,changed=0;
+  for(const row of rows){
+    const evidence=playlistTrackEvidence(row.id);if(!evidence)continue;
+    const tags=JSON.parse(row.tags_json),title=String(Array.isArray(tags.title)?tags.title[0]:tags.title??'');
+    if(descriptionHash(canonicalTrackDescription({artist:row.artist_name,album:row.album_name,title},evidence))!==row.content_hash){changed++;continue}
+    db().prepare('UPDATE playlist_track_embeddings SET updated_at=? WHERE file_id=? AND model_version=? AND content_hash=?').run(Date.now(),row.id,config.CURATOR_EMBEDDING_VERSION,row.content_hash);unchanged++;
+  }
+  return{checked:rows.length,unchanged,changed};
+}
 export async function preparePlaylistEmbeddings(limit=128,provider=localRetrievalProvider){
   if(stateGet('paused')==='true')return 0;
   const rows=db().prepare(`SELECT f.id,f.artist_name,f.album_name,f.tags_json,e.content_hash ${embeddingSources} ${embeddingDue}

@@ -5,7 +5,7 @@ import {db} from '../src/features/db/client';
 import {getPlaylist} from '../src/features/playlists/repository';
 import {listenBrainzCandidates,listenBrainzTagCandidates} from '../src/features/playlists/discovery-providers';
 import {discoveryReleaseFit} from '../src/features/playlists/discovery-fit';
-import {discoveryRecommendations,storeDiscoveryRecommendation,verifiedDiscoveryRecommendation,type DiscoveryRelease} from '../src/features/playlists/discovery-repository';
+import {discoveryRecommendations,discoveryPoolTarget,storeDiscoveryRecommendation,verifiedDiscoveryRecommendation,dismissDiscoveryRecommendation,type DiscoveryRelease} from '../src/features/playlists/discovery-repository';
 async function main(){
   const target=process.env.PLAYLIST_EVAL_DB_PATH,ratePath=process.env.PLAYLIST_EVAL_SHARED_RATE_DB;
   if(!target?.startsWith('/tmp/curator-renewal-eval-')||!target.endsWith('.sqlite')||config.DATABASE_PATH!==target||ratePath!=='/app/data/curator.sqlite')throw Error('Requires an isolated evaluation database and the explicitly supplied production rate-state path');
@@ -37,13 +37,19 @@ async function main(){
   };
   const started=Date.now();
   try{
+    const dismissed=process.env.PLAYLIST_EVAL_DISMISS_RELEASE;
+    if(dismissed){const row=discoveryRecommendations(playlist.id,playlist.ownerUserId).find(row=>row.release_id===dismissed);if(!row||!dismissDiscoveryRecommendation(row.id,playlist.id,playlist.ownerUserId))throw Error('Private dismissal simulation target is unavailable')}
     const mode=process.env.PLAYLIST_EVAL_SOURCE_MODE??'artist',all=new Map<string,DiscoveryRelease>();
     for(const provider of mode==='both'?[listenBrainzCandidates,listenBrainzTagCandidates]:[mode==='tags'?listenBrainzTagCandidates:listenBrainzCandidates])for(const release of await provider(playlist,false))all.set(release.id,release);
-    const candidates=[...all.values()],before=discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(verifiedDiscoveryRecommendation).length;
-    if(process.env.PLAYLIST_EVAL_FILL_POOL==='true')for(const release of candidates){const fit=discoveryReleaseFit(playlist,release);if(fit)storeDiscoveryRecommendation(playlist,release,fit.reason,'proof-'+fit.lane)}
-    const after=discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(verifiedDiscoveryRecommendation).length;
+    const active=()=>discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(row=>verifiedDiscoveryRecommendation(row)&&['researched','queued','downloading','ready'].includes(row.status));
+    const candidates=[...all.values()],before=active().length;
+    if(process.env.PLAYLIST_EVAL_FILL_POOL==='true')for(const release of candidates){
+      if(discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(row=>verifiedDiscoveryRecommendation(row)&&['researched','queued','downloading','ready'].includes(row.status)).length>=discoveryPoolTarget)break;
+      const fit=discoveryReleaseFit(playlist,release);if(fit)storeDiscoveryRecommendation(playlist,release,fit.reason,'proof-'+fit.lane);
+    }
+    const after=active().length;
     const output=process.env.PLAYLIST_EVAL_OUTPUT??'/tmp/curator-renewal-eval-code/discovery-probe';mkdirSync(output,{recursive:true});
-    const report={at:new Date().toISOString(),mode,cap,scope:'Live free-provider resolution; caches and optional recommendation associations in the isolated copy; no production playlist or acquisition mutations. Production writes are limited to existing shared MusicBrainz timing/cooldown state and the bounded proof request counter.',pool:{before,after},durationMs:Date.now()-started,requests,
+    const report={at:new Date().toISOString(),mode,cap,scope:'Live free-provider resolution; caches and optional recommendation associations/dismissal simulation in the isolated copy; no production playlist or acquisition mutations. Production writes are limited to existing shared MusicBrainz timing/cooldown state and the bounded proof request counter.',simulatedDismissal:dismissed??null,pool:{before,after},durationMs:Date.now()-started,requests,
       candidates:candidates.map(release=>({...release,fit:discoveryReleaseFit(playlist,release)}))};
     writeFileSync(output+'/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify({durationMs:report.durationMs,requests:requests.length,candidates:candidates.length,fit:candidates.filter(release=>discoveryReleaseFit(playlist,release)).length,statuses:requests.map(request=>request.status??request.error)}));
   }finally{globalThis.fetch=original;rates.close();database.close()}

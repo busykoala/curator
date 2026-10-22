@@ -1,6 +1,7 @@
 import {db} from '@/features/db/client';
 import {buildTrackEvidence,trackEvidenceHash,trackEvidenceVersion,type ExternalTrackFact,type TrackEvidenceView} from './track-evidence';
 import {reviewIdentity,reviewIdentityHash} from './metadata-review';
+import {reviewedTrackFacts} from './reviewed-track-facts';
 
 export function playlistTrackEvidence(fileId:number):TrackEvidenceView|null{
   const row=db().prepare(`SELECT f.id,f.artist_name,f.album_key,f.tags_json,f.properties_json,p.profile_json,p.provenance_json,o.patch_json,m.release_group_mbid,a.features_json
@@ -9,6 +10,7 @@ export function playlistTrackEvidence(fileId:number):TrackEvidenceView|null{
     {id:number;artist_name:string;album_key:string;tags_json:string;properties_json:string;profile_json:string|null;provenance_json:string|null;patch_json:string|null;release_group_mbid:string|null;features_json:string|null}|undefined;
   if(!row)return null;
   const tags=JSON.parse(row.tags_json),external:ExternalTrackFact[]=[];
+  external.push(...reviewedTrackFacts(fileId,reviewIdentityHash(reviewIdentity(row))));
   const reviewed=db().prepare("SELECT facts_json FROM playlist_metadata_reviews WHERE file_id=? AND source_hash=? AND status='complete'").get(fileId,reviewIdentityHash(reviewIdentity(row))) as {facts_json:string}|undefined;
   if(reviewed)external.push(...JSON.parse(reviewed.facts_json));
   const groupId=row.release_group_mbid??Object.entries(tags).filter(([k])=>k.toLowerCase().replace(/[^a-z]/g,'')==='musicbrainzreleasegroupid').flatMap(([,v])=>Array.isArray(v)?v:[v])[0];

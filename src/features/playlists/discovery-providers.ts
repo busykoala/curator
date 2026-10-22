@@ -6,6 +6,7 @@ import {recordAiUsage} from '@/features/ai/usage';
 import {norm} from './candidate-score';
 import {discoveryJson,discoveryPage,discoveryWebSearch} from './discovery-sources';
 import type {DiscoveryRelease,DiscoveryEvidence} from './discovery-repository';
+import {discoveryRecommendations,discoveryPoolTarget,verifiedDiscoveryRecommendation} from './discovery-repository';
 import type {PlaylistDefinition} from './types';
 import {musicBrainzGroup,radioRecordings,tagRadioRecordings,recommendedAlbumGroup,recommendedRecording} from './discovery-identities';
 import {playlistTrackEvidence} from './evidence-repository';
@@ -73,7 +74,9 @@ export async function listenBrainzCandidates(playlist:PlaylistDefinition,recent:
 
 export async function listenBrainzTagCandidates(playlist:PlaylistDefinition,recent:boolean){
   const tags=[...new Set((playlist.config.tasteLanes.length?playlist.config.tasteLanes:playlist.config.genres).map(norm))].slice(0,3);if(!tags.length)return[];
-  const query=new URLSearchParams({operator:'OR',pop_begin:'0',pop_end:'85',count:'12'});for(const tag of tags)query.append('tag',tag);
+  const current=discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(row=>verifiedDiscoveryRecommendation(row)&&['researched','queued','downloading','ready'].includes(row.status)).length;
+  const count=Math.max(6,Math.min(12,(discoveryPoolTarget-current)*2));
+  const query=new URLSearchParams({operator:'OR',pop_begin:'0',pop_end:'85',count:String(count)});for(const tag of tags)query.append('tag',tag);
   const endpoint='https://api.listenbrainz.org/1/lb-radio/tags?'+query;
   // Artist and tag radio share one provider limiter, cooldown and cache budget.
   const result=await discoveryJson('listenbrainz',endpoint,7,'api',undefined,raw=>tagRadioRecordings.parse(raw)),output=new Map<string,DiscoveryRelease>();

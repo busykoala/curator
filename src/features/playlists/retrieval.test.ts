@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {config} from '@/config';
 import {db} from '@/features/db/client';
 import {buildTrackEvidence} from './track-evidence';
-import {canonicalTrackDescription,mergeHybridRanks,preparePlaylistEmbeddings,playlistEmbeddingBacklog,retrievePlaylistCandidates,storeTrackEmbeddings,type RetrievalProvider} from './retrieval';
+import {canonicalTrackDescription,mergeHybridRanks,preparePlaylistEmbeddings,playlistEmbeddingBacklog,retrievePlaylistCandidates,storeTrackEmbeddings,revalidateUnchangedPlaylistEmbeddings,type RetrievalProvider} from './retrieval';
 import type {EvidencedCandidate} from './selection-policy';
 
 const directory=mkdtempSync(join(tmpdir(),'curator-retrieval-'));config.DATABASE_PATH=join(directory,'db.sqlite');const database=db();
@@ -57,6 +57,12 @@ test('vector row counts cannot claim a complete index when evidence was never ch
   assert.equal(playlistEmbeddingBacklog(),0);
   database.prepare('UPDATE playlist_track_evidence SET version=1 WHERE file_id=1').run();
   assert.equal(playlistEmbeddingBacklog(),1);
+});
+test('hash-only revalidation reuses an unchanged document and leaves changed music due for real embedding',()=>{
+  const first=revalidateUnchangedPlaylistEmbeddings(1);assert.equal(first.unchanged,1);assert.equal(first.changed,0);
+  database.prepare("UPDATE files SET tags_json='{\"title\":[\"A different recording\"]}' WHERE id=1").run();database.prepare('UPDATE playlist_track_embeddings SET updated_at=0 WHERE file_id=1').run();
+  const second=revalidateUnchangedPlaylistEmbeddings(1);assert.equal(second.changed,1);assert.equal(second.unchanged,0);
+  assert.equal((database.prepare('SELECT updated_at FROM playlist_track_embeddings WHERE file_id=1').get() as {updated_at:number}).updated_at,0);
 });
 test('backfill caps batches, retains profiles and yields between batches to chat',async()=>{
   for(let id=5;id<=160;id++)file(id);

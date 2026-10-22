@@ -14,9 +14,11 @@ const p=createPlaylist({name:'Techno',category:'discovery',enabled:true,ownerUse
 const releases:DiscoveryRelease[]=Array.from({length:12},(_,i):DiscoveryRelease=>({id:'verified-'+i,artistId:'artist',artist:'東京',album:'Older music '+i,releaseDate:'1999-01-01',genres:['electronic'],identityVerified:true,evidence:[{provider:'musicbrainz',url:'https://musicbrainz.org/release-group/fixture',fetchedAt:new Date().toISOString(),scope:'release',claims:{releaseGroupId:'verified-'+i,album:'Older music '+i}},{provider:'editorial',url:'https://example.com/review',fetchedAt:new Date().toISOString(),scope:'release',claims:{artist:'東京',album:'Older music '+i}}]}));
 test.beforeEach(()=>{database.exec('DELETE FROM playlist_discovery_recommendations;DELETE FROM playlist_discovery_releases;DELETE FROM state')});
 test('research continues after a provider failure and fills a bounded pool with older releases',async()=>{
-  const result=await researchDiscoveryPools([{name:'broken',load:async()=>{throw Error('Search unavailable')}},{name:'working',load:async()=>releases}]);
+  let unnecessary=0;
+  const result=await researchDiscoveryPools([{name:'broken',load:async()=>{throw Error('Search unavailable')}},{name:'working',load:async()=>releases},{name:'unneeded',load:async()=>{unnecessary++;return releases}}]);
   assert.equal(result.researched,10);assert.equal(discoveryRecommendations(p.id,1).length,10);
   assert.equal(discoveryPoolNeedsResearch(p),false);
+  assert.equal(unnecessary,0,'a full verified pool must not consume more source requests');
   assert.equal((database.prepare('SELECT count(*) n FROM playlist_discovery_admissions').get() as {n:number}).n,0,'research does not submit acquisitions');
 });
 test('an acquisition dependency outage cannot suppress independent discovery research',async()=>{

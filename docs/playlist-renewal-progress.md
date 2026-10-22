@@ -442,3 +442,30 @@ changes in the infrastructure repository. Update this record at each handoff.
   (`/private/tmp/curator-renewal-v12-{tests,build}.log`), followed by TypeScript.
   One additional inference-status regression passes. Production image and flag
   remain unchanged. No nightly comparison or production-cycle evidence yet.
+- Latest controlled rubric (`evaluation/rubric-v3-controlled.json`, compiler v8)
+  passes 38/40 (95%) versus 21/40 (52.5%) for the frozen selector: +42.5 points.
+  The unchanged fixtures retain two failures. No fixture/native track was
+  published, and this result remains conditional on its reference attributes.
+- Healthy-provider proof reached eight relevant verified releases while rejecting
+  two unrelated releases. The next refill reused cached radio/identity evidence
+  and reached ten without another request (`discovery/live-pool-v5-cache-refill.json`).
+  Simulating an owner dismissal in the private copy then replenished 9→10 using
+  cached evidence with zero network requests (`live-pool-v6-dismissal-refill.json`).
+  Production recommendations/downloads are unchanged; total proof traffic is 60.
+  Refill query size now follows the deficit, and research stops loading providers
+  once the verified active pool reaches ten. Regression tests pass.
+- A primary review identifies “Song of the Century” as a cappella, while its
+  real 57.773-second studio file's profile invents guitar/bass/drums/piano from
+  “typical band setup”. Added a source-review helper and explicit example CLI
+  bound to native identity, album, release-group and duration, with a supporting
+  track-specific quote. It preserves tags/profiles and user overrides, shares
+  the 100-track daily review cap, and invalidates only the affected vector.
+  The factual correction has not yet been applied: wait for the old isolated
+  embedding process to finish, then apply/repair the single document before the
+  final real-library replay. Source-binding/idempotency regressions pass.
+- Hash-only cache checks verified 2,815 older vectors still describe exactly the
+  current documents; one genuinely changed document remains due. No embedding
+  or provider request was issued, no profile was changed, and the real backlog
+  fell from 6,792 to 3,953 while new-document embedding continued. This avoids
+  spending model work or twenty-plus minutes on unchanged bookkeeping. A test
+  proves changed documents are never marked fresh by this utility.
