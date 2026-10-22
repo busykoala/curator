@@ -402,3 +402,18 @@ changes in the infrastructure repository. Update this record at each handoff.
   replay's exact compiled intent and listener hash, evolves hypothetical exposure
   only, and reports retained shortages, feasible rotation, locks and cooldown
   violations. It has not yet run against the final stable-index replay.
+- Primary artist credits exposed a factual error in the fixed piano reference:
+  Sonny Rollins's “St. Thomas” has Tommy Flanagan on piano. Before running the
+  quality comparison, replaced that negative example with “I'm an Old Cowhand”
+  from the explicitly piano-less Way Out West trio. The criterion is unchanged;
+  original reference and primary URLs are retained in evaluation-cases.ts.
+- Started the controlled forty-case musical-fit comparison (`rubric-v1`) against
+  live local intent compilation and the exact deployed 4177f1d selector/ordering
+  functions extracted with frozen clock and documented source/artifact hashes.
+  Both receive identical controls and reference attributes. Synthetic reference
+  IDs stay in memory and can never reach native publication. This measures fit
+  conditional on the curated reference metadata; it does not establish that
+  corresponding owned files exist or that all library profiles are accurate.
+  The real-library 24x3 replay and production quality checks remain separate.
+  A startup harness error (missing crypto import) was fixed before model cases
+  ran; no result was counted from that failed invocation.

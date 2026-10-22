@@ -30,6 +30,11 @@ export const playlistIntentCases:ReadonlyArray<{id:string;category:PlaylistCateg
 ];
 
 export type MusicalFitCase={id:string;direction:string;positive:string;negative:string;criterion:string};
+export const musicalFitReferenceCorrections=[{
+  caseId:'piano-required',originalNegative:'Sonny Rollins — St. Thomas',replacement:'Sonny Rollins — I’m an Old Cowhand (Way Out West)',
+  reason:'The original reference was factually wrong: Saxophone Colossus credits Tommy Flanagan on piano. Way Out West lists tenor saxophone, bass and drums. The piano-presence criterion is unchanged.',
+  sources:['https://sonnyrollins.com/saxophone-colossus','https://sonnyrollins.com/way-out-west'],verifiedAt:'2026-10-22',
+}] as const;
 // Musical reference examples deliberately precede selection implementation.
 // Evaluate against independently supported descriptors, not a model's opinion
 // of its own generated metadata. Missing evidence is unscored, never a pass.
@@ -47,7 +52,7 @@ export const musicalFitRubric:ReadonlyArray<MusicalFitCase>=[
   ['punk-nineties','1990s punk energy','Green Day — Basket Case','Metallica — Enter Sandman','Decade and energy do not erase a metal exclusion.'],
   ['artist-only','Only Green Day recordings','Green Day — Longview','blink-182 — All the Small Things','Similarity does not satisfy an exact artist restriction.'],
   ['instrumental-jazz','Jazz without singing or spoken word','The Dave Brubeck Quartet — Take Five','Louis Armstrong — What a Wonderful World','Track-specific vocal evidence is required.'],
-  ['piano-required','Jazz with piano as a real instrument','Thelonious Monk — ’Round Midnight','Sonny Rollins — St. Thomas','Do not invent piano from genre assumptions.'],
+  ['piano-required','Jazz with piano as a real instrument','Thelonious Monk — ’Round Midnight','Sonny Rollins — I’m an Old Cowhand (Way Out West)','Do not invent piano from genre assumptions.'],
   ['acoustic-focus','Predominantly acoustic instrumental guitar','John Fahey — Sunflower River Blues','Daft Punk — Around the World','Instrument and sound-source evidence must support the request.'],
   ['electronic-vs-electric','Guitar rock rather than electronic production','AC/DC — Back in Black','The Chemical Brothers — Hey Boy Hey Girl','Amplification alone does not mean electronic instrumentation.'],
   ['morning-indie','Playful indie for a morning commute','Belle and Sebastian — The Boy with the Arab Strap','Swans — Screen Shot','Hopeful/playful fit outranks rock-family matches.'],
