@@ -9,6 +9,11 @@ import {compilePlaylistIntent} from './intent-compiler';
 import {selectPlaylist} from './selection-policy';
 import type {PlaylistDefinition,PlaylistCandidate} from './types';
 import {chatState} from './chat-state';
+import {choosePlaylistAdditions} from './selection-agent';
+import {retrievePlaylistCandidates,type RetrievalProvider} from './retrieval';
+import {aiClient,aiModel,type CuratorAiClient} from '@/features/ai/client';
+import {recordAiUsage} from '@/features/ai/usage';
+import {playlistAttemptRecorder} from './inference-metrics';
 
 type CatalogRow={id:number;artist_name:string;album_name:string;tags_json:string;profile_json:string;jellyfin_song_id:string|null;identity_hash:string|null};
 const list=(value:unknown)=>Array.isArray(value)?value.map(String):value==null?[]:[String(value)];
@@ -55,7 +60,7 @@ export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:L
   const exposure=playlistExposure(definition.ownerUserId),boosts=discoveryTrackBoosts(definition.id,definition.ownerUserId);
   const recommendations=db().prepare(`SELECT r.id,r.genres_json,d.origin FROM playlist_discovery_recommendations d JOIN playlist_discovery_releases r ON r.id=d.release_id
     WHERE d.playlist_id=? AND d.owner_user_id=? AND d.status='ready' AND d.boost_until>CURRENT_TIMESTAMP`).all(definition.id,definition.ownerUserId) as Array<{id:string;genres_json:string;origin:string}>;
-  const pool:EvidencedCandidate[]=[];
+  const pool:EvidencedCandidate[]=[],mappings:Array<{fileId:number;hash:string;songId:string}>=[];
   for(const row of rows){
     const tags=JSON.parse(row.tags_json),title=list(tags.title)[0]??'';
     if(!title)continue;
@@ -66,6 +71,7 @@ export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:L
     // ambiguous and cannot be fixed by selecting the first matching file.
     const song=cached&&matches(cached)?cached:exact.length===1?exact[0]:undefined;
     if(!song)continue;
+    if(!cached||cached.id!==song.id)mappings.push({fileId:row.id,hash:identityHash(title,row.artist_name,row.album_name),songId:song.id});
     const evidence=playlistTrackEvidence(row.id);if(!evidence)continue;
     const history=exposure.get(evidence.recordingKey);
     const groupId=Object.entries(tags).find(([key])=>key.toLowerCase().replace(/[^a-z]/g,'')==='musicbrainzreleasegroupid')?.[1];
@@ -79,17 +85,25 @@ export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:L
       adjacent:recommendation?.origin==='listenbrainz-adjacent',
     });
   }
+  db().transaction(()=>{
+    const insert=db().prepare(`INSERT INTO navidrome_track_map(file_id,song_id,identity_hash,jellyfin_song_id) VALUES(?,'',?,?)
+      ON CONFLICT(file_id) DO UPDATE SET song_id=CASE WHEN identity_hash=excluded.identity_hash THEN song_id ELSE '' END,
+      identity_hash=excluded.identity_hash,jellyfin_song_id=excluded.jellyfin_song_id,verified_at=CURRENT_TIMESTAMP`);
+    for(const mapping of mappings)insert.run(mapping.fileId,mapping.hash,mapping.songId);
+  })();
   return pool;
 }
 
-export async function generateIntentSelection(definition:PlaylistDefinition){
-  const started=Date.now(),snapshot=await listenerMusicSnapshot(definition.ownerUserId);
+export async function generateIntentSelection(definition:PlaylistDefinition,options:{client?:Pick<CuratorAiClient,'structured'>;provider?:RetrievalProvider;signal?:AbortSignal}={}){
+  const started=Date.now(),deadline=AbortSignal.timeout(240_000),signal=options.signal?AbortSignal.any([options.signal,deadline]):deadline;
+  const snapshot=await listenerMusicSnapshot(definition.ownerUserId);
   if(!snapshot.available||/must sign in|\b401\b/i.test(snapshot.error))throw Error(snapshot.error||'A complete listening snapshot is not available yet');
   const pool=loadEvidencedCandidates(definition,snapshot);
   const priorIds=previousSelectionIds(definition.id),chat=definition.category==='chat'?chatState(definition.id).result:null;
   const currentIds=priorIds.length?priorIds:chat?.items.map(track=>track.fileId)??[];
   const current=currentIds.flatMap(id=>{const track=pool.find(item=>item.fileId===id);return track?[track]:[]});
-  const compiled=await compilePlaylistIntent(definition,current);
+  signal.throwIfAborted();
+  const compiled=await compilePlaylistIntent(definition,current,{client:options.client,signal});
   const feedback=db().prepare(`SELECT file_id,artist,action FROM playlist_feedback WHERE owner_user_id=? AND (playlist_id=? OR playlist_id IS NULL)
     AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)`).all(definition.ownerUserId,definition.id) as Array<{file_id:number;artist:string;action:string}>;
   const excluded=new Set(feedback.filter(row=>row.action==='exclude'||row.action==='snooze').map(row=>row.file_id));
@@ -106,8 +120,45 @@ export async function generateIntentSelection(definition:PlaylistDefinition){
     const representative=[...tracks].filter(track=>assessCandidate(track,definition,compiled.intent,snapshot).eligible).sort((a,b)=>assessCandidate({...b,discoveryBoost:0},definition,compiled.intent,snapshot).score-assessCandidate({...a,discoveryBoost:0},definition,compiled.intent,snapshot).score)[0];
     for(const track of tracks)if(track!==representative){track.discoveryBoost=0;track.origin='catalog'}
   }
-  const selected=selectPlaylist({definition,intent:compiled.intent,pool:pool.filter(track=>!excludedKeys.has(track.evidence.recordingKey)),previous:current,snapshot});
-  return{...selected,intent:compiled.intent,detail:{selectionVersion:1,evaluation:selected.evaluation,intent:compiled.detail,listener:{complete:snapshot.complete,stale:snapshot.stale,capturedAt:snapshot.capturedAt,error:snapshot.error},latencyMs:Date.now()-started}};
+  const available=pool.filter(track=>!excludedKeys.has(track.evidence.recordingKey));
+  let selected=selectPlaylist({definition,intent:compiled.intent,pool:available,previous:current,snapshot});
+  const previousKeys=new Set(current.map(track=>track.evidence.recordingKey));
+  const lockedIds=new Set([...compiled.intent.pinnedRecordings.map(pin=>pin.fileId),...compiled.intent.positionLocks.map(lock=>lock.fileId)]);
+  const fixed=selected.items.filter(track=>track.retained||lockedIds.has(track.fileId));
+  const proposed=selected.items.filter(track=>!fixed.some(kept=>kept.fileId===track.fileId));
+  const aiDetails:Array<Record<string,unknown>>=[];
+  let retrievalDetail:Record<string,unknown>|null=null;
+  if(!selected.evaluation.shortage&&!selected.evaluation.violations.length&&proposed.length){
+    const fixedKeys=new Set(fixed.map(track=>track.evidence.recordingKey)),canonical=new Map<string,EvidencedCandidate>();
+    for(const track of available){
+      if(previousKeys.has(track.evidence.recordingKey)||fixedKeys.has(track.evidence.recordingKey)||track.removedAt&&Date.now()-track.removedAt<14*86400_000)continue;
+      const assessment=assessCandidate(track,definition,compiled.intent,snapshot);
+      if(assessment.eligible&&!canonical.has(track.evidence.recordingKey))canonical.set(track.evidence.recordingKey,{...track,score:assessment.score,reason:assessment.reasons.join(' · ')});
+    }
+    const retrieved=await retrievePlaylistCandidates(compiled.intent.summary+'\n'+JSON.stringify(compiled.intent.soft),[...canonical.values()],{provider:options.provider,signal,mandatoryIds:proposed.map(track=>track.fileId)});
+    retrievalDetail=retrieved.detail;
+    const chosen:EvidencedCandidate[]=[],repairBudget={remaining:1},chunks=Math.ceil(proposed.length/60);
+    for(let chunk=0;chunk<chunks;chunk++){
+      signal.throwIfAborted();
+      const required=proposed.slice(chunk*60,chunk*60+60),requiredIds=new Set(required.map(track=>track.fileId)),used=new Set(chosen.map(track=>track.fileId));
+      const candidates=[...required,...retrieved.candidates.filter(track=>!requiredIds.has(track.fileId)&&!used.has(track.fileId))].slice(0,60);
+      const result=await choosePlaylistAdditions({client:options.client??aiClient,intent:compiled.intent,candidates,target:required.length,
+        adjacentTarget:definition.category==='discovery'?required.filter(track=>track.adjacent).length:undefined,
+        listenerContext:{complete:snapshot.complete,stale:snapshot.stale,capturedAt:snapshot.capturedAt,observedSongs:snapshot.songs.length},
+        retainedArtists:[...new Set([...fixed,...chosen].map(track=>track.artist))],signal,
+        maxToolTurns:Math.floor(6/chunks),maxToolCalls:Math.floor(12/chunks),repairBudget,onAttempt:playlistAttemptRecorder(definition,'selection'),
+      });
+      recordAiUsage('playlist_selection',aiModel,result.detail);aiDetails.push(result.detail);chosen.push(...result.items);
+    }
+    const final=selectPlaylist({definition,intent:compiled.intent,pool:[...fixed,...chosen],previous:current,snapshot});
+    final.evaluation.eligible=selected.evaluation.eligible;
+    final.evaluation.relaxations=[...new Set([...selected.evaluation.relaxations,...final.evaluation.relaxations])];
+    if(final.evaluation.shortage||final.evaluation.violations.length)throw Error('AI selection failed final count, constraint or ordering validation; retained the previous mix');
+    selected=final;
+    const reasons=new Map(chosen.map(track=>[track.fileId,track.reason]));for(const item of selected.items)if(reasons.has(item.fileId))item.reason=reasons.get(item.fileId)!;
+  }
+  signal.throwIfAborted();
+  return{...selected,intent:compiled.intent,detail:{selectionVersion:1,evaluation:selected.evaluation,intent:compiled.detail,retrieval:retrievalDetail,ai:aiDetails,listener:{complete:snapshot.complete,stale:snapshot.stale,capturedAt:snapshot.capturedAt,error:snapshot.error},latencyMs:Date.now()-started}};
 }
 
 // Called in the local publication transaction only after native verification.

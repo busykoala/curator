@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { db } from "@/features/db/client";
 import {
   definitionInputSchema,
@@ -6,6 +5,7 @@ import {
   type PlaylistDefinition,
 } from "./types";
 import { nextZurichRunSql } from "./schedule-time";
+import {playlistRevisionHash} from './refresh-policy';
 
 type Row = {
   id: number;
@@ -248,7 +248,7 @@ export function playlistSnapshot(id: number) {
       run?.preview &&
         definition &&
         run.config_hash !==
-          createHash("sha256").update(JSON.stringify(definition)).digest("hex"),
+          playlistRevisionHash(definition),
     ),
   };
 }

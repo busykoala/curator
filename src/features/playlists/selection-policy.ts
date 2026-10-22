@@ -44,7 +44,7 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
   const identity=norm(`${track.artist} ${track.album} ${track.title}`);
   if(hard.exclusions.some(term=>matches(term,[identity,...semantic])))violations.push('Explicit exclusion');
   const vocal=evidenceValues(track,'vocalProfile').map(norm),instrumental=vocal.some(v=>v==='instrumental'||v==='no vocals');
-  const hasVoice=vocal.some(v=>/spoken|rap|sung|vocal|chant|choir|sing/.test(v)&&v!=='no vocals')||track.evidence.fields.vocalPresence?.value===true;
+  const hasVoice=vocal.some(v=>!['instrumental','no vocals','unknown','none'].includes(v))||track.evidence.fields.vocalPresence?.value===true;
   if(hard.vocal==='instrumental'&&(!instrumental||hasVoice))violations.push('Instrumental requirement lacks consistent track evidence');
   if(hard.vocal==='vocals'&&!hasVoice)violations.push('Required vocals');
   const versions=evidenceValues(track,'recordingTypes').map(norm),live=versions.some(v=>v==='live'||v==='live recording')||/\b(live|concert)\b/.test(norm(track.title));

@@ -2,10 +2,15 @@ import {pollPlaylistRefreshSchedule,runNextRefreshJob} from '@/features/playlist
 import {runDiscoveryMaintenance} from '@/features/playlists/discovery-research';
 import {playlistRefreshMode} from '@/features/playlists/refresh-jobs';
 import {seedMetadataReviews,runMetadataReviews} from '@/features/playlists/metadata-review';
+import {preparePlaylistEmbeddings} from '@/features/playlists/retrieval';
 
 let stopping=false;
 const tick=()=>{try{pollPlaylistRefreshSchedule()}catch(error){console.error(JSON.stringify({event:'playlist_refresh_schedule_error',error:String(error)}))}};
-tick();const timer=setInterval(tick,60_000);
+let embedding=false;
+const embed=()=>{if(!embedding&&playlistRefreshMode()!=='off'){
+  embedding=true;void preparePlaylistEmbeddings().catch(error=>console.error(JSON.stringify({event:'playlist_embeddings_error',error:String(error)}))).finally(()=>{embedding=false});
+}};
+tick();const timer=setInterval(()=>{tick();embed()},60_000);
 let maintaining=false;
 const research=setInterval(()=>{if(!maintaining&&(playlistRefreshMode()==='enabled'||playlistRefreshMode()==='canary')){
   maintaining=true;void runDiscoveryMaintenance().then(()=>{seedMetadataReviews();return runMetadataReviews()}).catch(error=>console.error(String(error))).finally(()=>{maintaining=false});

@@ -245,6 +245,24 @@ function migrate(instance: Database.Database) {
       PRIMARY KEY(run_id,file_id));
     CREATE INDEX IF NOT EXISTS playlist_exposure_owner ON playlist_exposure(owner_user_id,recording_key,exposed_at);
   `));
+  migration(19,()=>instance.exec(`
+    CREATE TABLE IF NOT EXISTS playlist_track_embeddings(
+      file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,model_version TEXT NOT NULL,
+      content_hash TEXT NOT NULL,vector BLOB NOT NULL,dimensions INTEGER NOT NULL,updated_at INTEGER NOT NULL,
+      PRIMARY KEY(file_id,model_version));
+    CREATE TABLE IF NOT EXISTS playlist_query_embeddings(
+      content_hash TEXT NOT NULL,model_version TEXT NOT NULL,vector BLOB NOT NULL,dimensions INTEGER NOT NULL,updated_at INTEGER NOT NULL,
+      PRIMARY KEY(content_hash,model_version));
+    CREATE TABLE IF NOT EXISTS playlist_ai_attempts(
+      id INTEGER PRIMARY KEY,playlist_id INTEGER REFERENCES smart_playlists(id) ON DELETE SET NULL,
+      owner_user_id INTEGER REFERENCES curator_users(id) ON DELETE CASCADE,purpose TEXT NOT NULL,model TEXT NOT NULL,
+      status TEXT NOT NULL,http_status INTEGER,duration_ms INTEGER NOT NULL,usage_json TEXT,error TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS playlist_inference_queue(
+      id TEXT PRIMARY KEY,priority TEXT NOT NULL,created_at INTEGER NOT NULL,expires_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS playlist_inference_slot(
+      id INTEGER PRIMARY KEY CHECK(id=1),lease_token TEXT,lease_until INTEGER NOT NULL DEFAULT 0);
+  `));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

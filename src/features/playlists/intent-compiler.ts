@@ -9,6 +9,7 @@ import {chatState} from './chat-state';
 import {canonicalIntent,configuredIntent,playlistIntentSchema,type PlaylistIntent} from './intent-schema';
 import type {EvidencedCandidate} from './selection-policy';
 import type {PlaylistDefinition} from './types';
+import {playlistAttemptRecorder} from './inference-metrics';
 
 const compilerVersion=1;
 const compiledSchema=playlistIntentSchema.omit({version:true,sourceRevision:true,pinnedRecordings:true}).extend({
@@ -40,7 +41,7 @@ ${canonicalPrompt}`,
         conversation:chat?.messages.filter(message=>message.role==='user').slice(-16),
         current:current.map(track=>({fileId:track.fileId,title:track.title,artist:track.artist,vocalProfile:track.evidence.fields.vocalProfile?.value})),
       }),
-      schemaName:'playlist_intent',schema:z.toJSONSchema(compiledSchema),maxOutputTokens:3500,signal:options.signal??AbortSignal.timeout(90_000),
+      schemaName:'playlist_intent',schema:z.toJSONSchema(compiledSchema),maxOutputTokens:3500,signal:options.signal??AbortSignal.timeout(90_000),onAttempt:playlistAttemptRecorder(definition,'intent'),
     });
     recordAiUsage('playlist_intent',aiModel,output);
     const compiled=compiledSchema.parse(output.data);

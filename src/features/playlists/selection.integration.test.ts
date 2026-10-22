@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {config} from '@/config';
 import {db,stateSet} from '@/features/db/client';
 import {provisionUser} from '@/features/auth/navidrome';
-import {createPlaylist,getPlaylist} from './repository';
+import {createPlaylist,getPlaylist,playlistSnapshot} from './repository';
 import {generatePlaylist,savePlaylistPreview} from './generate';
 import {recordPlaylistExposure,loadEvidencedCandidates} from './selection-repository';
 import {compilePlaylistIntent} from './intent-compiler';
@@ -14,6 +14,7 @@ import {configuredIntent} from './intent-schema';
 import type {StructuredRequest} from '@/features/ai/client';
 import {acquireChatLease,releaseChatLease,storeRefreshedChatSelection,chatState} from './chat-state';
 import {unrestrictedRequirements} from './chat-agent';
+import {aiClient} from '@/features/ai/client';
 
 const directory=mkdtempSync(join(tmpdir(),'curator-selection-integration-'));config.DATABASE_PATH=join(directory,'db.sqlite');
 const database=db(),user=provisionUser({token:'listener-one',navidromeUserId:'one',username:'one',displayName:'One'}),other=provisionUser({token:'listener-two',navidromeUserId:'two',username:'two',displayName:'Two'});
@@ -23,11 +24,22 @@ for(let id=1;id<=8;id++){
   database.prepare("INSERT INTO files(id,path,album_key,artist_name,album_name,format,inode,link_count,size,mtime_ms,tags_json,properties_json,artwork_json,status) VALUES(?,?,?, ?,?,'flac',?,1,1,1,?,'{}','{}','written')").run(id,'/music/'+id,'album'+id,'Artist '+id,'Album '+id,id,JSON.stringify(tags));
   database.prepare("INSERT INTO track_profiles(file_id,album_key,status,profile_json,source_fingerprint,audio_fingerprint,schema_version,classifier_version,source_updated_at) VALUES(?,?,'complete',?,'fixture','fixture',1,1,CURRENT_TIMESTAMP)").run(id,'album'+id,JSON.stringify(profile));
 }
-const original=globalThis.fetch;
+const original=globalThis.fetch,originalStructured=aiClient.structured;
 test.before(()=>{
   stateSet('playlist_refresh_mode','enabled');
+  aiClient.structured=async<T>(request:StructuredRequest)=>{
+    assert.equal(request.schemaName,'playlist_additions');
+    const input=JSON.parse(request.input);
+    await request.tools?.find(tool=>tool.name==='get_listener_context')?.execute({});
+    const page=await request.tools?.find(tool=>tool.name==='search_library')?.execute({query:'',offset:0,limit:20}) as {tracks:Array<{fileId:number}>}|undefined;
+    const candidates=page?.tracks??input.candidates,target=input.requestedAdditions??input.target;
+    return{data:{summary:'Warm jazz',tracks:candidates.slice(0,target).map((track:{fileId:number})=>({fileId:track.fileId,focus:'genre'}))} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}};
+  };
   globalThis.fetch=async(url,options)=>{
-    const query=new URL(String(url));assert.equal(options?.method??'GET','GET','Selection must never publish during a preview');
+    const query=new URL(String(url));
+    if(query.pathname.endsWith('/embeddings'))return Response.json({data:[{index:0,embedding:Array.from({length:1024},(_,i)=>i===0?1:0)}]});
+    if(query.pathname.endsWith('/rerank'))return Response.json(JSON.parse(String(options?.body)).texts.map((_:string,index:number)=>({index,score:-index})));
+    assert.equal(options?.method??'GET','GET','Selection must never publish during a preview');
     assert.equal(query.searchParams.get('IncludeItemTypes'),'Audio');
     const token=new Headers(options?.headers).get('X-Emby-Token'),ids=token==='listener-one'?[1,2,3,4]:[5,6,7,8];
     return Response.json({Items:ids.map(id=>({Id:'native-'+id,Name:'Song '+id,Artists:['Artist '+id],Album:'Album '+id,UserData:{PlayCount:0,Played:false,IsFavorite:false}})),TotalRecordCount:ids.length});
@@ -39,6 +51,7 @@ test('same-name owner playlists use their own visible song IDs and never write e
   assert.ok(one.items.every(item=>item.fileId<=4));assert.ok(two.items.every(item=>item.fileId>=5&&item.fileId!==8));
   assert.equal((database.prepare('SELECT count(*) n FROM playlist_exposure').get() as {n:number}).n,0);
   assert.equal(one.detail.tracks,2);
+  assert.equal(playlistSnapshot(playlist.id).stale,false);
 });
 test('exposure is idempotent, owner-specific and records removed recordings only after publication',()=>{
   const makeRun=(p:typeof playlist)=>database.prepare("INSERT INTO playlist_runs(playlist_id,owner_user_id,config_hash,status,preview) VALUES(?,?,'fixture','complete',0) RETURNING id").get(p.id,p.ownerUserId) as {id:number};
@@ -79,4 +92,4 @@ test('nightly chat results retain real conversation and saved strict corrections
   storeRefreshedChatSelection(chat.id,lease,[]);releaseChatLease(chat.id,lease);
   assert.deepEqual(chatState(chat.id).messages,messages);assert.equal(chatState(chat.id).result?.guidance,result.guidance);assert.equal(chatState(chat.id).revision,2);
 });
-test.after(()=>{globalThis.fetch=original;database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});
+test.after(()=>{globalThis.fetch=original;aiClient.structured=originalStructured;database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

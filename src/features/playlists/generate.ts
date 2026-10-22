@@ -455,6 +455,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
       origin: string;
       reason: string;
       retained: number;
+      navidrome_song_id:string|null;
     }>;
     const preferences = activeFeedback(id);
     if (
@@ -491,6 +492,8 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
       for(const item of items){
         const track=byId.get(item.fileId);
         if(!track||!assessCandidate(track,definition,intent,snapshot).eligible)throw Error('Track evidence or availability changed; kept the previous mix');
+        const proposed=rows.find(row=>row.file_id===item.fileId)?.navidrome_song_id;
+        if(proposed&&proposed!==track.songId)throw Error('A proposed native song identity changed; generate a fresh preview');
       }
     }
     if (items.length < definition.config.targetTracks)

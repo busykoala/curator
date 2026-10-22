@@ -100,8 +100,7 @@ changes in the infrastructure repository. Update this record at each handoff.
 - Package G transport now caps a request at four minutes, six tool rounds and
   12 calls, stops identical calls, honours Retry-After and exposes every HTTP
   attempt's timing/usage (including failures). Seven transport tests pass.
-  Full checkpoint: 177 tests and production/worker build passed. The transport
-  implementation still needs durable attempt accounting and inference priority.
+  Earlier checkpoint: 177 tests and production/worker build passed.
 - Read-only live route probes on 2026-10-22 confirmed the current `curator`
   alias is Qwen3.8-27B (revision `4ca720788d1e01f1bff70c033e0d0028fd02e502`),
   98,304-token context; embedding returned 1,024 dimensions in 46 ms; reranking
@@ -113,9 +112,27 @@ changes in the infrastructure repository. Update this record at each handoff.
   Identity changes invalidate facts, and the import watermark preserves gaps.
   Full tests 159/159, TypeScript and production build passed. External facts and
   actual musical accuracy still require runtime/evaluation verification.
-- Implement F and G fully: compiled intent, per-type ranking, exposure/rotation,
-  representative discovery tracks, actual chat nightly changes, local retrieval,
-  reranking, validated bounded tools/repair, interactive inference priority.
+- Package G now connects cached 1,024-dimensional track/query embeddings,
+  120-candidate hybrid retrieval, eight-document reranker batches, and at most
+  60 visible candidates per generative batch. Initial selections above 60 songs
+  use two batches sharing six rounds/12 calls, one repair and a four-minute
+  overall deadline. Added five typed read-only tools, code validation and
+  evidence-built song explanations. The background embedding fill is capped at
+  128 tracks/minute and yields between batches to chat; profiles stay intact.
+  Cross-process inference leases serialize background generation and preempt it
+  for interactive requests. A regression specifically prevents deadlock when
+  queued chat waits for a playlist mutation lease. HTTP attempts, failed-call
+  usage/latency and unknown usage are persisted separately. Interactive chat
+  uses canonical evidence/recording keys when its playlist is enabled for the
+  rollout. Full suite 191/191, TypeScript and production build passed; final
+  context-budget/native-identity guards also passed targeted tests/TypeScript.
+- Finish operational/status UI, owner-scoped background refresh/retry and
+  discovery dismissal; fix existing snapshot staleness to use the stable
+  revision hash (implemented, regression passing).
+- Run live end-to-end provider checks and model replays. Verify retrieval cache
+  model revisions against deployment; inspect actual candidate counts, musical
+  fit and timings, and iterate. Synthetic tests and route smoke probes do not
+  satisfy the 24×3 replay or 40-case quality gates.
 - Finish owner-scoped status/retry/dismiss/evidence UI and perform all stated
   live evaluations, simulations and quality gates. Current passing tests prove
   foundations only. Provider adapters still need live end-to-end validation.

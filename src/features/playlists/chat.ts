@@ -7,6 +7,9 @@ import { acquireChatLease, chatState, releaseChatLease, storeChatResult } from "
 import { getPlaylist, updatePlaylist } from "./repository";
 import { generatePlaylist } from "./generate";
 import { chatRequestSchema } from "./chat-request";
+import {playlistAttemptRecorder} from './inference-metrics';
+import {refreshManaged} from './refresh-jobs';
+import {playlistTrackEvidence} from './evidence-repository';
 export { chatRequestSchema } from "./chat-request";
 
 export function chatLibrary(id:number):LibraryTrack[]{
@@ -16,7 +19,8 @@ export function chatLibrary(id:number):LibraryTrack[]{
   const rows=db().prepare("SELECT f.id,f.artist_name,f.album_name,f.tags_json,coalesce(p.profile_json,'{}') profile_json FROM files f LEFT JOIN track_profiles p ON p.file_id=f.id AND p.status='complete' WHERE f.status='written'").all() as Array<{id:number;artist_name:string;album_name:string;tags_json:string;profile_json:string}>;
   return rows.filter(row=>!excluded.has(row.id)&&!artists.has(norm(row.artist_name))).map(row=>{
     const tags=JSON.parse(row.tags_json), date=Array.isArray(tags.date)?tags.date[0]:tags.date??tags.year??0;
-    return {fileId:row.id,title:String(Array.isArray(tags.title)?tags.title[0]:tags.title??"Untitled"),artist:row.artist_name,album:row.album_name,year:Number(String(date).slice(0,4))||0,profile:JSON.parse(row.profile_json),tags,score:0,reason:"",origin:"catalog"};
+    const evidence=refreshManaged(id)?playlistTrackEvidence(row.id):null;
+    return {fileId:row.id,title:String(Array.isArray(tags.title)?tags.title[0]:tags.title??"Untitled"),artist:row.artist_name,album:row.album_name,year:evidence?evidence.originalYear??0:Number(String(date).slice(0,4))||0,profile:evidence?Object.fromEntries(Object.entries(evidence.fields).map(([key,field])=>[key,field.value])):JSON.parse(row.profile_json),...(evidence?{evidence}:{}),tags,score:0,reason:"",origin:"catalog"};
   });
 }
 export async function sendPlaylistMessage(id:number,raw:unknown,job?:{lease:string;stored:()=>void}){
@@ -27,7 +31,7 @@ export async function sendPlaylistMessage(id:number,raw:unknown,job?:{lease:stri
   try{
     const state=chatState(id);
     if(request.revision!==state.revision)throw new Error("This conversation has changed. Reopen the playlist and retry.");
-    const result=await suggestChatPlaylist({client:aiClient,library:chatLibrary(id),messages:state.messages,message:request.message,targetTracks:request.targetTracks,current:state.result?.items??[],guidance:state.result?.guidance,priorRequirements:state.result?.detail.requirements,name:state.result?definition.name:undefined});
+    const result=await suggestChatPlaylist({client:aiClient,library:chatLibrary(id),messages:state.messages,message:request.message,targetTracks:request.targetTracks,current:state.result?.items??[],guidance:state.result?.guidance,priorRequirements:state.result?.detail.requirements,name:state.result?definition.name:undefined,onAttempt:playlistAttemptRecorder(definition,'chat')});
     recordAiUsage("playlist_chat",aiModel,{usage:result.detail.usage});
     const messages=[...state.messages,{role:"user" as const,content:request.message},{role:"assistant" as const,content:result.reply}];
     db().transaction(()=>{
