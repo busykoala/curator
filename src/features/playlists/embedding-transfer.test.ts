@@ -1,0 +1,26 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import Database from 'better-sqlite3';
+import {config} from '@/config';
+import {db} from '@/features/db/client';
+import {exportPlaylistEmbeddingCache,importPlaylistEmbeddingCache} from './embedding-transfer';
+import {playlistTrackEvidence} from './evidence-repository';
+import {canonicalTrackDescription,storeTrackEmbeddings} from './retrieval';
+const directory=mkdtempSync(join(tmpdir(),'curator-vector-transfer-'));config.DATABASE_PATH=join(directory,'db.sqlite');const database=db();
+test('vector transfer contains no listener data and validates content, model and numerical shape before import',()=>{
+  database.exec(`INSERT INTO files(id,path,album_key,artist_name,album_name,format,inode,link_count,size,mtime_ms,tags_json,properties_json,artwork_json,status) VALUES(1,'/one','one','Artist','Album','flac',1,1,1,1,'{"title":["Song"]}','{}','{}','written');
+    INSERT INTO track_profiles(file_id,album_key,status,profile_json,source_fingerprint,audio_fingerprint,schema_version,classifier_version,source_updated_at) VALUES(1,'one','complete','{"genre":["jazz"]}','fixture','fixture',1,1,CURRENT_TIMESTAMP);`);
+  const description=canonicalTrackDescription({artist:'Artist',album:'Album',title:'Song'},playlistTrackEvidence(1)!);
+  storeTrackEmbeddings([{fileId:1,description}],[Array.from({length:1024},(_,i)=>i===0?1:0)]);
+  const path=join(directory,'vectors.sqlite');assert.equal(exportPlaylistEmbeddingCache(path).exported,1);
+  const source=new Database(path);assert.deepEqual(source.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all(),[{name:'manifest'},{name:'vectors'}]);
+  database.exec('DELETE FROM playlist_track_embeddings');assert.equal(importPlaylistEmbeddingCache(path).imported,1);assert.equal(importPlaylistEmbeddingCache(path).alreadyPresent,1);
+  database.exec('DELETE FROM playlist_track_embeddings');database.exec("UPDATE files SET tags_json='{\"title\":[\"Changed\"]}' WHERE id=1");assert.equal(importPlaylistEmbeddingCache(path).skipped,1);
+  database.exec("UPDATE files SET tags_json='{\"title\":[\"Song\"]}' WHERE id=1");source.exec("UPDATE vectors SET vector=x'0000'");assert.equal(importPlaylistEmbeddingCache(path).skipped,1);
+  source.exec("UPDATE manifest SET model_version='different-model'");assert.throws(()=>importPlaylistEmbeddingCache(path),/incompatible/);source.close();
+  assert.equal((database.prepare('SELECT count(*) n FROM playlist_track_embeddings').get() as {n:number}).n,0);
+});
+test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

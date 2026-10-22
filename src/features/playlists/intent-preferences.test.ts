@@ -20,3 +20,9 @@ test('invented quotes and a mandatory instruction in a different sentence cannot
     assert.deepEqual(intent.hard.requirements,[]);assert.deepEqual(intent.soft.moods,['serene']);
   }
 });
+test('a speech exclusion uses vocal evidence without excluding instrumental musical interludes',()=>{
+  const intent=base();intent.hard.requirements=[{field:'recordingTypes',values:['spoken_interlude','live_recording'],match:'none'}];
+  const canonical=canonicalIntent(intent);
+  assert.deepEqual(canonical.hard.requirements,[{field:'recordingTypes',values:['live_recording'],match:'none'},{field:'vocalProfile',values:['spoken'],match:'none'}]);
+  const allInterludes=base();allInterludes.hard.requirements=[{field:'recordingTypes',values:['interlude'],match:'none'}];assert.deepEqual(canonicalIntent(allInterludes).hard.requirements,allInterludes.hard.requirements);
+});

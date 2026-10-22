@@ -1,9 +1,12 @@
-import {randomUUID} from 'node:crypto';
-import {db,stateGet} from '@/features/db/client';
+import {randomUUID,createHash} from 'node:crypto';
+import {db,stateGet,stateSet} from '@/features/db/client';
+import {config} from '@/config';
 import {latestScheduledDate,scheduledDateInstant,isAuthenticationFailure,refreshRetryDelays,type PlaylistRefreshMode} from './refresh-policy';
 import {getPlaylist} from './repository';
 
 export const refreshLeaseMs=10*60_000;
+const inferenceAuthentication=(error:string)=>isAuthenticationFailure(error)&&/local AI|inference/i.test(error);
+const inferenceCredentialsRevision=()=>createHash('sha256').update(JSON.stringify([config.CURATOR_AI_BASE_URL,config.CURATOR_AI_MODEL,config.CURATOR_AI_API_KEY])).digest('hex');
 export type PlaylistRefreshJob={id:string;playlist_id:number;owner_user_id:number;scheduled_date:string;kind:string;revision:number;mode:string;status:string;phase:string;attempts:number;next_attempt_at:number;lease_token:string|null;lease_until:number;run_id:number|null;error:string;result_json:string};
 export function playlistRefreshMode():PlaylistRefreshMode{
   const mode=stateGet('playlist_refresh_mode','off');
@@ -41,8 +44,11 @@ export function claimRefreshJob(now=Date.now()):PlaylistRefreshJob|null{
     // until it can verify/roll back; its revision is fenced at the native API.
     db().prepare("UPDATE playlist_refresh_jobs SET status='superseded',updated_at=? WHERE status IN ('queued','retry','auth_wait') AND NOT EXISTS (SELECT 1 FROM smart_playlists p WHERE p.id=playlist_id AND (p.enabled=1 OR kind LIKE 'manual:%') AND p.revision=playlist_refresh_jobs.revision AND p.owner_user_id=playlist_refresh_jobs.owner_user_id)").run(now);
     db().prepare("UPDATE playlist_refresh_jobs SET status='retry',lease_token=NULL,lease_until=0,updated_at=? WHERE status='running' AND lease_until<=?").run(now,now);
-    const auth=db().prepare("SELECT j.id,p.owner_user_id FROM playlist_refresh_jobs j JOIN smart_playlists p ON p.id=j.playlist_id JOIN curator_users u ON u.id=p.owner_user_id WHERE j.status='auth_wait' AND u.token_status='active' AND u.last_seen_at>datetime(j.updated_at/1000,'unixepoch')").all() as Array<{id:string}>;
-    for(const j of auth)db().prepare("UPDATE playlist_refresh_jobs SET status='retry',next_attempt_at=0 WHERE id=?").run(j.id);
+    const auth=db().prepare("SELECT j.id,j.error,u.token_status,u.last_seen_at>datetime(j.updated_at/1000,'unixepoch') renewed FROM playlist_refresh_jobs j JOIN smart_playlists p ON p.id=j.playlist_id JOIN curator_users u ON u.id=p.owner_user_id WHERE j.status='auth_wait'").all() as Array<{id:string;error:string;token_status:string;renewed:number}>;
+    for(const j of auth){
+      const renewed=inferenceAuthentication(j.error)?stateGet('playlist_refresh_inference_auth:'+j.id)!==inferenceCredentialsRevision():j.token_status==='active'&&j.renewed;
+      if(renewed)db().prepare("UPDATE playlist_refresh_jobs SET status='retry',next_attempt_at=0 WHERE id=?").run(j.id);
+    }
     // Interactive work and any active mutation lease take priority.
     const row=db().prepare(`SELECT j.* FROM playlist_refresh_jobs j WHERE j.status IN ('queued','retry') AND j.next_attempt_at<=?
       AND NOT EXISTS (SELECT 1 FROM playlist_chat_jobs c WHERE c.playlist_id=j.playlist_id AND c.status IN ('queued','running'))
@@ -96,6 +102,10 @@ export function finishRefreshJob(job:PlaylistRefreshJob,result:Record<string,unk
   let status=error?(isAuthenticationFailure(error)?'auth_wait':'failed'):'completed',next=0;
   if(/superseded|settings changed/i.test(error))status='superseded';
   else if(error&&status!=='auth_wait'&&job.attempts<=refreshRetryDelays.length){status='retry';next=now+refreshRetryDelays[job.attempts-1]}
-  return db().prepare("UPDATE playlist_refresh_jobs SET status=?,next_attempt_at=?,result_json=?,error=?,lease_token=NULL,lease_until=0,updated_at=? WHERE id=? AND status='running' AND lease_token=? AND lease_until>?")
-    .run(status,next,JSON.stringify(result),error,now,job.id,job.lease_token,now).changes>0;
+  return db().transaction(()=>{
+    const changed=db().prepare("UPDATE playlist_refresh_jobs SET status=?,next_attempt_at=?,result_json=?,error=?,lease_token=NULL,lease_until=0,updated_at=? WHERE id=? AND status='running' AND lease_token=? AND lease_until>?")
+      .run(status,next,JSON.stringify(result),error,now,job.id,job.lease_token,now).changes>0;
+    if(changed&&status==='auth_wait'&&inferenceAuthentication(error))stateSet('playlist_refresh_inference_auth:'+job.id,inferenceCredentialsRevision());
+    return changed;
+  }).immediate();
 }

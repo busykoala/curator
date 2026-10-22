@@ -44,6 +44,15 @@ export function canonicalIntent(intent:PlaylistIntent):PlaylistIntent{
     // silently weaken an explicit musical requirement.
     values:[...new Set(rule.values.map(value=>canonicalSemanticValue(rule.field==='genre'?'style':rule.field,value)))],
   }));
+  result.hard.requirements=result.hard.requirements.flatMap(rule=>{
+    if(rule.field!=='recordingTypes'||rule.match!=='none')return[rule];
+    const spoken=rule.values.filter(value=>['spoken_interlude','spoken_piece','spoken_word'].includes(value));
+    if(!spoken.length)return[rule];
+    const other=rule.values.filter(value=>!spoken.includes(value));
+    // Speaking is a vocal property. A song's missing edition/type tag must
+    // neither prove it contains speech nor override positive vocal evidence.
+    return[...(other.length?[{...rule,values:other}]:[]),{field:'vocalProfile' as const,values:['spoken'],match:'none' as const}];
+  });
   for(const key of ['styles','moods','contexts'] as const){
     const field=key==='styles'?'style':key==='moods'?'mood':'listeningContexts';
     result.soft[key]=[...new Set(result.soft[key].map(value=>canonicalSemanticValue(field,value)))];

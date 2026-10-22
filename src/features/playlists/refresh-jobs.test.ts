@@ -59,6 +59,14 @@ test('all retry delays are persisted; authentication waits for new credentials',
   const auth=claimRefreshJob(at.getTime())!;finishRefreshJob(auth,{},'Playlist owner must sign in to Navidrome again',at.getTime());
   assert.equal((database.prepare('SELECT status FROM playlist_refresh_jobs').get() as {status:string}).status,'auth_wait');
 });
+test('an inference authentication failure waits for model credentials, not an unrelated listener login',()=>{
+  scheduleRefreshJobs(at);const now=at.getTime(),job=claimRefreshJob(now)!;
+  finishRefreshJob(job,{},'Local AI request failed (401): unauthorized',now);
+  database.prepare("UPDATE curator_users SET token_status='active',last_seen_at='2026-10-25 12:00:00' WHERE id=1").run();
+  assert.equal(claimRefreshJob(now+1000),null);
+  const previous=config.CURATOR_AI_API_KEY;config.CURATOR_AI_API_KEY=previous+'-renewed';
+  try{assert.equal(claimRefreshJob(now+2000)?.id,job.id)}finally{config.CURATOR_AI_API_KEY=previous}
+});
 test('manual mutations and refresh share one lease; config edits fence the proposal',()=>{
   const manual=acquireChatLease(p.id);scheduleRefreshJobs(at);
   assert.equal(claimRefreshJob(),null);releaseChatLease(p.id,manual);

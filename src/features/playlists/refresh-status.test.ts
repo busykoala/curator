@@ -36,4 +36,8 @@ test('a shortage retry regenerates the proposal and authentication waits have no
   const retry=claimRefreshJob()!;finishRefreshJob(retry,{},'Playlist owner must sign in to Navidrome again');
   assert.equal(getPlaylist(p.id)!.refreshStatus,'auth_required');assert.equal(getPlaylist(p.id)!.nextRefresh,null);
 });
+test('an inference credential failure does not ask the listener to renew their Navidrome login',()=>{
+  requestPlaylistRefresh(p.id,1,randomUUID());const job=claimRefreshJob()!;finishRefreshJob(job,{},'Local AI request failed (401): unauthorized');
+  const view=getPlaylist(p.id)!;assert.equal(view.refreshAuthService,'inference');assert.match(view.changeSummary!,/AI connection/);assert.equal(view.nextRefresh,null);
+});
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

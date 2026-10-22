@@ -417,3 +417,28 @@ changes in the infrastructure repository. Update this record at each handoff.
   The real-library 24x3 replay and production quality checks remain separate.
   A startup harness error (missing crypto import) was fixed before model cases
   ran; no result was counted from that failed invocation.
+- The first complete controlled rubric passed 35/40 (87.5%) versus 21/40
+  (52.5%) for the frozen deployed selector, a +35-point improvement. The second
+  passed 36/40 (90%, +37.5 points). Both originals, including failures, are saved
+  as `evaluation/rubric-v{1,2}-controlled.json`. These conditional fixture results
+  exceed the numeric gate; they do not establish actual library metadata truth.
+- Inspected failures rather than changing the frozen fixtures: the compiler
+  invented artist-associated style gates, extra instruments/tempo-feel and
+  recording-type requirements not requested by the listener. Compiler v8 adds
+  minimal complete examples and preserves the actual period/BPM instructions.
+  Speech exclusions normalise to vocal evidence, preserving instrumental
+  interludes and unrelated live restrictions. A third unchanged-fixture run is
+  active; the real stable-index replay is still outstanding.
+- Inference authentication waits now fingerprint the model connection's actual
+  credentials, so a listener login cannot restart a failing model-auth loop.
+  Status/UI distinguish this from a revoked Navidrome login. Native auth still
+  waits for that owner's renewed credentials.
+- Added a vector-only export/import utility for deployment warm-up. Its SQLite
+  artifact contains only a manifest and vectors, never an evaluation DB, owner
+  histories, settings, credentials or synthetic playlists. Import checks model,
+  evidence version, numerical shape and each current track-description hash;
+  changed/missing tracks are skipped. It is not yet run against production.
+- Latest full checkpoint: 266/266 tests and production/worker build passed
+  (`/private/tmp/curator-renewal-v12-{tests,build}.log`), followed by TypeScript.
+  One additional inference-status regression passes. Production image and flag
+  remain unchanged. No nightly comparison or production-cycle evidence yet.
