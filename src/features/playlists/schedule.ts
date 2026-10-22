@@ -4,6 +4,7 @@ import { refreshListeningClusters } from "./clusters";
 import { researchDiscovery, refreshDiscoveryStates } from "./discovery";
 import { generateEnabledPlaylists } from "./generate";
 import { refreshNextRunTimes } from "./repository";
+import {playlistRefreshMode} from './refresh-jobs';
 
 function local() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -26,6 +27,9 @@ function local() {
 }
 
 export async function runPlaylistSchedule() {
+  // The dedicated worker owns refresh state in the new pipeline. Legacy mode
+  // remains available during unpublished comparison and staged rollout.
+  if(playlistRefreshMode()==='enabled')return;
   stateSet("playlist_error", "");
   const now = local();
   await refreshDiscoveryStates();

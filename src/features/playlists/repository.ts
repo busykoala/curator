@@ -9,6 +9,7 @@ import { nextZurichRunSql } from "./schedule-time";
 
 type Row = {
   id: number;
+  revision: number;
   name: string;
   category: string;
   enabled: number;
@@ -27,6 +28,7 @@ const select = `SELECT p.*,coalesce(u.display_name,'Unknown user') owner_display
 function definition(row: Row): PlaylistDefinition {
   return {
     id: row.id,
+    revision: row.revision,
     name: row.name,
     category: row.category as PlaylistDefinition["category"],
     enabled: Boolean(row.enabled),
@@ -97,7 +99,7 @@ export function updatePlaylist(id: number, input: unknown) {
   const ownerChanged = value.ownerUserId !== current.ownerUserId;
   db()
     .prepare(
-      "UPDATE smart_playlists SET name=?,category=?,enabled=?,intent=?,config_json=?,owner_user_id=?,automatic=0,navidrome_playlist_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      "UPDATE smart_playlists SET name=?,category=?,enabled=?,intent=?,config_json=?,owner_user_id=?,automatic=0,navidrome_playlist_id=?,revision=revision+1,next_run_at=CASE WHEN ?=0 THEN NULL ELSE next_run_at END,updated_at=CURRENT_TIMESTAMP WHERE id=?",
     )
     .run(
       value.name,
@@ -107,6 +109,7 @@ export function updatePlaylist(id: number, input: unknown) {
       JSON.stringify(value.config),
       value.ownerUserId,
       ownerChanged ? null : current.navidromePlaylistId,
+      value.enabled ? 1 : 0,
       id,
     );
   return getPlaylist(id)!;
@@ -135,6 +138,7 @@ export function refreshNextRunTimes() {
       "UPDATE smart_playlists SET next_run_at=? WHERE enabled=1 AND next_run_at IS NOT ?",
     )
     .run(next, next);
+  db().prepare('UPDATE smart_playlists SET next_run_at=NULL WHERE enabled=0 AND next_run_at IS NOT NULL').run();
 }
 export function playlistRuns(id: number) {
   return db()
@@ -162,6 +166,7 @@ export function feedback(
       `INSERT INTO playlist_feedback(owner_user_id,playlist_id,file_id,artist,action,expires_at) VALUES (?,?,?,?,?,${action === "snooze" ? "datetime('now','+30 days')" : "NULL"})`,
     )
     .run(owner, scope, fileId, artist, action);
+  db().prepare('UPDATE smart_playlists SET revision=revision+1 WHERE owner_user_id=? AND (id=? OR ? IS NULL)').run(owner,id,scope);
 }
 export function removeFeedback(id: number, fileId: number, action: string) {
   const owner = getPlaylist(id)?.ownerUserId,
@@ -171,6 +176,7 @@ export function removeFeedback(id: number, fileId: number, action: string) {
       "DELETE FROM playlist_feedback WHERE owner_user_id=? AND playlist_id IS ? AND file_id=? AND action=?",
     )
     .run(owner, scope, fileId, action);
+  db().prepare('UPDATE smart_playlists SET revision=revision+1 WHERE owner_user_id=? AND (id=? OR ? IS NULL)').run(owner,id,scope);
 }
 
 export function dashboardData(ownerUserId: number) {

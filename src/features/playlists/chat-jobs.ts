@@ -51,8 +51,15 @@ export function enqueuePlaylistMessage(id: number, raw: unknown) {
     if (!aiConfigured) throw new Error("The AI service is not configured.");
     if (request.revision !== chatState(id).revision) throw new Error("This conversation has changed. Reopen the playlist and retry.");
     assertChatIdle(id);
-    const lease = db().prepare("SELECT lease_until FROM playlist_chat_state WHERE playlist_id=?").get(id) as { lease_until: number } | undefined;
-    if (lease && lease.lease_until > Date.now()) throw new Error("This playlist is already being updated. Please wait for that update to finish.");
+    const lease = db().prepare("SELECT lease,lease_until FROM playlist_chat_state WHERE playlist_id=?").get(id) as {lease:string; lease_until: number } | undefined;
+    if (lease && lease.lease_until > Date.now()) {
+      const background=db().prepare("SELECT 1 FROM playlist_refresh_jobs WHERE playlist_id=? AND status='running' AND lease_token=?").get(id,lease.lease);
+      if(!background)throw new Error("This playlist is already being updated. Please wait for that update to finish.");
+      // Queue the correction and fence the background proposal immediately.
+      // Keep its lease until it can roll back an in-flight publication; the
+      // chat worker waits for that lease instead of racing the rollback.
+      db().prepare('UPDATE smart_playlists SET revision=revision+1 WHERE id=?').run(id);
+    }
     const now = Date.now();
     db().prepare("INSERT INTO playlist_chat_jobs(id,playlist_id,message,target_tracks,base_revision,sync_required,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)")
       .run(requestId, id, request.message, request.targetTracks, request.revision, definition.navidromePlaylistId ? 1 : 0, now, now);
@@ -85,7 +92,9 @@ export function claimChatJob(now = Date.now()) {
     }
     const token = randomUUID();
     const row = db().prepare(`UPDATE playlist_chat_jobs SET status='running',attempts=attempts+1,lease_token=?,lease_until=?,updated_at=?
-      WHERE id=(SELECT id FROM playlist_chat_jobs WHERE status='queued' ORDER BY created_at,rowid LIMIT 1) RETURNING *`).get(token, now + LEASE_MS, now) as Row | undefined;
+      WHERE id=(SELECT j.id FROM playlist_chat_jobs j WHERE j.status='queued'
+      AND NOT EXISTS (SELECT 1 FROM playlist_chat_state s WHERE s.playlist_id=j.playlist_id AND s.lease_until>?)
+      ORDER BY j.created_at,j.rowid LIMIT 1) RETURNING *`).get(token, now + LEASE_MS, now,now) as Row | undefined;
     return row ? { ...map(row), lease: token } : null;
   }).immediate();
 }

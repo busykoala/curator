@@ -161,6 +161,28 @@ function migrate(instance: Database.Database) {
     );
   });
   migration(12,()=>addColumns(instance,"acquisition_targets",[["wanted_since","TEXT"]]));
+  migration(13,()=>{
+    addColumns(instance,'smart_playlists',[["revision","INTEGER NOT NULL DEFAULT 1"]]);
+    addColumns(instance,'playlist_runs',[["source_preview_id","INTEGER REFERENCES playlist_runs(id)"]]);
+    instance.exec('CREATE UNIQUE INDEX IF NOT EXISTS playlist_runs_source_preview ON playlist_runs(source_preview_id) WHERE source_preview_id IS NOT NULL');
+    instance.exec(`CREATE TABLE IF NOT EXISTS playlist_refresh_jobs(
+      id TEXT PRIMARY KEY,playlist_id INTEGER NOT NULL REFERENCES smart_playlists(id) ON DELETE CASCADE,
+      owner_user_id INTEGER NOT NULL REFERENCES curator_users(id) ON DELETE CASCADE,
+      scheduled_date TEXT NOT NULL,kind TEXT NOT NULL DEFAULT 'nightly',revision INTEGER NOT NULL,
+      mode TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'queued',phase TEXT NOT NULL DEFAULT 'generate',
+      attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at INTEGER NOT NULL DEFAULT 0,
+      lease_token TEXT,lease_until INTEGER NOT NULL DEFAULT 0,run_id INTEGER REFERENCES playlist_runs(id),
+      error TEXT NOT NULL DEFAULT '',result_json TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,
+      UNIQUE(playlist_id,scheduled_date,kind));
+      CREATE INDEX IF NOT EXISTS playlist_refresh_work ON playlist_refresh_jobs(status,next_attempt_at,created_at);
+      CREATE TABLE IF NOT EXISTS playlist_publications(
+      id TEXT PRIMARY KEY,playlist_id INTEGER NOT NULL REFERENCES smart_playlists(id) ON DELETE CASCADE,
+      owner_user_id INTEGER NOT NULL REFERENCES curator_users(id) ON DELETE CASCADE,revision INTEGER NOT NULL,
+      selection_hash TEXT NOT NULL,song_ids_json TEXT NOT NULL,previous_ids_json TEXT NOT NULL DEFAULT '[]',
+      native_id TEXT,status TEXT NOT NULL DEFAULT 'prepared',error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(playlist_id,revision,selection_hash));`);
+  });
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

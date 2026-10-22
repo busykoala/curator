@@ -21,6 +21,10 @@ export function acquireChatLease(id:number,jobId?:string,token?:string){
   })();
 }
 export function releaseChatLease(id:number,lease:string){db().prepare("UPDATE playlist_chat_state SET lease=NULL,lease_until=0 WHERE playlist_id=? AND lease=?").run(id,lease)}
+export function assertPlaylistLease(id:number,lease:string){
+  if(!db().prepare('SELECT 1 FROM playlist_chat_state WHERE playlist_id=? AND lease=? AND lease_until>?').get(id,lease,Date.now()))
+    throw new Error('Playlist mutation lease expired; update superseded');
+}
 export function storeChatResult(id:number,lease:string,messages:ChatMessage[],result:ChatResult){
   const updated=db().prepare("UPDATE playlist_chat_state SET revision=revision+1,conversation_json=?,result_json=?,updated_at=CURRENT_TIMESTAMP WHERE playlist_id=? AND lease=? AND lease_until>?").run(JSON.stringify(messages),JSON.stringify(result),id,lease,Date.now());
   if(!updated.changes)throw new Error("Playlist changed while the AI was working. Please retry.");

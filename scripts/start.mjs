@@ -29,3 +29,4 @@ launch("worker", "node", [".workers/worker.mjs"], true);
 launch("acquisition", "node", [".workers/acquisition-worker.mjs"], true);
 
 launch("playlist-chat", "node", [".workers/playlist-chat-worker.mjs"], true);
+launch("playlist-refresh", "node", [".workers/playlist-refresh-worker.mjs"], true);

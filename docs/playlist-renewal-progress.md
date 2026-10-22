@@ -42,3 +42,10 @@ changes in the infrastructure repository. Update this record at each handoff.
   Added the read-only `scripts/audit-playlists.cjs` and fixed 24 intent / 40
   reference-rubric cases. Remote publication and musical-constraint validation
   are explicitly unverified by this baseline, rather than counted as passes.
+- 2026-10-22: Package B implementation added a supervised independent worker,
+  durable jobs/checkpoints, four retry delays, auth waits, per-playlist mutation
+  leases, revision fencing, and a recoverable native-publication journal. The
+  feature flag remains `off`; production has not changed. Validation: full
+  `npm test` 131/131, `npx tsc --noEmit`, `npm run build`; additional lost-create /
+  lost-rename response and rollback checks passed. Runtime/rollout evidence is
+  still outstanding. Package A committed as `c61d1a2`.

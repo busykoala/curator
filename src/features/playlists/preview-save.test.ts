@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHash } from "node:crypto";
+import {playlistRevisionHash} from './refresh-policy';
 import { config } from "@/config";
 import { db } from "../db/client";
 import { provisionUser } from "../auth/navidrome";
@@ -46,7 +46,7 @@ const run = database
   )
   .get(
     playlist.id,
-    createHash("sha256").update(JSON.stringify(playlist)).digest("hex"),
+    playlistRevisionHash(playlist),
   ) as { id: number };
 for (const [position, id] of [2, 1].entries())
   database
@@ -58,6 +58,7 @@ test("explicit save preserves the exact reviewed order; stale and foreign previe
   const original = globalThis.fetch;
   let nativeIds: string[] = [],
     writes = 0;
+  let loseVerification=true,renamed=false;
   globalThis.fetch = async (url, init) => {
     const u = new URL(String(url)),
       path = u.pathname;
@@ -87,6 +88,9 @@ test("explicit save preserves the exact reviewed order; stale and foreign previe
           ? [{ Id: "native-playlist", Name: playlist.name }]
           : [],
       });
+    if(path.endsWith('/Playlists/native-playlist/Items')&&renamed&&loseVerification){
+      loseVerification=false;return new Response('Lost response after rename',{status:503});
+    }
     if (path.endsWith("/Playlists/native-playlist/Items"))
       return Response.json({ Items: nativeIds.map((Id) => ({ Id })) });
     if (init?.method === "POST" && path.endsWith("/Playlists")) {
@@ -94,9 +98,16 @@ test("explicit save preserves the exact reviewed order; stale and foreign previe
       nativeIds = JSON.parse(String(init.body)).Ids;
       return Response.json({ Id: "native-playlist" });
     }
+    if(init?.method==='POST'&&path.endsWith('/Playlists/native-playlist')){
+      nativeIds=JSON.parse(String(init.body)).Ids;
+      renamed=true;
+      return new Response(null,{status:204});
+    }
     throw new Error("Unexpected request " + path);
   };
   try {
+    await assert.rejects(savePlaylistPreview(playlist.id,run.id),/503/);
+    assert.equal(getPlaylist(playlist.id)?.navidromePlaylistId,null,'local identity has not committed after the lost response');
     await savePlaylistPreview(playlist.id, run.id);
     assert.deepEqual(nativeIds, ["native-Song 2", "native-Song 1"]);
     assert.equal(
@@ -104,6 +115,10 @@ test("explicit save preserves the exact reviewed order; stale and foreign previe
       "native-playlist",
     );
     assert.equal(writes, 1);
+    const completed=database.prepare("SELECT count(*) n FROM playlist_runs WHERE source_preview_id=?").get(run.id) as {n:number};
+    await savePlaylistPreview(playlist.id,run.id);
+    assert.equal((database.prepare("SELECT count(*) n FROM playlist_runs WHERE source_preview_id=?").get(run.id) as {n:number}).n,completed.n);
+    assert.equal(writes,1);
     updatePlaylist(playlist.id, { intent: "Changed settings" });
     await assert.rejects(
       savePlaylistPreview(playlist.id, run.id),

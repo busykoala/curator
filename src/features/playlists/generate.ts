@@ -2,6 +2,7 @@ import {
   acquireChatLease,
   currentChatItems,
   releaseChatLease,
+  assertPlaylistLease,
 } from "./chat-state";
 import { createHash } from "node:crypto";
 import { db } from "@/features/db/client";
@@ -14,6 +15,8 @@ import { type ListeningProfile, norm, scoreCandidate } from "./candidate-score";
 import { getPlaylist, markRun, setNavidromeId } from "./repository";
 import { sequenceJourney } from "./sequence";
 import { playlistAwaitingAcquisition } from "./discovery";
+import {playlistRevisionHash} from './refresh-policy';
+import {refreshManaged} from './refresh-jobs';
 import type { PlaylistCandidate, PlaylistDefinition } from "./types";
 
 type Row = {
@@ -218,11 +221,11 @@ export async function generatePlaylist(
   const definition = getPlaylist(id);
   if (!definition) throw new Error("Playlist not found");
   const lease =
-    definition.category === "chat" && !heldChatLease
+    !heldChatLease
       ? acquireChatLease(id)
       : undefined;
   try {
-    return await generatePlaylistRun(definition, preview);
+    return await generatePlaylistRun(definition, preview, heldChatLease??lease!);
   } finally {
     if (lease) releaseChatLease(id, lease);
   }
@@ -231,11 +234,16 @@ export async function generatePlaylist(
 async function generatePlaylistRun(
   definition: PlaylistDefinition,
   preview: boolean,
+  lease: string,
 ) {
   const id = definition.id;
-  const configHash = createHash("sha256")
-    .update(JSON.stringify(definition))
-    .digest("hex");
+  const configHash = playlistRevisionHash(definition);
+  const assertCurrent=()=>{
+    assertPlaylistLease(id,lease);
+    const current=getPlaylist(id);
+    if(!current||playlistRevisionHash(current)!==configHash)throw new Error('Playlist settings changed; update superseded');
+  };
+  assertCurrent();
   const run = db()
     .prepare(
       "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,owner_user_id) VALUES (?,'running',?,?,?) RETURNING id",
@@ -309,12 +317,13 @@ async function generatePlaylistRun(
           `Only ${items.length - unresolved.length} of ${definition.config.targetTracks} tracks have unambiguous Navidrome identity`,
         );
       }
-      const synced = await replaceManagedPlaylist(definition, items);
+      const synced = await replaceManagedPlaylist(definition, items,assertCurrent);
       navidromeId = synced.playlistId;
       songIds = synced.songIds;
       setNavidromeId(id, synced.playlistId);
       markRun(id);
     }
+    assertCurrent();
     const insert = db().prepare(
       "INSERT INTO playlist_items(run_id,playlist_id,file_id,navidrome_song_id,position,score,origin,reason,retained) VALUES (?,?,?,?,?,?,?,?,?)",
     );
@@ -381,6 +390,7 @@ export async function generateEnabledPlaylists() {
     .all() as Array<{ id: number; name: string }>;
   const results = [];
   for (const row of rows) {
+    if(refreshManaged(row.id))continue;
     const acquisition = playlistAwaitingAcquisition(row.name);
     if (acquisition) {
       results.push({
@@ -401,11 +411,18 @@ export async function generateEnabledPlaylists() {
 
 // Save the exact reviewed ordering. Never silently replace unresolved preview
 // songs with a different selection during the explicit save action.
-export async function savePlaylistPreview(id: number, previewRunId: number) {
+export async function savePlaylistPreview(id: number, previewRunId: number, heldLease?:string) {
   const definition = getPlaylist(id);
   if (!definition) throw new Error("Playlist not found");
-  const lease = acquireChatLease(id);
+  const lease = heldLease??acquireChatLease(id);
+  const expected=playlistRevisionHash(definition);
+  const assertCurrent=()=>{
+    assertPlaylistLease(id,lease);
+    const current=getPlaylist(id);
+    if(!current||playlistRevisionHash(current)!==expected)throw new Error('Playlist settings changed; update superseded');
+  };
   try {
+    assertCurrent();
     const preview = db()
       .prepare(
         "SELECT id,config_hash FROM playlist_runs WHERE id=? AND playlist_id=? AND preview=1 AND status='complete'",
@@ -414,7 +431,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number) {
     if (
       !preview ||
       preview.config_hash !==
-        createHash("sha256").update(JSON.stringify(definition)).digest("hex")
+        expected
     )
       throw new Error(
         "Playlist settings changed. Create a new preview before saving.",
@@ -470,11 +487,14 @@ export async function savePlaylistPreview(id: number, previewRunId: number) {
       throw new Error(
         "Some preview songs have unresolved Navidrome identity. Your saved playlist has not changed.",
       );
-    const synced = await replaceManagedPlaylist(definition, items);
+    const synced = await replaceManagedPlaylist(definition, items,assertCurrent);
+    assertCurrent();
     db().transaction(() => {
+      const completed=db().prepare("SELECT id FROM playlist_runs WHERE source_preview_id=? AND status='complete'").get(previewRunId);
+      if(completed)return;
       const run = db()
         .prepare(
-          "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,owner_user_id,detail_json,finished_at) VALUES (?,'complete',0,?,?,?,CURRENT_TIMESTAMP) RETURNING id",
+          "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,owner_user_id,detail_json,finished_at,source_preview_id) VALUES (?,'complete',0,?,?,?,CURRENT_TIMESTAMP,?) RETURNING id",
         )
         .get(
           id,
@@ -484,6 +504,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number) {
             tracks: items.length,
             navidromeId: synced.playlistId,
           }),
+          previewRunId,
         ) as { id: number };
       const insert = db().prepare(
         "INSERT INTO playlist_items(run_id,playlist_id,file_id,navidrome_song_id,position,score,origin,reason,retained) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -510,6 +531,6 @@ export async function savePlaylistPreview(id: number, previewRunId: number) {
       detail: { tracks: items.length, navidromeId: synced.playlistId },
     };
   } finally {
-    releaseChatLease(id, lease);
+    if(!heldLease)releaseChatLease(id, lease);
   }
 }

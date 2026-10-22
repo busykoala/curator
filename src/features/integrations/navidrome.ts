@@ -6,6 +6,7 @@ import {
   trackAlbumMatches,
   trackPositionMatches,
 } from "./navidrome-identity";
+import {publishVerifiedPlaylist} from "@/features/playlists/publication";
 import { jellyfinCall } from "@/features/auth/navidrome";
 import { db } from "@/features/db/client";
 import {
@@ -387,6 +388,7 @@ async function verifiedJellyfinIds(
 async function replaceUserPlaylist(
   definition: PlaylistDefinition,
   items: PlaylistCandidate[],
+  assertCurrent:()=>void,
 ) {
   const userId = definition.ownerUserId,
     mapped: Array<{ fileId: number; songId: string }> = [];
@@ -407,6 +409,10 @@ async function replaceUserPlaylist(
   let existing = definition.navidromePlaylistId
     ? playlists.find((item) => item.Id === definition.navidromePlaylistId)
     : undefined;
+  if(!existing){
+    const journal=db().prepare('SELECT native_id FROM playlist_publications WHERE playlist_id=? AND owner_user_id=? AND revision=? AND song_ids_json=?').get(definition.id,userId,definition.revision??1,JSON.stringify(ids)) as {native_id:string|null}|undefined;
+    if(journal?.native_id)existing=playlists.find(item=>item.Id===journal.native_id);
+  }
   if (
     !existing &&
     definition.navidromePlaylistId &&
@@ -430,66 +436,25 @@ async function replaceUserPlaylist(
     throw new Error(
       `An unmanaged Navidrome playlist named ${definition.name} already exists`,
     );
-  let playlistId = existing?.Id ?? "",
-    previous: string[] = [];
-  if (existing) {
-    previous = (await jellyfinPlaylistItems(userId, playlistId)).map(
-      (item) => item.Id,
-    );
-    await jellyfinCall(userId, `Playlists/${playlistId}`, {
-      method: "POST",
-      body: JSON.stringify({
-        Name: definition.name,
-        Ids: ids,
-        IsPublic: false,
-      }),
-    });
-  } else {
-    const created = await jellyfinCall<{ Id?: string }>(userId, "Playlists", {
-      method: "POST",
-      body: JSON.stringify({
-        Name: definition.name,
-        Ids: ids,
-        IsPublic: false,
-      }),
-    });
-    playlistId = created.Id ?? "";
-    if (!playlistId)
-      throw new Error("Navidrome did not return the created playlist");
-  }
-  try {
-    const actual = await verifiedJellyfinIds(userId, playlistId, ids);
-    if (
-      actual.length !== ids.length ||
-      actual.some((value, index) => value !== ids[index])
-    )
-      throw new Error(
-        `Navidrome playlist verification failed: expected ${ids.length} tracks, received ${actual.length}`,
-      );
-  } catch (error) {
-    if (existing)
-      await jellyfinCall(userId, `Playlists/${playlistId}`, {
-        method: "POST",
-        body: JSON.stringify({
-          Name: definition.name,
-          Ids: previous,
-          IsPublic: false,
-        }),
-      }).catch(() => undefined);
-    throw error;
-  }
-  return {
-    playlistId,
-    tracks: ids.length,
-    songIds: new Map(mapped.map((item) => [item.fileId, item.songId])),
-  };
+  const published=await publishVerifiedPlaylist(definition,ids,existing?.Id,{
+    list:async()=>((await jellyfinCall<JellyItems>(userId,"Items?IncludeItemTypes=Playlist&Recursive=true&Limit=1000&Fields=Overview")).Items??[]).map(p=>({id:p.Id,name:p.Name??""})),
+    items:async id=>(await jellyfinPlaylistItems(userId,id)).map(item=>item.Id),
+    verify:async(id,expected)=>verifiedJellyfinIds(userId,id,expected),
+    create:async(name,songs)=>{
+      const result=await jellyfinCall<{Id?:string}>(userId,"Playlists",{method:"POST",body:JSON.stringify({Name:name,Ids:songs,IsPublic:false})});
+      return result.Id??"";
+    },
+    update:async(id,name,songs)=>{await jellyfinCall(userId,`Playlists/${id}`,{method:"POST",body:JSON.stringify({Name:name,Ids:songs,IsPublic:false})})},
+  },assertCurrent);
+  return {...published,tracks:ids.length,songIds:new Map(mapped.map(item=>[item.fileId,item.songId]))};
 }
 
 export async function replaceManagedPlaylist(
   definition: PlaylistDefinition,
   items: PlaylistCandidate[],
+  assertCurrent:()=>void=()=>{},
 ) {
-  if (definition.ownerUserId) return replaceUserPlaylist(definition, items);
+  if (definition.ownerUserId) return replaceUserPlaylist(definition, items,assertCurrent);
   throw new Error("Playlist owner must sign in to Navidrome again");
 }
 export async function deleteManagedPlaylist(definition: PlaylistDefinition) {

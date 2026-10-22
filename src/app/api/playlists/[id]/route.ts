@@ -42,7 +42,7 @@ export async function DELETE(request: Request, { params }: Context) {
   if (access instanceof Response) return access;
   let lease: string | undefined;
   try {
-    if (access.playlist.category === "chat") lease = acquireChatLease(id);
+    lease = acquireChatLease(id);
     await deleteManagedPlaylist(access.playlist);
     removePlaylist(id);
     return Response.json({ ok: true });

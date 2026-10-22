@@ -14,7 +14,7 @@ test("durable chat jobs deduplicate retries, fence workers, and resume saved rep
   const { db } = await import("../db/client");
   const { aiClient } = await import("../ai/client");
   const { provisionUser } = await import("../auth/navidrome");
-  const { createPlaylist } = await import("./repository");
+  const { createPlaylist,getPlaylist } = await import("./repository");
   const { chatState, acquireChatLease, releaseChatLease } = await import("./chat-state");
   const { createPlaylistChat, enqueuePlaylistMessage, claimChatJob, checkpointChatJob, heartbeatChatJob, latestChatJob } = await import("./chat-jobs");
   const { runNextChatJob } = await import("./chat-job-runner");
@@ -76,6 +76,17 @@ test("durable chat jobs deduplicate retries, fence workers, and resume saved rep
     assert.equal(latestChatJob(failed.id)?.status, "failed"); assert.match(latestChatJob(failed.id)!.error, /unavailable/);
     assert.equal(chatState(failed.id).revision, 0);
     assert.ok(acquireChatLease(failed.id));
+
+    const background=createPlaylist({name:'Nightly correction',category:'chat',ownerUserId:user.id,config:{targetTracks:1}});
+    const bgLease=acquireChatLease(background.id),beforeRevision=getPlaylist(background.id)!.revision;
+    database.prepare("INSERT INTO playlist_refresh_jobs(id,playlist_id,owner_user_id,scheduled_date,revision,mode,status,lease_token,lease_until,created_at,updated_at) VALUES ('nightly',?,?,'2026-10-22',?,'enabled','running',?,?,?,?)")
+      .run(background.id,user.id,beforeRevision,bgLease,Date.now()+600000,Date.now(),Date.now());
+    const correction=enqueuePlaylistMessage(background.id,{...request,requestId:randomUUID(),message:'A correction during nightly work'});
+    assert.equal(correction.job?.status,'queued');assert.equal(getPlaylist(background.id)!.revision,beforeRevision!+1);
+    assert.equal(claimChatJob(),null,'chat must wait while the old publication can still roll back');
+    releaseChatLease(background.id,bgLease);
+    const claimed=claimChatJob()!;assert.equal(claimed.playlistId,background.id);
+    database.prepare("UPDATE playlist_chat_jobs SET status='failed',lease_until=0 WHERE id=?").run(claimed.id);
     // An idle chat worker must keep polling during a scanner write transaction.
     const scanner = new Database(process.env.CURATOR_DB_PATH!);
     try {
