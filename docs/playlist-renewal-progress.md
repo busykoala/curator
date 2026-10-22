@@ -355,3 +355,10 @@ changes in the infrastructure repository. Update this record at each handoff.
   pagination and rejects incomplete, repeated or changing results before a
   create. Ten focused publication/inventory regressions and TypeScript pass.
   This is pre-deployment evidence; production remains unchanged.
+- Dependency recovery now checks connectivity failures independently of the
+  persisted exponential retry, at most every five minutes. A successful native
+  or actual structured-model probe wakes the affected job without erasing its
+  last failure. Authentication, quotas, shortages and invalid selections are
+  excluded. The model's Retry-After deadline is persisted across processes so
+  recovery checks cannot bypass it. Fourteen focused recovery/client tests and
+  TypeScript pass. No live outage or production rollout has been claimed.

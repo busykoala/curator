@@ -108,3 +108,15 @@ test("a shared output budget prevents tool responses from overflowing the model 
     assert.ok(output.includes("context budget"));assert.ok(output.length<200);
   }finally{globalThis.fetch=original}
 });
+test('a persisted Retry-After cooldown also fences a fresh health-check client',async()=>{
+  const original=globalThis.fetch;let calls=0,until=0;
+  const retryState={get:()=>until,set:(value:number)=>{until=value}};
+  const options={apiKey:'test',baseURL:'http://local.test/v1',model:'curator',retryState};
+  globalThis.fetch=async()=>{calls++;return new Response('Busy',{status:503,headers:{'Retry-After':'60'}})};
+  try{
+    await assert.rejects(new CuratorAiClient(options).structured({input:'Test',schemaName:'test',schema,deadlineMs:20}));
+    assert.ok(until>Date.now());
+    await assert.rejects(new CuratorAiClient(options).structured({input:'Test',schemaName:'test',schema}),/Retry-After cooldown/);
+    assert.equal(calls,1);
+  }finally{globalThis.fetch=original}
+});

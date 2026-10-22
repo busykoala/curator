@@ -5,14 +5,17 @@ import {seedMetadataReviews,runMetadataReviews} from '@/features/playlists/metad
 import {preparePlaylistEmbeddings} from '@/features/playlists/retrieval';
 import {refreshListeningClusters} from '@/features/playlists/clusters';
 import {db,stateGet} from '@/features/db/client';
+import {recoverPlaylistDependencies} from '@/features/playlists/dependency-recovery';
 
 let stopping=false;
 const tick=()=>{try{pollPlaylistRefreshSchedule()}catch(error){console.error(JSON.stringify({event:'playlist_refresh_schedule_error',error:String(error)}))}};
+let recovering=false;
+const recover=()=>{if(!recovering){recovering=true;void recoverPlaylistDependencies().catch(error=>console.error(JSON.stringify({event:'playlist_dependency_probe_error',error:String(error)}))).finally(()=>{recovering=false})}};
 let embedding=false;
 const embed=()=>{if(!embedding&&playlistRefreshMode()!=='off'){
   embedding=true;void preparePlaylistEmbeddings().catch(error=>console.error(JSON.stringify({event:'playlist_embeddings_error',error:String(error)}))).finally(()=>{embedding=false});
 }};
-tick();const timer=setInterval(()=>{tick();embed()},60_000);
+tick();recover();const timer=setInterval(()=>{tick();embed();recover()},60_000);
 let maintaining=false;
 async function listenerMaintenance(){
   const owners=db().prepare('SELECT DISTINCT owner_user_id id FROM smart_playlists WHERE enabled=1').all() as Array<{id:number}>;

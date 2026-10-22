@@ -1,6 +1,7 @@
 import { config } from "@/config";
 import { openWebPage,webSearch } from "./web-tools";
 import {runSharedInference} from './scheduler';
+import {stateGet,stateSet} from '@/features/db/client';
 
 export type JsonSchema=Record<string,unknown>;
 export type AiUsage={input_tokens:number;output_tokens:number;total_tokens:number};
@@ -8,7 +9,7 @@ export type AiResult<T>={data:T;usage:AiUsage;sourceUrls?:Set<string>};
 export type AiTool={name:string;description:string;parameters:JsonSchema;execute:(args:Record<string,unknown>)=>unknown|Promise<unknown>};
 export type AiAttempt={durationMs:number;httpStatus:number|null;outcome:'success'|'failed';usage:AiUsage|null;error?:string};
 export type StructuredRequest={input:string;instructions?:string;schemaName:string;schema:JsonSchema;maxOutputTokens?:number;web?:boolean;tools?:AiTool[];firstTool?:string;finishAfterValidTool?:string;finishAfterTool?:string;maxToolTurns?:number;maxToolCalls?:number;maxToolResultCharacters?:number;signal?:AbortSignal;deadlineMs?:number;priority?:'interactive'|'background';onAttempt?:(attempt:AiAttempt)=>void};
-export type AiClientOptions={apiKey:string;baseURL:string;model:string;runCompletion?:typeof runSharedInference};
+export type AiClientOptions={apiKey:string;baseURL:string;model:string;runCompletion?:typeof runSharedInference;retryState?:{get:()=>number;set:(until:number)=>void}};
 
 type FunctionTool={type:"function";function:{name:string;description:string;strict:true;parameters:JsonSchema}};
 type ToolCall={id:string;type:"function";function:{name:string;arguments:string}};
@@ -57,6 +58,7 @@ export class CuratorAiClient{
   constructor(private readonly options:AiClientOptions){this.endpoint=`${options.baseURL.replace(/\/+$/g,"")}/chat/completions`}
 
   private async completion(body:Record<string,unknown>,signal:AbortSignal,onAttempt?:StructuredRequest['onAttempt'],priority:NonNullable<StructuredRequest['priority']>='background'):Promise<ChatResponse>{
+    if((this.options.retryState?.get()??0)>Date.now())throw new AiHttpError(503,'Local AI is respecting the inference Retry-After cooldown');
     if(aiCooldownRemaining()>0)throw new AiHttpError(503,unavailableReason||"Local AI model route is temporarily unavailable");
     let lastError:unknown;
     for(let attempt=0;attempt<3;attempt+=1){
@@ -70,7 +72,7 @@ export class CuratorAiClient{
         const {response,text}=await(this.options.runCompletion?this.options.runCompletion(transport,signal,priority):transport(signal));
         httpStatus=response.status;
         let parsed:ChatResponse|undefined;try{parsed=JSON.parse(text) as ChatResponse;if(parsed.usage)attemptUsage=usage(parsed.usage)}catch{/* Some upstream errors are plain text. */}
-        if(!response.ok){const message=`Local AI request failed (${response.status}): ${text.slice(0,500)}`;if(response.status===404&&/no router for requested model/i.test(text)){unavailableUntil=Date.now()+15*60_000;unavailableReason=message}throw new AiHttpError(response.status,message,retryAfter(response.headers.get('retry-after')))}
+        if(!response.ok){const message=`Local AI request failed (${response.status}): ${text.slice(0,500)}`,backoff=retryAfter(response.headers.get('retry-after'));if(backoff>0)this.options.retryState?.set(Date.now()+backoff);if(response.status===404&&/no router for requested model/i.test(text)){unavailableUntil=Date.now()+15*60_000;unavailableReason=message}throw new AiHttpError(response.status,message,backoff)}
         if(!parsed)throw new Error('Local AI returned invalid JSON');
         onAttempt?.({durationMs:Date.now()-started,httpStatus,outcome:'success',usage:attemptUsage});return parsed;
       }catch(error){
@@ -133,4 +135,4 @@ export class CuratorAiClient{
 
 export const aiModel=config.CURATOR_AI_MODEL;
 export const aiConfigured=Boolean(config.CURATOR_AI_API_KEY);
-export const aiClient=new CuratorAiClient({apiKey:config.CURATOR_AI_API_KEY,baseURL:config.CURATOR_AI_BASE_URL,model:aiModel,runCompletion:runSharedInference});
+export const aiClient=new CuratorAiClient({apiKey:config.CURATOR_AI_API_KEY,baseURL:config.CURATOR_AI_BASE_URL,model:aiModel,runCompletion:runSharedInference,retryState:{get:()=>Number(stateGet('inference_retry_after_until','0')),set:until=>stateSet('inference_retry_after_until',String(Math.max(until,Number(stateGet('inference_retry_after_until','0')))))}});
