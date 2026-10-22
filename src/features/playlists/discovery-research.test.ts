@@ -4,9 +4,9 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {config} from '@/config';
-import {db,stateSet} from '@/features/db/client';
+import {db,stateSet,stateGet} from '@/features/db/client';
 import {createPlaylist} from './repository';
-import {researchDiscoveryPools,discoveryPoolNeedsResearch} from './discovery-research';
+import {researchDiscoveryPools,discoveryPoolNeedsResearch,runDiscoveryMaintenance} from './discovery-research';
 import {discoveryRecommendations,type DiscoveryRelease} from './discovery-repository';
 const directory=mkdtempSync(join(tmpdir(),'curator-discovery-research-'));config.DATABASE_PATH=join(directory,'test.sqlite');const database=db();
 database.exec("INSERT INTO curator_users(id,navidrome_user_id,username,display_name) VALUES(1,'one','one','One')");
@@ -18,6 +18,11 @@ test('research continues after a provider failure and fills a bounded pool with 
   assert.equal(result.researched,10);assert.equal(discoveryRecommendations(p.id,1).length,10);
   assert.equal(discoveryPoolNeedsResearch(p),false);
   assert.equal((database.prepare('SELECT count(*) n FROM playlist_discovery_admissions').get() as {n:number}).n,0,'research does not submit acquisitions');
+});
+test('an acquisition dependency outage cannot suppress independent discovery research',async()=>{
+  let researched=0,admitted=0;
+  await runDiscoveryMaintenance({lifecycle:async()=>{throw Error('Lidarr unavailable')},admit:async()=>{admitted++;return{admitted:0,active:0}},research:async()=>{researched++;return{researched:1,queued:0}}});
+  assert.equal(researched,1);assert.equal(admitted,0);assert.match(stateGet('playlist_discovery_error'),/Lidarr unavailable/);
 });
 test('a bare URL or incorrect identity claim cannot admit an automatic recommendation',async()=>{
   const malformed=releases.map(r=>({...r,evidence:r.evidence.filter(e=>e.provider==='musicbrainz')}));

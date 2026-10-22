@@ -9,7 +9,8 @@ import {db} from '@/features/db/client';
 import {schemaSql} from '@/features/db/schema';
 import {createPlaylist,updatePlaylist} from './repository';
 import {storeDiscoveryRecommendation,discoveryRecommendations,reserveDiscoveryAdmission,dismissDiscoveryRecommendation,type DiscoveryRecommendation} from './discovery-repository';
-import {discoveryProgressDecision,refreshDiscoveryLifecycle,queueDiscoveryRecommendations} from './discovery-lifecycle';
+import {discoveryProgressDecision,refreshDiscoveryLifecycle,queueDiscoveryRecommendations,genuinelyActiveDiscoveryTorrent} from './discovery-lifecycle';
+import {claimMaintenanceLease,heartbeatMaintenanceLease,releaseMaintenanceLease,assertMaintenanceLease} from './maintenance-lease';
 
 const directory=mkdtempSync(join(tmpdir(),'curator-discovery-lifecycle-'));config.DATABASE_PATH=join(directory,'test.sqlite');
 const old=new Database(config.DATABASE_PATH);old.exec(schemaSql);old.exec(`ALTER TABLE smart_playlists ADD COLUMN owner_user_id INTEGER;
@@ -73,5 +74,28 @@ test('uncertain admissions retain their cap until a verified receipt reconciles 
   database.exec("UPDATE playlist_discovery_admissions SET created_at=datetime('now','-20 minutes')");
   await queueDiscoveryRecommendations(dependencies);assert.equal(adds,1);
   assert.equal(discoveryRecommendations(rec.playlist_id,rec.owner_user_id)[0].status,'queued');
+});
+test('old stalled, paused and partial seeding transfers do not exhaust active discovery slots',()=>{
+  const now=Date.now(),old={progress:.5,state:'stalledDL',dlspeed:0,added_on:(now-72*3600000)/1000};
+  assert.equal(genuinelyActiveDiscoveryTorrent(old,now-60*3600000,now),false);
+  assert.equal(genuinelyActiveDiscoveryTorrent({...old,state:'downloading',dlspeed:1024},now-60*3600000,now),true);
+  assert.equal(genuinelyActiveDiscoveryTorrent({...old,state:'stoppedDL'},now,now),false);
+  assert.equal(genuinelyActiveDiscoveryTorrent({...old,state:'uploading'},now,now),false);
+  assert.equal(genuinelyActiveDiscoveryTorrent({...old,state:'metaDL',added_on:now/1000},0,now),true);
+});
+test('overlapping admission workers cannot both use an outdated active-transfer inventory',async()=>{
+  recommend();let begin!:()=>void,release!:()=>void,adds=0;
+  const started=new Promise<void>(resolve=>{begin=resolve}),blocked=new Promise<void>(resolve=>{release=resolve});
+  const deps={queue:async()=>[],torrents:async()=>[],ready:async()=>[],target:()=>undefined,lookup:async()=>({albums:[]}),add:async()=>{adds++;begin();await blocked;return{albumIds:[123]}}} as unknown as NonNullable<Parameters<typeof queueDiscoveryRecommendations>[0]>;
+  const first=queueDiscoveryRecommendations(deps);await started;
+  const second=await queueDiscoveryRecommendations(deps);assert.equal(second.admitted,0);assert.equal(adds,1);
+  release();await first;assert.equal(adds,1);
+});
+test('a crashed admission lease expires and its stale owner cannot release the replacement',()=>{
+  const now=Date.now(),old=claimMaintenanceLease('fixture-crash',1000,now)!;assert.ok(old);
+  assert.equal(claimMaintenanceLease('fixture-crash',1000,now+500),null);
+  const current=claimMaintenanceLease('fixture-crash',1000,now+1001)!;assert.ok(current);assert.notEqual(current,old);
+  assert.equal(heartbeatMaintenanceLease('fixture-crash',old,1000,now+1100),false);releaseMaintenanceLease('fixture-crash',old);
+  assert.doesNotThrow(()=>assertMaintenanceLease('fixture-crash',current,now+1100));releaseMaintenanceLease('fixture-crash',current);
 });
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

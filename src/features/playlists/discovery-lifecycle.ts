@@ -2,11 +2,12 @@ import {stat} from 'node:fs/promises';
 import {db} from '@/features/db/client';
 import {addMusic,lidarrQueue,searchMusic} from '@/features/integrations/music';
 import {unresolvedNavidromeCandidates} from '@/features/integrations/navidrome';
-import {qbitTorrents} from '@/features/acquisition/qbittorrent';
+import {qbitTorrents,type Torrent} from '@/features/acquisition/qbittorrent';
 import {targetByAlbum} from '@/features/acquisition/repository';
 import type {PlaylistCandidate} from './types';
 import {activeDiscoveryRecommendations,reserveDiscoveryAdmission,type DiscoveryRecommendation} from './discovery-repository';
 import {playlistRefreshMode,refreshManaged} from './refresh-jobs';
+import {claimMaintenanceLease,heartbeatMaintenanceLease,assertMaintenanceLease,releaseMaintenanceLease} from './maintenance-lease';
 
 function timestamp(value:string|null){return value?Date.parse(value.endsWith('Z')?value:value.replace(' ','T')+'Z'):0}
 export function discoveryProgressDecision(row:DiscoveryRecommendation,sizeLeft:number|null,targetProgress:string|null,now=Date.now()){
@@ -31,13 +32,23 @@ async function readyTracks(row:DiscoveryRecommendation){
   return candidates.filter(t=>!unresolved.has(t.fileId)).map(t=>t.fileId);
 }
 const defaults={queue:lidarrQueue,torrents:qbitTorrents,target:targetByAlbum,add:addMusic,ready:readyTracks,lookup:searchMusic};
-function activeDiscoveryHashes(rows:DiscoveryRecommendation[],torrents:Awaited<ReturnType<typeof qbitTorrents>>,target:typeof targetByAlbum){
-  const incomplete=new Set(torrents.filter(t=>t.progress<1).map(t=>t.hash.toLowerCase()));
+export function genuinelyActiveDiscoveryTorrent(torrent:Pick<Torrent,'progress'|'state'|'dlspeed'|'added_on'>,lastProgress:number,now=Date.now()){
+  if(torrent.progress>=1||/paused|stopped|error|missing|upload|stalledup|queuedup|checkingup/i.test(torrent.state))return false;
+  if(!/^(downloading|forceddl|metadl|forcedmetadl|checkingdl|allocating|moving|checkingresumedata|queueddl|stalleddl)$/i.test(torrent.state))return false;
+  if(torrent.dlspeed>0)return true;
+  const last=Math.max(lastProgress||0,Number(torrent.added_on||0)*1000);
+  // Recent commitments still count while resolving metadata/starting. Old
+  // non-progressing transfers do not permanently occupy every discovery slot.
+  return !last||now-last<48*3600_000;
+}
+function activeDiscoveryHashes(rows:DiscoveryRecommendation[],torrents:Awaited<ReturnType<typeof qbitTorrents>>,target:typeof targetByAlbum,now=Date.now()){
   // Ready, dismissed, deferred and disabled recommendations may still have a
   // real transfer. Their bytes count toward the global active cap too.
-  const known=db().prepare("SELECT download_hash FROM acquisition_targets WHERE origin='playlist' AND download_hash IS NOT NULL").all() as Array<{download_hash:string}>;
-  const hashes=[...known.map(t=>t.download_hash),...rows.flatMap(row=>{const t=row.lidarr_album_id?target(row.lidarr_album_id):undefined;return t?.download_hash?[t.download_hash]:[]})];
-  return new Set(hashes.map(h=>h.toLowerCase()).filter(h=>incomplete.has(h)));
+  const known=db().prepare("SELECT download_hash,last_progress_at,created_at FROM acquisition_targets WHERE origin='playlist' AND download_hash IS NOT NULL").all() as Array<{download_hash:string;last_progress_at:string|null;created_at:string}>;
+  const progress=new Map<string,number>();
+  for(const item of known)progress.set(item.download_hash.toLowerCase(),Math.max(progress.get(item.download_hash.toLowerCase())??0,timestamp(item.last_progress_at)||timestamp(item.created_at)));
+  for(const row of rows){const item=row.lidarr_album_id?target(row.lidarr_album_id):undefined;if(item?.download_hash){const hash=item.download_hash.toLowerCase();progress.set(hash,Math.max(progress.get(hash)??0,timestamp(row.last_progress_at)||timestamp(row.queued_at),timestamp(item.last_progress_at)))}}
+  return new Set(torrents.filter(t=>progress.has(t.hash.toLowerCase())&&genuinelyActiveDiscoveryTorrent(t,progress.get(t.hash.toLowerCase())!,now)).map(t=>t.hash.toLowerCase()));
 }
 export async function reconcileDiscoveryAdmissions(dependencies=defaults){
   const reservations=db().prepare(`SELECT a.id,a.release_id,a.playlist_id,r.artist_id FROM playlist_discovery_admissions a JOIN playlist_discovery_releases r ON r.id=a.release_id
@@ -81,16 +92,23 @@ export async function refreshDiscoveryLifecycle(dependencies=defaults,now=new Da
         progress.defer?'No acquisition progress for 48 hours; considering other recommendations. Existing data retained.':'Acquisition managed independently by Curator',row.id);
     if(progress.defer)deferred++;
   }
-  const discoveryHashes=activeDiscoveryHashes(rows,torrents,dependencies.target);
+  const discoveryHashes=activeDiscoveryHashes(rows,torrents,dependencies.target,now.getTime());
   return{active:discoveryHashes.size,imported,deferred};
 }
 
 export async function queueDiscoveryRecommendations(dependencies=defaults,now=new Date()){
+  const name='discovery-acquisition',token=claimMaintenanceLease(name);if(!token)return{admitted:0,active:0,busy:true};
+  const heartbeat=setInterval(()=>{try{heartbeatMaintenanceLease(name,token)}catch(error){console.warn(JSON.stringify({event:'discovery_admission_heartbeat_failed',error:String(error)}))}},15_000);
+  try{return await queueDiscoveryRecommendationsLocked(dependencies,now,()=>assertMaintenanceLease(name,token))}
+  finally{clearInterval(heartbeat);releaseMaintenanceLease(name,token)}
+}
+async function queueDiscoveryRecommendationsLocked(dependencies:typeof defaults,now:Date,assertLease:()=>void){
   await reconcileDiscoveryAdmissions(dependencies);
   const [queue,torrents]=await Promise.all([dependencies.queue(),dependencies.torrents()]);
   const rows=activeDiscoveryRecommendations();
-  let active=activeDiscoveryHashes(rows,torrents,dependencies.target).size,admitted=0;
+  let active=activeDiscoveryHashes(rows,torrents,dependencies.target,now.getTime()).size,admitted=0;
   for(const row of rows.filter(r=>['researched','deferred'].includes(r.status))){
+    assertLease();
     if(playlistRefreshMode()==='canary'&&!refreshManaged(row.playlist_id))continue;
     if(row.cooldown_until&&timestamp(row.cooldown_until)>now.getTime())continue;
     if((await dependencies.ready(row)).length)continue;
@@ -101,9 +119,10 @@ export async function queueDiscoveryRecommendations(dependencies=defaults,now=ne
     // The shared release may already be in the native queue even if its
     // acquisition target has not yet been synchronized.
     if(row.lidarr_album_id&&queue.some(item=>item.albumId===row.lidarr_album_id))continue;
-    const reservation=reserveDiscoveryAdmission(row,active,now);if(!reservation)continue;
+    assertLease();const reservation=reserveDiscoveryAdmission(row,active,now);if(!reservation)continue;
     try{
       const added=await dependencies.add(row.artist_id,[row.release_id],'playlist');
+      assertLease();
       const albumId=added.albumIds[0];if(!albumId)throw Error('Acquisition returned no album identity');
       db().transaction(()=>{
         db().prepare("UPDATE playlist_discovery_releases SET lidarr_album_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(albumId,row.release_id);

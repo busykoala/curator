@@ -50,14 +50,16 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
   return{researched,queued:0};
 }
 let maintenanceRunning=false;
-export async function runDiscoveryMaintenance(){
+export async function runDiscoveryMaintenance(stages={lifecycle:refreshDiscoveryLifecycle,admit:queueDiscoveryRecommendations,research:researchDiscoveryPools}){
   if(maintenanceRunning||stateGet('paused')==='true')return;
   maintenanceRunning=true;
   try{
-    await refreshDiscoveryLifecycle();
-    await queueDiscoveryRecommendations();
-    await researchDiscoveryPools();
-    stateSet('playlist_discovery_error','');
+    const errors:string[]=[];
+    try{await stages.lifecycle();await stages.admit()}catch(error){errors.push('acquisition: '+String(error))}
+    // Discovery research is independent of Lidarr, qBittorrent and imports.
+    // A dependency outage must not empty or freeze the recommendation pool.
+    try{await stages.research()}catch(error){errors.push('research: '+String(error))}
+    stateSet('playlist_discovery_error',errors.join('; '));
   }catch(error){stateSet('playlist_discovery_error',String(error))}
   finally{maintenanceRunning=false}
 }

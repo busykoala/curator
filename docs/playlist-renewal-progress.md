@@ -168,6 +168,14 @@ changes in the infrastructure repository. Update this record at each handoff.
   can suppress research when acquisition dependencies fail. Also protect
   admission inventory against overlapping worker processes/rollouts, not only
   individual SQL reservations. Add regression and live evidence for these.
+- Follow-up lifecycle fixes are implemented: paused/finished/partial-seeding
+  transfers and >48-hour non-progressing transfers do not exhaust active slots;
+  current byte flow and recent commitments still count conservatively. A shared
+  leased admission inventory prevents overlapping workers using stale counts,
+  including lost/expired worker ownership. Research now continues independently
+  when acquisition dependencies fail. Four new regressions pass; full suite
+  204/204 and production build passed. Live provider/inventory evidence remains
+  outstanding before C/D can be considered verified.
 - Finish owner-scoped status/retry/dismiss/evidence UI and perform all stated
   live evaluations, simulations and quality gates. Current passing tests prove
   foundations only. Provider adapters still need live end-to-end validation.
