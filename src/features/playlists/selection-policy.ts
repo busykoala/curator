@@ -11,7 +11,7 @@ import type {PlaylistCandidate,PlaylistDefinition} from './types';
 
 export type EvidencedCandidate=PlaylistCandidate&{evidence:TrackEvidenceView;recordingGroupKey?:string;songId:string;listener:ListenerSong|null;exposureCount:number;removedAt:number|null;artistPlayCount?:number;albumLastPlayed?:string|null;discoveryBoost?:number;adjacent?:boolean;adjacencyReason?:string};
 export type CandidateAssessment={eligible:boolean;score:number;reasons:string[];violations:string[];uncertainty:string[]};
-export type PlaylistEvaluation={eligible:number;selected:number;requested:number;changed:number;retained:number;artistDiversity:number;albumDiversity:number;unheard:number|null;uncertainty:string[];relaxations:string[];shortage:number;violations:string[];diversityLimits?:{artist:number;album:number}};
+export type PlaylistEvaluation={eligible:number;selected:number;requested:number;changed:number;retained:number;artistDiversity:number;albumDiversity:number;unheard:number|null;uncertainty:string[];relaxations:string[];shortage:number;violations:string[];diversityLimits?:{artist:number;album:number};adjacentAdditions?:number;familiarAdditions?:number;adjacentTarget?:number};
 const values=(v:unknown):string[]=>Array.isArray(v)?v.map(String):v==null?[]:[String(v)];
 const days=86400_000;
 
@@ -228,6 +228,7 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
   if(intent.hard.singleArtist&&new Set(ordered.map(track=>norm(track.artist))).size>1)violations.push('Only one artist was requested');
   for(const lock of intent.positionLocks)if(allEligible.has(lock.fileId)&&ordered[lock.position]?.fileId!==lock.fileId)violations.push('A valid position lock could not be preserved');
   const evaluation:PlaylistEvaluation={eligible:pool.length,selected:ordered.length,requested:target,changed:ordered.filter(t=>!t.retained).length,retained:ordered.filter(t=>t.retained).length,
+    ...(definition.category==='discovery'?{adjacentAdditions:ordered.filter(track=>track.adjacent&&!track.retained).length,familiarAdditions:ordered.filter(track=>!track.adjacent&&!track.retained).length,adjacentTarget}:{}),
     artistDiversity:new Set(ordered.map(t=>norm(t.artist))).size,albumDiversity:new Set(ordered.map(t=>norm(t.artist)+'|'+norm(t.album))).size,
     unheard:input.snapshot.complete&&!input.snapshot.stale?ordered.filter(t=>t.listener&&!t.listener.hasPlayed&&!t.listener.favourite&&!t.listener.playCount).length:null,
     uncertainty:[...new Set(ordered.flatMap(t=>assessments.get(t.fileId)?.uncertainty??[]))],relaxations,shortage:Math.max(0,target-ordered.length),violations,diversityLimits:{artist:artistLimit,album:albumLimit}};

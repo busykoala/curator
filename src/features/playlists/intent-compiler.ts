@@ -11,9 +11,9 @@ import {canonicalIntent,configuredIntent,playlistIntentSchema,type PlaylistInten
 import type {EvidencedCandidate} from './selection-policy';
 import type {PlaylistDefinition} from './types';
 import {playlistAttemptRecorder} from './inference-metrics';
-import {enforceSoftPreferences} from './intent-preferences';
+import {enforceSoftPreferences,enforceDiscoveryStylePreferences} from './intent-preferences';
 
-const compilerVersion=9;
+const compilerVersion=10;
 export type ChatIntentContext=ReturnType<typeof chatState>;
 const compiledSchema=playlistIntentSchema.omit({version:true,sourceRevision:true,pinnedRecordings:true,excludedFileIds:true,excludedRecordings:true}).extend({
   pinFileIds:z.array(z.number().int().positive()).max(100),conflicts:z.array(z.string().max(240)).max(10),
@@ -55,6 +55,7 @@ Use availableVocabulary to express optional direction in terms actually present 
 Discovery's agreed default is roughly 70% familiar styles and 30% nearby styles among new additions, across all years. Put its stylistic centre in soft.styles so the application can use evidenced neighbours. Do not invent a strict positive style requirement solely from an ordinary Discovery preference such as "melodic techno new to me". A real "only melodic techno" instruction or an explicit factual restriction remains hard. Configured genre filters still apply, as do every explicit exclusion, instrument, vocal, version and date requirement. Other playlist types keep their ordinary interpretation.
 An artist name alone does not request all of that artist's typical styles. "Only Green Day recordings" with configured genre rock means that exact artist within rock; do not invent a pop_punk style gate. Likewise, do not infer extra mandatory dates, instruments or vocal styles from an artist's reputation. Preserve real style directions from the conversation and configuration when present.
 Factual requirements must come from actual user instructions or explicit configuration, never from genre stereotypes. "Electronic tracks with verified BPM 110–130" does NOT require synthesizer instrumentation; some electronic music uses samples or acoustic instruments. A Journey's calm landing is an ordering request, not permission to require ambient style or low energy throughout the entire playlist. Keep its overall musical centre broad enough for the requested peak and closing section; use energyCurve for the changing arc.
+For Discovery, ordinary genre/style directions describe its familiar centre and allow the agreed adjacent exploration. Put them in soft.styles. Add positive hard genre/style restrictions only when the real listener explicitly says only, exclusively, or every song must follow that style; configured genre requirements remain independently enforced. "Melodic techno new to me" permits adjacent styles; "Only melodic techno, no adjacent styles" does not.
 Preserve qualified exclusions precisely. "No festival EDM" => exclusions [festival_edm], not [edm], [electronic] or [house]. It excludes big-room/mainstage festival styles, while compatible house and techno remain available. "No aggressive rock" does not ban every rock song or every energetic song. Do not broaden a qualified exclusion to its entire genre family.
 Use minimal requirements, not a description of typical matching songs. "Music originally recorded in the 1970s" => minYear 1970, maxYear 1979, requirements [] unless configuration adds a filter; no recordingTypes requirement. "1990s punk energy" => original years 1990–1999 and punk direction; do not require studio recordings, standard_track, clean vocals or particular instruments. "Verified BPM 110–130" => numeric minBpm/maxBpm; do not add a tempoFeel steady condition. Leave unused requirement arrays empty; listing every allowed recording type still wrongly excludes recordings whose type is unknown. Never use the token "none" as a positive metadata value to express an absence; use a justified match=none rule and retain honest uncertainty.
 "No spoken interludes" means vocalProfile none spoken; singing may still be allowed. Do not invent a spoken_interlude recording type or exclude all musical interludes. "No forceful percussion" is not automatically "no crescendo" or "no percussion whatsoever"; preserve exactly the expressed limitation, and do not treat missing evidence as proof of absence.
@@ -95,7 +96,9 @@ ${canonicalPrompt}`,
       positionLocks:[...base.positionLocks,...compiled.positionLocks.filter(lock=>!base.positionLocks.some(existing=>existing.position===lock.position))],
       trackRequests:[...base.trackRequests,...compiled.trackRequests.filter(request=>!base.trackRequests.some(existing=>existing.title===request.title&&existing.artist===request.artist&&existing.action===request.action&&existing.position===request.position))],
     });
-    const demoted=enforceSoftPreferences(intent,compiled.mandatoryPreferences,[definition.intent,...(chat?.messages.filter(message=>message.role==='user').map(message=>message.content)??[])]);
+    const preserved=canonicalIntent(base).hard.requirements;
+    const demoted=enforceSoftPreferences(intent,compiled.mandatoryPreferences,directions,preserved);
+    if(definition.category==='discovery')demoted.push(...enforceDiscoveryStylePreferences(intent,directions,preserved));
     detail={...detail,usage:output.usage,latencyMs:Date.now()-started,demotedPreferences:demoted,replaceUnpinned:compiled.replaceUnpinned};
   }
   intent=canonicalIntent(intent);

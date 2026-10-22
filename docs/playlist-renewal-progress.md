@@ -519,3 +519,25 @@ changes in the infrastructure repository. Update this record at each handoff.
   Validation v17: 282/282 tests, TypeScript and production/worker build passed.
   Re-running the fixed rubric, then the complete repeated live replay. No
   production migration, pipeline enablement or new-pipeline nightly evidence yet.
+- Rubric v4 remains 38/40 (95%) versus frozen baseline 21/40 (52.5%), +42.5
+  points, with unchanged reference cases and the two known failures retained.
+- Rehearsed actual production schema 12→27 on a new consistent private copy,
+  then repeated migrations idempotently. Hashes of every definition, saved run,
+  song ordering, library tag/profile and encrypted credential row are unchanged;
+  foreign-key integrity is unchanged and no job/publication was created. The
+  rehearsal took 4.6 seconds; report is `baseline/production-migration-rehearsal.json`.
+- The next live replay exposed a different Discovery issue: local inference
+  promoted ordinary style preferences to hard all-song restrictions, leaving
+  zero adjacent additions. Preserved it as
+  `evaluation/full-replay-v2-interrupted-invented-style-restriction.json`.
+  Compiler v10 now grounds exclusive Discovery style requirements in real user
+  clauses, preserving configured hard requirements. Ordinary preferences stay
+  in the musical centre and permit the agreed adjacent exploration. Existing
+  saved mandatory mood requirements are also preserved on nightly interpretation.
+- Added explicit familiar/adjacent counts and target to Discovery evaluation
+  receipts. Validation v19: 285/285 tests, TypeScript and production/worker build
+  passed; a further focused negated-only direction regression passes. The full
+  repeated replay is running against the corrected code (`results-final-v3`).
+  Updated compiler requires its final fixed-rubric replay too. Production remains
+  unchanged; infrastructure pins currently refer to the earlier 98ba4ee image and
+  MUST be updated to the final evaluated build before any deploy/commit there.

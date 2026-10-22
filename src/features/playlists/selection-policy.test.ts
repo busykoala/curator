@@ -79,6 +79,7 @@ test('Discovery preserves its familiar-style share before relaxing album variety
   const adjacent=Array.from({length:20},(_,i)=>track(i+101,{genre:['electronic'],style:['dub_techno']}));
   const result=selectPlaylist({definition:def,intent,pool:[...familiar,...adjacent],previous:[],snapshot,now});
   assert.equal(result.items.length,12);assert.equal(result.items.filter(track=>track.adjacent).length,4);
+  assert.equal(result.evaluation.adjacentAdditions,4);assert.equal(result.evaluation.familiarAdditions,8);assert.equal(result.evaluation.adjacentTarget,4);
   assert.equal(result.evaluation.diversityLimits?.album,2);
   assert.ok(!result.evaluation.relaxations.some(reason=>reason.includes('share expanded')));
 });
