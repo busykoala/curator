@@ -182,3 +182,68 @@ changes in the infrastructure repository. Update this record at each handoff.
 - Deploy/observe only after the remaining packages pass. Preserve the original
   rollout: unpublished nightly comparison, Discovery canary, then three verified
   full nights. Goal completion remains unproven.
+- Read-only full-pipeline replays exposed two gaps absent from the synthetic
+  fixtures: the model promoted ordinary mood/context preferences into hard
+  requirements, and sometimes failed artist/album distribution arithmetic after
+  a repair. Added exact user-quote checks for mandatory mood/context claims,
+  deterministic distribution repair within the same inspected candidate set,
+  and an application-selected feasible plan as a distribution fallback. Hard
+  musical requirements and unseen IDs remain errors, with one model repair.
+  The second six-scenario replay passed 6/6, zero independent violations and
+  no publications (`evaluation/initial-six-v2.json`). It does not cover chat
+  correction stages or satisfy the 72-run gate.
+- Actual replay latency identified repeated tool exploration (up to 147,386
+  tokens) and verbose reranking documents. Candidates are now supplied directly,
+  the first validation stage advertises only its permitted tool, and successful
+  validation moves immediately to structured output. This also works around
+  the deployed custom template ignoring named `tool_choice`. Reranking uses
+  shorter musical descriptions. A 24-case initial replay is in progress; the
+  first case improved from 69.4 to 49.2 seconds, including compilation/retrieval.
+- Added the missing evidence lookup index and bounded startup WAL-transition
+  retries after concurrent-migration testing exposed a race. Native snapshots
+  now retain full collaborative credits, paths and disc/track positions;
+  additive migration 22 invalidates only the older identity cache version.
+  Exact owner-visible paths resolve edition collisions; contradictory paths
+  cannot be rescued by a stale mapping. Native IDs associated with conflicting
+  recording identities are rejected. Single-artist requests now select one
+  eligible artist group and report a shortage instead of padding across artists.
+- Latest full checkpoint: 212/212 tests, TypeScript and production build passed
+  before the final single-artist and native-identity regression additions. Those
+  additions passed targeted tests; repeat the full checks before committing.
+  Production remains unchanged, new pipeline flag off; no nightly rollout or
+  three-night observation has begun.
+- Follow-up implementation now uses the same bounded interpretation/retrieval/
+  selection path for managed interactive chat and nightly chat. Real corrections
+  can supersede earlier requirements; nightly work cannot weaken the latest
+  saved full intent, pins or position locks. Interpretation also represents
+  single-artist scope, album-level recent-play exclusions, negative dynamics,
+  and explicit Journey arcs. Independent evaluation expectations are separate
+  from generated intents and production scoring; the runner now includes actual
+  correction messages and subsequent nightly generations in the private copy.
+- The wider initial replay exposed an invented-style false shortage
+  (`calm_electronic` / `japanese_jazz` composites). Interpretation now receives
+  bounded library vocabulary and separates mood, geography and style. Another
+  piano failure was an overly literal evaluation assertion excluding
+  `electric_piano`; the independent oracle now recognises piano variants.
+  Preserve the exploratory report and distinguish these two causes.
+- Evidence view v2 treats empty fields as unknown, preserves explicit vocal/year
+  overrides, surfaces conflicting original dates, and does not use compilation
+  release-group dates as original recording dates. These are computed evidence
+  changes, not blanket reclassification or tag writes.
+- Live free-provider probe: ListenBrainz artist radio returned HTTP 200 in
+  491 ms, grouped recording MBIDs and 29 remaining requests. Discovery now checks
+  release/artist/recording bindings, prefers official artist albums over
+  compilations, validates provider payloads before caching, and requires musical
+  fit separately from identity before acquisition. Exact editorial style quotes
+  support claims; a related artist with unknown exact style is labelled adjacent.
+  Full end-to-end provider resolution/acquisition evidence is still outstanding.
+- Local embedding indexing exposed a real batch-size problem: the existing
+  four-thread single-slot service processes descriptions sequentially, so 32
+  texts exceeded the 12-second deadline. Eight-document batches now succeed:
+  128 vectors committed in 70.6 seconds. The private copy's fixed-library index
+  is building with chat priority and at most 128 tracks per minute; the original
+  failed benchmark is preserved. Final replays must use a stable completed index.
+- Current checkpoint: full suite 230/230 and production/worker build passed
+  (`/private/tmp/curator-renewal-v7-{tests,build}.log`). Final TypeScript check is
+  sequential after build because both access Next's generated type files.
+  No push, deployment, new production migrations or feature enablement yet.

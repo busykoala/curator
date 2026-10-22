@@ -68,6 +68,33 @@ test('the application caps tool rounds even if a caller requests a larger loop',
     assert.equal(executions,6);assert.equal(requests,7);
   }finally{globalThis.fetch=original}
 });
+test('successful validation switches directly to structured output without another tool round',async()=>{
+  const original=globalThis.fetch,requests:Array<Record<string,unknown>>=[];
+  globalThis.fetch=async(_url,options)=>{requests.push(JSON.parse(String(options?.body)));return Response.json({choices:[{message:requests.length===1?{tool_calls:[{id:'validate',type:'function',function:{name:'validate_selection',arguments:'{}'}}]}:{content:'{"ok":true}'}}]})};
+  try{
+    await client.structured({input:'Compare supplied candidates',schemaName:'test',schema,firstTool:'validate_selection',finishAfterValidTool:'validate_selection',tools:[{name:'validate_selection',description:'Check',parameters:{type:'object'},execute:()=>({valid:true})}]});
+    assert.equal(requests.length,2);assert.ok(requests[0].tools);assert.equal(requests[1].tools,undefined);assert.ok(requests[1].response_format);
+  }finally{globalThis.fetch=original}
+});
+test('a bounded validation stage passes errors to final output without repeating distribution arithmetic',async()=>{
+  const original=globalThis.fetch;let requests=0;
+  globalThis.fetch=async()=>{requests++;return Response.json({choices:[{message:requests===1?{tool_calls:[{id:'validate',type:'function',function:{name:'validate_selection',arguments:'{}'}}]}:{content:'{"ok":true}'}}]})};
+  try{
+    await client.structured({input:'Compare supplied candidates',schemaName:'test',schema,firstTool:'validate_selection',finishAfterTool:'validate_selection',tools:[{name:'validate_selection',description:'Check',parameters:{type:'object'},execute:()=>({valid:false,errors:['Artist variety']})}]});
+    assert.equal(requests,2);
+  }finally{globalThis.fetch=original}
+});
+test('the first workflow stage advertises and executes only its declared tool',async()=>{
+  const original=globalThis.fetch;let executed=false;
+  globalThis.fetch=async(_url,options)=>{
+    const body=JSON.parse(String(options?.body));assert.deepEqual(body.tools.map((tool:{function:{name:string}})=>tool.function.name),['requirements']);
+    return Response.json({choices:[{message:{tool_calls:[{id:'wrong',type:'function',function:{name:'publish',arguments:'{}'}}]}}]});
+  };
+  try{
+    await assert.rejects(client.structured({input:'Test staged tools',schemaName:'test',schema,firstTool:'requirements',tools:[{name:'requirements',description:'First',parameters:{type:'object'},execute:()=>({})},{name:'publish',description:'Other',parameters:{type:'object'},execute:()=>{executed=true}}]}),/outside the current workflow stage/);
+    assert.equal(executed,false);
+  }finally{globalThis.fetch=original}
+});
 test("a shared output budget prevents tool responses from overflowing the model context",async()=>{
   const original=globalThis.fetch,requests:Array<Record<string,unknown>>=[];
   globalThis.fetch=async (_url,options)=>{

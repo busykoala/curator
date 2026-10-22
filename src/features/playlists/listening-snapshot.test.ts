@@ -38,4 +38,14 @@ test('snapshots and failures remain scoped to their owner',async()=>{
   assert.deepEqual(other.songs.map(s=>s.id),['private-two']);
   assert.deepEqual((await listenerMusicSnapshot(1)).songs.map(s=>s.id),['private-one']);
 });
+test('identity upgrades refresh a recent cache and preserve collaborative credits, path and edition positions',async()=>{
+  await listenerMusicSnapshot(1,{load:async()=>({Items:[{Id:'old',Name:'Old'}],TotalRecordCount:1})});
+  database.prepare('UPDATE listener_music_snapshots SET identity_version=1 WHERE owner_user_id=1').run();
+  const snapshot=await listenerMusicSnapshot(1,{load:async path=>{
+    assert.ok(new URLSearchParams(path.split('?')[1]).get('Fields')?.includes('Path'));
+    return{Items:[{Id:'new',Name:'Collaboration',Artists:['Stan Getz','Charlie Byrd'],Album:'Jazz Samba',Path:'/music/Jazz/01.flac',IndexNumber:1,ParentIndexNumber:2}],TotalRecordCount:1};
+  }});
+  assert.deepEqual(snapshot.songs[0].artists,['Stan Getz','Charlie Byrd']);assert.equal(snapshot.songs[0].path,'/music/Jazz/01.flac');
+  assert.equal(snapshot.songs[0].trackNumber,1);assert.equal(snapshot.songs[0].discNumber,2);assert.equal(snapshot.songs[0].id,'new');
+});
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

@@ -3,12 +3,12 @@ import {canonicalSemanticField,canonicalSemanticValue} from '@/features/categori
 import type {PlaylistDefinition} from './types';
 
 const terms=z.array(z.string().trim().min(1).max(120)).max(30);
-export const intentFields=['genre','style','mood','listeningContexts','instrumentation','vocalProfile','recordingTypes','languages','acousticElectronicCharacter'] as const;
+export const intentFields=['genre','style','mood','listeningContexts','instrumentation','vocalProfile','recordingTypes','languages','acousticElectronicCharacter','texture','timbre','production','scenes','groove','dynamicCharacter','structuralCharacter','energy','valence','tempoFeel'] as const;
 export const semanticRequirementSchema=z.object({
   field:z.enum(intentFields),values:terms.min(1),match:z.enum(['any','all','none']),
 });
 export const playlistIntentSchema=z.object({
-  version:z.literal(1),sourceRevision:z.string(),summary:z.string().max(2000),
+  version:z.literal(1),sourceRevision:z.string(),summary:z.string().max(2000),energyCurve:z.enum(['configured','steady','ascent','slow_burn','wave','descent']).default('configured'),
   hard:z.object({
     requirements:z.array(semanticRequirementSchema).max(30),
     artists:terms,excludeArtists:terms,exclusions:terms,
@@ -16,7 +16,7 @@ export const playlistIntentSchema=z.object({
     recording:z.enum(['any','live','studio']),
     minYear:z.number().int().min(0).max(2100),maxYear:z.number().int().min(0).max(2100),
     minBpm:z.number().min(0).max(400),maxBpm:z.number().min(0).max(400),
-    favouritesOnly:z.boolean(),
+    favouritesOnly:z.boolean(),singleArtist:z.boolean().default(false),excludeRecentlyPlayedAlbums:z.boolean().default(false),
   }),
   soft:z.object({styles:terms,moods:terms,contexts:terms,energy:z.enum(['any','very_low','low','medium','high','very_high']),valence:terms}),
   pinnedRecordings:z.array(z.object({fileId:z.number().int().positive(),recordingKey:z.string().max(300)})).max(100),
@@ -27,10 +27,10 @@ export type SemanticRequirement=z.infer<typeof semanticRequirementSchema>;
 
 export function configuredIntent(definition:PlaylistDefinition,revision:string):PlaylistIntent{
   const config=definition.config;
-  return{version:1,sourceRevision:revision,summary:definition.intent,hard:{
+  return{version:1,sourceRevision:revision,summary:definition.intent,energyCurve:'configured',hard:{
     requirements:config.genres.length?[{field:'genre',values:config.genres,match:'any'}]:[],
     artists:[],excludeArtists:[],exclusions:config.exclusions,vocal:'any',recording:'any',
-    minYear:0,maxYear:0,minBpm:0,maxBpm:0,favouritesOnly:false,
+    minYear:0,maxYear:0,minBpm:0,maxBpm:0,favouritesOnly:false,singleArtist:false,excludeRecentlyPlayedAlbums:false,
   },soft:{styles:config.tasteLanes,moods:config.moods,contexts:config.contexts,energy:'any',valence:[]},pinnedRecordings:[],positionLocks:[]};
 }
 

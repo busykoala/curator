@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {identityName,trackAlbumMatches,trackArtistMatches,trackPositionMatches} from "./navidrome-identity";
+import {identityName,trackAlbumMatches,trackArtistMatches,trackPositionMatches,nativePathMatches} from "./navidrome-identity";
 
 test("Navidrome recordings match exact collaborative file credits, including split and reordered featured artists",()=>{
   assert.equal(trackArtistMatches(["Tom Misch,Yussef Dayes"],"Tom Misch","Tom Misch,Yussef Dayes"),true);
@@ -28,4 +28,11 @@ test("repeated titles use exact known track and disc positions rather than guess
   assert.equal(trackPositionMatches(tags,10,2),false);
   assert.equal(trackPositionMatches(tags,10,undefined),false);
   assert.equal(trackPositionMatches({},10,1),false);
+});
+test('native paths reconcile mount roots without collapsing distinct files',()=>{
+  assert.equal(nativePathMatches('/music/坂本/Album/01 Song.flac','/media/music/坂本/Album/01%20Song.flac'),true);
+  assert.equal(nativePathMatches('/music/Artist/Album/100% Music.flac','Artist/Album/100% Music.flac'),true);
+  assert.equal(nativePathMatches('/music/Artist/Album/01.flac','OtherArtist/Album/01.flac'),false);
+  assert.equal(nativePathMatches('/music/Artist/Album/01.flac','Artist/Album/01.FLAC'),false);
+  assert.equal(nativePathMatches('/music/Artist/Album/01.flac',undefined),false);
 });

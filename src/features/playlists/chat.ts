@@ -10,6 +10,7 @@ import { chatRequestSchema } from "./chat-request";
 import {playlistAttemptRecorder} from './inference-metrics';
 import {refreshManaged} from './refresh-jobs';
 import {playlistTrackEvidence} from './evidence-repository';
+import {suggestIntentChatPlaylist} from './chat-selection';
 export { chatRequestSchema } from "./chat-request";
 
 export function chatLibrary(id:number):LibraryTrack[]{
@@ -31,8 +32,10 @@ export async function sendPlaylistMessage(id:number,raw:unknown,job?:{lease:stri
   try{
     const state=chatState(id);
     if(request.revision!==state.revision)throw new Error("This conversation has changed. Reopen the playlist and retry.");
-    const result=await suggestChatPlaylist({client:aiClient,library:chatLibrary(id),messages:state.messages,message:request.message,targetTracks:request.targetTracks,current:state.result?.items??[],guidance:state.result?.guidance,priorRequirements:state.result?.detail.requirements,name:state.result?definition.name:undefined,onAttempt:playlistAttemptRecorder(definition,'chat')});
-    recordAiUsage("playlist_chat",aiModel,{usage:result.detail.usage});
+    const managed=refreshManaged(id);
+    const result=managed?(await suggestIntentChatPlaylist(definition,state,request.message,request.targetTracks)).result:
+      await suggestChatPlaylist({client:aiClient,library:chatLibrary(id),messages:state.messages,message:request.message,targetTracks:request.targetTracks,current:state.result?.items??[],guidance:state.result?.guidance,priorRequirements:state.result?.detail.requirements,name:state.result?definition.name:undefined,onAttempt:playlistAttemptRecorder(definition,'chat')});
+    if(!managed)recordAiUsage("playlist_chat",aiModel,{usage:result.detail.usage});
     const messages=[...state.messages,{role:"user" as const,content:request.message},{role:"assistant" as const,content:result.reply}];
     db().transaction(()=>{
       let name=result.name;

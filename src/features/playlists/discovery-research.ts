@@ -6,6 +6,8 @@ import {editorialCandidates,lastFmCandidates,listenBrainzCandidates} from './dis
 import {queueDiscoveryRecommendations,refreshDiscoveryLifecycle} from './discovery-lifecycle';
 import type {PlaylistDefinition} from './types';
 import {playlistRefreshMode,refreshManaged} from './refresh-jobs';
+import {compilePlaylistIntent} from './intent-compiler';
+import {discoveryReleaseFit} from './discovery-fit';
 
 const providers=[{name:'listenbrainz',load:listenBrainzCandidates},{name:'editorial',load:editorialCandidates},{name:'lastfm',load:lastFmCandidates}];
 export function discoveryPoolNeedsResearch(playlist:PlaylistDefinition,now=Date.now()){
@@ -23,21 +25,26 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
   if(!playlists.length)return{researched:0,queued:0};
   const cursor=Number(stateGet('playlist_research_cursor','0'))%playlists.length,playlist=playlists[cursor];
   const cycle=Number(stateGet(`playlist_research_cycles:${playlist.id}`,'0'));
+  const compiled=await compilePlaylistIntent(playlist,[]),direction={...playlist,config:{...playlist.config,
+    tasteLanes:compiled.intent.soft.styles.length?compiled.intent.soft.styles:playlist.config.tasteLanes,
+    exclusions:[...new Set([...playlist.config.exclusions,...compiled.intent.hard.exclusions,...compiled.intent.hard.requirements.filter(rule=>['genre','style'].includes(rule.field)&&rule.match==='none').flatMap(rule=>rule.values)])],
+  }};
   const recent=cycle%4===3;let researched=0;
   const outcomes:Array<{provider:string;candidates:number;error?:string}>=[];
   for(const provider of adapters){
     try{
-      const releases=await provider.load(playlist,recent);let accepted=0;
+      const releases=await provider.load(direction,recent);let accepted=0;
       for(const release of releases){
         if(!usableEvidence(release))continue;
+        const fit=discoveryReleaseFit(direction,release);if(!fit)continue;
         if(recent&&(!release.releaseDate||Date.parse(release.releaseDate)<now.getTime()-120*86400_000))continue;
         const existing=discoveryRecommendations(playlist.id,playlist.ownerUserId);
         if(existing.some(r=>r.release_id===release.id))continue;
         if(existing.filter(r=>['researched','queued','downloading','ready'].includes(r.status)).length>=discoveryPoolTarget)break;
         const recommendation=release.evidence.find(e=>e.provider!=='musicbrainz')!;
         const reason=recommendation.claims.seedArtist?`Recommended from ${String(recommendation.claims.seedArtist)} by ${recommendation.provider}`:`Supported by ${recommendation.provider} release evidence`;
-        const origin=provider.name==='listenbrainz'&&recommendation.claims.explorationMode==='medium'?'listenbrainz-adjacent':provider.name;
-        storeDiscoveryRecommendation(playlist,release,reason,origin);researched++;accepted++;
+        const origin=fit.lane==='adjacent'?provider.name+'-adjacent':provider.name;
+        storeDiscoveryRecommendation(playlist,release,reason+' · '+fit.reason,origin);researched++;accepted++;
       }
       outcomes.push({provider:provider.name,candidates:accepted});
     }catch(error){outcomes.push({provider:provider.name,candidates:0,error:String(error).slice(0,250)})}

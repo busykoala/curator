@@ -1,4 +1,9 @@
 export const identityName=(value:string)=>value.normalize("NFKD").replace(/\p{M}+/gu,"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+export function nativePathMatches(expected:string,actual:string|undefined){
+  if(!expected||!actual)return false;
+  const clean=(value:string)=>{let decoded=value;try{decoded=decodeURIComponent(value)}catch{/* Literal percent signs are valid filenames. */}return decoded.normalize('NFC').replace(/\\/g,'/').replace(/^\/?music\//,'').replace(/^\/+/, '')};
+  const left=clean(expected),right=clean(actual);return Boolean(left&&right)&&(left===right||left.endsWith('/'+right)||right.endsWith('/'+left));
+}
 
 function strings(value:unknown):string[]{return Array.isArray(value)?value.filter((item):item is string=>typeof item==="string"):typeof value==="string"?[value]:[]}
 function credits(value:string[]){

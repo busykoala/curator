@@ -8,11 +8,12 @@ import {db,stateSet} from '@/features/db/client';
 import {provisionUser} from '@/features/auth/navidrome';
 import {createPlaylist,getPlaylist,playlistSnapshot} from './repository';
 import {generatePlaylist,savePlaylistPreview} from './generate';
-import {recordPlaylistExposure,loadEvidencedCandidates} from './selection-repository';
+import {recordPlaylistExposure,loadEvidencedCandidates,generateIntentSelection} from './selection-repository';
 import {compilePlaylistIntent} from './intent-compiler';
 import {configuredIntent} from './intent-schema';
 import type {StructuredRequest} from '@/features/ai/client';
-import {acquireChatLease,releaseChatLease,storeRefreshedChatSelection,chatState} from './chat-state';
+import {acquireChatLease,releaseChatLease,storeRefreshedChatSelection,storeChatResult,chatState} from './chat-state';
+import {suggestIntentChatPlaylist} from './chat-selection';
 import {unrestrictedRequirements} from './chat-agent';
 import {aiClient} from '@/features/ai/client';
 
@@ -91,5 +92,43 @@ test('nightly chat results retain real conversation and saved strict corrections
   const compiled=await compilePlaylistIntent(chat,[],{client});assert.equal(compiled.intent.hard.vocal,'instrumental');assert.ok(compiled.intent.hard.requirements.some(rule=>rule.field==='instrumentation'&&rule.values.includes('piano')));
   storeRefreshedChatSelection(chat.id,lease,[]);releaseChatLease(chat.id,lease);
   assert.deepEqual(chatState(chat.id).messages,messages);assert.equal(chatState(chat.id).result?.guidance,result.guidance);assert.equal(chatState(chat.id).revision,2);
+});
+test('managed chat uses bounded retrieval and lets real corrections supersede earlier intent while nightly refresh cannot weaken it',async()=>{
+  const chat=createPlaylist({name:'Bounded conversation',category:'chat',enabled:false,ownerUserId:user.id,config:{targetTracks:1}});
+  const snapshot=await(await import('./listening-snapshot')).listenerMusicSnapshot(user.id);
+  let requestedArtist='Artist 1',compileCalls=0;
+  const client={async structured<T>(request:StructuredRequest){
+    assert.equal(request.web??false,false);
+    if(request.schemaName==='playlist_intent'){
+      compileCalls++;const input=JSON.parse(request.input);assert.ok(input.conversation.length);
+      const intent=configuredIntent(chat,'ignored');intent.hard.artists=requestedArtist?[requestedArtist]:[];intent.hard.vocal='instrumental';
+      return{data:{...intent,summary:'Saved exact artist',pinFileIds:[],positionLocks:[],conflicts:[],mandatoryPreferences:[],replaceUnpinned:false} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}};
+    }
+    assert.equal(request.priority,'interactive');const input=JSON.parse(request.input);assert.ok(input.candidates.length<=60);
+    return{data:{summary:'Matching artist',tracks:input.candidates.slice(0,1).map((track:{fileId:number})=>({fileId:track.fileId,focus:'genre'}))} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}};
+  }};
+  const provider={embed:async()=>[Array.from({length:1024},(_,i)=>i===0?1:0)],rerank:async(_query:string,texts:string[])=>texts.map((_,index)=>({index,score:-index}))};
+  const first=await suggestIntentChatPlaylist(chat,chatState(chat.id),'Only Artist 1, no singing',1,{client,snapshot,provider});
+  assert.equal(first.result.items[0].artist,'Artist 1');assert.equal(chatState(chat.id).revision,0,'Generation cannot commit a conversation');
+  const save=(message:string,result:typeof first.result)=>{const state=chatState(chat.id),lease=acquireChatLease(chat.id);try{storeChatResult(chat.id,lease,[...state.messages,{role:'user',content:message},{role:'assistant',content:result.reply}],result)}finally{releaseChatLease(chat.id,lease)}};
+  save('Only Artist 1, no singing',first.result);requestedArtist='Artist 2';
+  const correction=await suggestIntentChatPlaylist(chat,chatState(chat.id),'Only Artist 2 instead',1,{client,snapshot,provider});
+  assert.equal(correction.result.items[0].artist,'Artist 2');save('Only Artist 2 instead',correction.result);
+  requestedArtist='';
+  const nightly=await generateIntentSelection(chat,{client,snapshot,provider});
+  assert.deepEqual(nightly.intent.hard.artists,['Artist 2']);assert.equal(nightly.intent.hard.vocal,'instrumental');assert.equal(nightly.items[0].artist,'Artist 2');
+  assert.equal(compileCalls,3);assert.equal(chatState(chat.id).messages.length,4);assert.equal(chatState(chat.id).messages[2].content,'Only Artist 2 instead');
+});
+test('collaborative native identities use full credits and exact paths rather than stale cached editions',()=>{
+  const tags={title:['Duet'],artist:['Charlie Byrd feat. Stan Getz'],album:['Jazz Samba'],trackNumber:1,discNumber:1};
+  database.prepare("INSERT INTO files(id,path,album_key,artist_name,album_name,format,inode,link_count,size,mtime_ms,tags_json,properties_json,artwork_json,status) VALUES(9,'/music/Jazz/01.flac','collab','Charlie Byrd/Stan Getz','Jazz Samba','flac',9,1,1,1,?,'{}','{}','written')").run(JSON.stringify(tags));
+  database.prepare("INSERT INTO track_profiles(file_id,album_key,status,profile_json,source_fingerprint,audio_fingerprint,schema_version,classifier_version,source_updated_at) VALUES(9,'collab','complete','{\"genre\":[\"jazz\"]}','fixture','fixture',1,1,CURRENT_TIMESTAMP)").run();
+  const native={id:'correct',title:'Duet',artist:'Charlie Byrd',artists:['Stan Getz','Charlie Byrd'],album:'Jazz Samba',path:'/media/music/Jazz/01.flac',trackNumber:1,discNumber:1,playCount:0,hasPlayed:false,lastPlayed:null,favourite:false,rating:null,providerIds:{}};
+  const snapshot={songs:[native,{...native,id:'other-edition',path:'/media/music/Jazz-other-edition/01.flac'}],complete:true,stale:false,capturedAt:'',error:'',available:true};
+  assert.deepEqual(loadEvidencedCandidates(playlist,snapshot).map(song=>song.songId),['correct']);
+  database.prepare("UPDATE navidrome_track_map SET jellyfin_song_id='other-edition' WHERE file_id=9").run();
+  assert.equal(loadEvidencedCandidates(playlist,snapshot)[0].songId,'correct');
+  assert.equal(loadEvidencedCandidates(playlist,{...snapshot,songs:[{...native,path:'/music/Wrong/01.flac'}]}).length,0);
+  assert.equal(loadEvidencedCandidates(playlist,{...snapshot,songs:[{...native,artists:['Charlie Byrd']}]}).length,0);
 });
 test.after(()=>{globalThis.fetch=original;aiClient.structured=originalStructured;database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

@@ -1,5 +1,5 @@
 import {db} from '@/features/db/client';
-import {buildTrackEvidence,trackEvidenceHash,type ExternalTrackFact,type TrackEvidenceView} from './track-evidence';
+import {buildTrackEvidence,trackEvidenceHash,trackEvidenceVersion,type ExternalTrackFact,type TrackEvidenceView} from './track-evidence';
 import {reviewIdentity,reviewIdentityHash} from './metadata-review';
 
 export function playlistTrackEvidence(fileId:number):TrackEvidenceView|null{
@@ -18,15 +18,17 @@ export function playlistTrackEvidence(fileId:number):TrackEvidenceView|null{
       const payload=JSON.parse(source.payload_json),groups=[payload,...(payload['release-groups']??[])];
       const group=groups.find(g=>g.id===groupId);if(!group)continue;
       const date=group['first-release-date'];
-      if(date)external.push({field:'originalDate',value:date,scope:'release',url:`https://musicbrainz.org/release-group/${groupId}`});
+      // A compilation's first issue date says nothing about the original era
+      // of its component recordings. Preserve edition dates separately.
+      if(date&&!(group['secondary-types']??[]).includes('Compilation'))external.push({field:'originalDate',value:date,scope:'release',url:`https://musicbrainz.org/release-group/${groupId}`});
       break;
     }
   }
   const input={artist:row.artist_name,title:String(Array.isArray(tags.title)?tags.title[0]:tags.title??''),tags,profile:JSON.parse(row.profile_json??'{}'),manual:JSON.parse(row.patch_json??'{}'),provenance:JSON.parse(row.provenance_json??'{}'),audio:JSON.parse(row.features_json??'{}'),external};
-  const hash=trackEvidenceHash(input),cached=db().prepare('SELECT evidence_json FROM playlist_track_evidence WHERE file_id=? AND version=1 AND source_hash=?').get(fileId,hash) as {evidence_json:string}|undefined;
+  const hash=trackEvidenceHash(input),cached=db().prepare('SELECT evidence_json FROM playlist_track_evidence WHERE file_id=? AND version=? AND source_hash=?').get(fileId,trackEvidenceVersion,hash) as {evidence_json:string}|undefined;
   if(cached)return JSON.parse(cached.evidence_json);
   const evidence=buildTrackEvidence(input);
-  db().prepare('INSERT INTO playlist_track_evidence(file_id,version,source_hash,evidence_json) VALUES(?,1,?,?) ON CONFLICT(file_id) DO UPDATE SET version=1,source_hash=excluded.source_hash,evidence_json=excluded.evidence_json,updated_at=CURRENT_TIMESTAMP')
-    .run(fileId,hash,JSON.stringify(evidence));
+  db().prepare('INSERT INTO playlist_track_evidence(file_id,version,source_hash,evidence_json) VALUES(?,?,?,?) ON CONFLICT(file_id) DO UPDATE SET version=excluded.version,source_hash=excluded.source_hash,evidence_json=excluded.evidence_json,updated_at=CURRENT_TIMESTAMP')
+    .run(fileId,trackEvidenceVersion,hash,JSON.stringify(evidence));
   return evidence;
 }

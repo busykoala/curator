@@ -32,9 +32,9 @@ async function main(){
   const proposedIds=new Set(proposed.map(track=>track.fileId)),candidates=[...proposed,...ranked.filter(track=>!proposedIds.has(track.fileId))].slice(0,60);
   if(candidates.length<12)throw Error(`Only ${candidates.length} matching recordings in the fixed fixture; smoke needs 12`);
   const attempts:AiAttempt[]=[],started=Date.now();
-  const result=await choosePlaylistAdditions({client,intent,candidates,target:12,listenerContext:{complete:false,stale:true,note:'No listener history supplied. Unheard status must not be claimed.'},retainedArtists:[],limits:{maxPerArtist:plan.evaluation.diversityLimits!.artist,maxPerAlbum:plan.evaluation.diversityLimits!.album,retained:[]},signal:AbortSignal.timeout(240_000),repairBudget:{remaining:1},onAttempt:attempt=>attempts.push(attempt)});
+  const result=await choosePlaylistAdditions({client,intent,candidates,target:12,feasibleIds:proposed.map(track=>track.fileId),listenerContext:{complete:false,stale:true,note:'No listener history supplied. Unheard status must not be claimed.'},retainedArtists:[],limits:{maxPerArtist:plan.evaluation.diversityLimits!.artist,maxPerAlbum:plan.evaluation.diversityLimits!.album,retained:[]},signal:AbortSignal.timeout(240_000),repairBudget:{remaining:1},onAttempt:attempt=>attempts.push(attempt)});
   const checks={requestedSize:result.items.length===12,uniqueRecordings:new Set(result.items.map(item=>item.evidence.recordingKey)).size===12,
-    eligible:result.items.every(track=>assessCandidate(track,definition,intent,snapshot).eligible),toolsUsed:result.detail.tools.some(tool=>tool.name==='search_library'),
+    eligible:result.items.every(track=>assessCandidate(track,definition,intent,snapshot).eligible),validationToolUsed:result.detail.tools.some(tool=>tool.name==='validate_selection'),
     artistVariety:result.items.every(track=>result.items.filter(other=>other.artist===track.artist).length<=plan.evaluation.diversityLimits!.artist),
     albumVariety:result.items.every(track=>result.items.filter(other=>other.artist===track.artist&&other.album===track.album).length<=plan.evaluation.diversityLimits!.album)};
   const report={at:new Date().toISOString(),scope:'Live selection-stage smoke only; fixed intent, existing model metadata, no listening history, no native playability proof, no publication',fixture:baseline,

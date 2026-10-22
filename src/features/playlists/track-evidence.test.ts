@@ -36,3 +36,13 @@ test('original dates and distinct recording versions survive modern reissues',()
   const verified=buildTrackEvidence({...base,external:[{field:'recordingId',value:id,scope:'recording',url:'https://musicbrainz.org/recording/'+id}]});
   assert.equal(verified.recordingKey,'mb:'+id);assert.equal(verified.fields.recordingId.confidence,'high');
 });
+test('empty semantic fields are unknown and empty embedded tags cannot erase positive evidence',()=>{
+  const result=buildTrackEvidence({artist:'A',title:'T',profile:{vocalProfile:[],instrumentation:['piano']},tags:{instrumentation:[]}});
+  assert.equal(result.fields.vocalProfile.source,'unknown');assert.equal(result.fields.vocalProfile.value,null);
+  assert.equal(result.fields.instrumentation.source,'model_inference');assert.deepEqual(result.fields.instrumentation.value,['piano']);
+});
+test('conflicting original dates are reviewable and explicit year overrides are preserved',()=>{
+  const input={artist:'A',title:'T',profile:{},tags:{date:['2020']},external:[{field:'originalDate',value:'1977',scope:'recording' as const,url:'https://example.com/one'},{field:'originalDate',value:'1981',scope:'recording' as const,url:'https://example.com/two'}]};
+  const conflict=buildTrackEvidence(input);assert.equal(conflict.originalYear,null);assert.equal(conflict.fields.originalYear.source,'conflict');
+  const override=buildTrackEvidence({...input,manual:{originalYear:1977}});assert.equal(override.originalYear,1977);assert.equal(override.fields.originalYear.source,'user_override');
+});

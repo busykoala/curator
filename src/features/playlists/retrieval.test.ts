@@ -50,8 +50,8 @@ test('invalid vectors are rejected atomically before any cache mutation',()=>{
 test('backfill caps batches, retains profiles and yields between batches to chat',async()=>{
   for(let id=5;id<=160;id++)file(id);
   const before=database.prepare('SELECT profile_json FROM track_profiles WHERE file_id=10').get();let requests=0,documents=0;
-  const provider:RetrievalProvider={async embed(texts){requests++;documents+=texts.length;assert.ok(texts.length<=32);return texts.map(()=>v(0))},async rerank(){return[]}};
-  assert.equal(await preparePlaylistEmbeddings(1000,provider),128);assert.equal(documents,128);assert.equal(requests,4);
+  const provider:RetrievalProvider={async embed(texts){requests++;documents+=texts.length;assert.ok(texts.length<=8);return texts.map(()=>v(0))},async rerank(){return[]}};
+  assert.equal(await preparePlaylistEmbeddings(1000,provider),128);assert.equal(documents,128);assert.equal(requests,16);
   assert.deepEqual(database.prepare('SELECT profile_json FROM track_profiles WHERE file_id=10').get(),before);
   database.exec("INSERT INTO curator_users(id,navidrome_user_id,username,display_name) VALUES(1,'one','one','One');INSERT INTO smart_playlists(id,name,category,owner_user_id) VALUES(1,'Chat','chat',1);INSERT INTO playlist_chat_jobs(id,playlist_id,message,target_tracks,base_revision,created_at,updated_at) VALUES('chat',1,'A request',1,0,0,0)");
   assert.equal(await preparePlaylistEmbeddings(128,provider),0);

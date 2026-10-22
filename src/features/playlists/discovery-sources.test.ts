@@ -41,4 +41,15 @@ test('an empty successful provider result is distinct from an unavailable provid
   assert.deepEqual(rows,[{provider:'empty',status:'success'},{provider:'broken',status:'failed'}]);
   assert.equal(stateGet('playlist_source_error:empty'),'');assert.match(stateGet('playlist_source_error:broken'),/Unavailable/);
 });
+test('malformed provider data is not cached as success and does not suppress another source',async()=>{
+  const original=globalThis.fetch;globalThis.fetch=async()=>Response.json({error:'Wrong schema'});
+  try{
+    await assert.rejects(discoveryJson('malformed','https://example.com/api',7,'api',undefined,raw=>{
+      if(!Array.isArray(raw))throw Error('Malformed recommendation response');return raw;
+    }),/Malformed recommendation/);
+    assert.equal((database.prepare('SELECT count(*) n FROM playlist_source_cache').get() as {n:number}).n,0);
+    assert.equal((database.prepare('SELECT status FROM playlist_source_requests').get() as {status:string}).status,'failed');
+    assert.ok(Number(stateGet('playlist_source_cooldown:malformed'))>Date.now());assert.ok(reserveDiscoveryRequest('healthy','api'));
+  }finally{globalThis.fetch=original}
+});
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

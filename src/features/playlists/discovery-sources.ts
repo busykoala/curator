@@ -30,10 +30,13 @@ async function providerSlot(provider:string){
     if(!wait)return;await new Promise(r=>setTimeout(r,wait));
   }
 }
-export async function cachedDiscoveryRequest<T>(provider:string,key:string,kind:DiscoveryRequestKind,ttlDays:number,load:()=>Promise<T>):Promise<{value:T;fetchedAt:string;cached:boolean}>{
+export async function cachedDiscoveryRequest<T>(provider:string,key:string,kind:DiscoveryRequestKind,ttlDays:number,load:()=>Promise<T>,decode?:(raw:unknown)=>T):Promise<{value:T;fetchedAt:string;cached:boolean}>{
   const cacheKey=createHash('sha256').update(provider+':'+key).digest('hex'),now=Date.now();
   const cached=db().prepare('SELECT payload_json,fetched_at,expires_at FROM playlist_source_cache WHERE cache_key=?').get(cacheKey) as {payload_json:string;fetched_at:number;expires_at:number}|undefined;
-  if(cached&&cached.expires_at>now)return{value:JSON.parse(cached.payload_json),fetchedAt:new Date(cached.fetched_at).toISOString(),cached:true};
+  if(cached&&cached.expires_at>now){
+    try{const raw=JSON.parse(cached.payload_json);return{value:decode?decode(raw):raw,fetchedAt:new Date(cached.fetched_at).toISOString(),cached:true}}
+    catch{db().prepare('DELETE FROM playlist_source_cache WHERE cache_key=?').run(cacheKey)}
+  }
   await providerSlot(provider);
   const receipt=reserveDiscoveryRequest(provider,kind);
   try{
@@ -50,7 +53,7 @@ export async function cachedDiscoveryRequest<T>(provider:string,key:string,kind:
     throw error;
   }
 }
-export async function discoveryJson<T>(provider:string,url:string,ttlDays=7,kind:DiscoveryRequestKind='api',gate?:(load:()=>Promise<T>)=>Promise<T>){
+export async function discoveryJson<T>(provider:string,url:string,ttlDays=7,kind:DiscoveryRequestKind='api',gate?:(load:()=>Promise<T>)=>Promise<T>,decode?:(raw:unknown)=>T){
   const keyUrl=new URL(url);for(const key of ['api_key','token'])keyUrl.searchParams.delete(key);
   return cachedDiscoveryRequest<T>(provider,keyUrl.toString(),kind,ttlDays,async()=>{
     const request=async()=>{
@@ -58,10 +61,10 @@ export async function discoveryJson<T>(provider:string,url:string,ttlDays=7,kind
     if(response.status===429||response.status===503){stateSet(`playlist_source_cooldown:${provider}`,String(retryAt(response)));throw new DiscoverySourceDeferred(`${provider} returned ${response.status}; retry scheduled`)}
     if(!response.ok)throw Error(`${provider} returned HTTP ${response.status}`);
     if(response.headers.get('x-ratelimit-remaining')==='0')stateSet(`playlist_source_cooldown:${provider}`,String(retryAt(response)));
-    return await response.json() as T;
+    const raw=await response.json();return decode?decode(raw):raw as T;
     };
     return gate?gate(request):request();
-  });
+  },decode);
 }
 export function discoveryPage(provider:string,url:string){return cachedDiscoveryRequest<OpenedPage>(provider,url,'editorial',7,()=>openWebPage(url))}
 export function discoveryWebSearch(query:string){return cachedDiscoveryRequest('web-search',query,'search',7,()=>webSearch(query))}

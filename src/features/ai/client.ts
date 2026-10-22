@@ -7,7 +7,7 @@ export type AiUsage={input_tokens:number;output_tokens:number;total_tokens:numbe
 export type AiResult<T>={data:T;usage:AiUsage;sourceUrls?:Set<string>};
 export type AiTool={name:string;description:string;parameters:JsonSchema;execute:(args:Record<string,unknown>)=>unknown|Promise<unknown>};
 export type AiAttempt={durationMs:number;httpStatus:number|null;outcome:'success'|'failed';usage:AiUsage|null;error?:string};
-export type StructuredRequest={input:string;instructions?:string;schemaName:string;schema:JsonSchema;maxOutputTokens?:number;web?:boolean;tools?:AiTool[];firstTool?:string;maxToolTurns?:number;maxToolCalls?:number;maxToolResultCharacters?:number;signal?:AbortSignal;deadlineMs?:number;priority?:'interactive'|'background';onAttempt?:(attempt:AiAttempt)=>void};
+export type StructuredRequest={input:string;instructions?:string;schemaName:string;schema:JsonSchema;maxOutputTokens?:number;web?:boolean;tools?:AiTool[];firstTool?:string;finishAfterValidTool?:string;finishAfterTool?:string;maxToolTurns?:number;maxToolCalls?:number;maxToolResultCharacters?:number;signal?:AbortSignal;deadlineMs?:number;priority?:'interactive'|'background';onAttempt?:(attempt:AiAttempt)=>void};
 export type AiClientOptions={apiKey:string;baseURL:string;model:string;runCompletion?:typeof runSharedInference};
 
 type FunctionTool={type:"function";function:{name:string;description:string;strict:true;parameters:JsonSchema}};
@@ -101,23 +101,29 @@ export class CuratorAiClient{
     const discoveredUrls=new Set<string>(),sourceUrls=new Set<string>(),executed=new Set<string>();
     const toolDefinitions:FunctionTool[]=[...(request.tools??[]).map(tool=>({type:"function" as const,function:{name:tool.name,description:tool.description,strict:true as const,parameters:tool.parameters}})),...(request.web?localTools:[])];
     let toolCalls=0,remainingToolCharacters=request.maxToolResultCharacters??Infinity;
-    let repeated=false;
+    let repeated=false,validated=false;
     for(let turn=0;turn<Math.min(6,request.maxToolTurns??6);turn+=1){
       const firstTool=request.firstTool??(request.web?"web_search":undefined);
-      const response=await this.completion({messages,tools:toolDefinitions,tool_choice:turn===0&&firstTool?{type:"function",function:{name:firstTool}}:"auto",max_tokens:1_200,temperature:0},signal,onAttempt,request.priority);
+      // Some local template/parser combinations treat named tool_choice as
+      // advisory. Advertise only the permitted first-stage function as well.
+      const availableTools=turn===0&&firstTool?toolDefinitions.filter(tool=>tool.function.name===firstTool):toolDefinitions;
+      const response=await this.completion({messages,tools:availableTools,tool_choice:turn===0&&firstTool?{type:"function",function:{name:firstTool}}:"auto",max_tokens:1_200,temperature:0},signal,onAttempt,request.priority);
       const choice=response.choices?.[0];if(!choice)throw new Error("Local AI response contained no choice");
       const calls=choice.message.tool_calls??[];
       if(!calls.length){messages.push({role:"assistant",content:choice.message.content??""});break}
       if(toolCalls+calls.length>Math.min(12,request.maxToolCalls??12))throw Error('AI exceeded the tool-call budget');
       messages.push({role:"assistant",content:choice.message.content??"",tool_calls:calls});
       for(const call of calls){
+        if(!availableTools.some(tool=>tool.function.name===call.function.name))throw Error('AI called a tool outside the current workflow stage');
         let output:unknown;try{toolCalls++;const args=JSON.parse(call.function.arguments) as Record<string,unknown>,key=call.function.name+':'+stable(args);if(executed.has(key)){repeated=true;throw Error('Identical tool call already attempted; finish from the collected evidence')}executed.add(key);const custom=request.tools?.find(tool=>tool.name===call.function.name);if(custom)output=await abortable(Promise.resolve().then(()=>custom.execute(args)),signal);else if(request.web&&call.function.name==="web_search"){output=await abortable(webSearch(String(args.query??"")),signal);for(const item of output as Awaited<ReturnType<typeof webSearch>>)discoveredUrls.add(item.url)}else if(request.web&&call.function.name==="open_url"){const url=String(args.url??"");if(!discoveredUrls.has(url))throw new Error("open_url only accepts a URL returned by web_search");output=await abortable(openWebPage(url),signal);const page=output as Awaited<ReturnType<typeof openWebPage>>;sourceUrls.add(url);sourceUrls.add(page.url);for(const image of page.images)sourceUrls.add(image)}else throw new Error("Unknown tool")}catch(error){signal.throwIfAborted();output={error:String(error)}}
         let content=JSON.stringify(output);
+        if(call.function.name===request.finishAfterValidTool&&(output as {valid?:boolean}|null)?.valid===true)validated=true;
+        if(call.function.name===request.finishAfterTool)validated=true;
         if(content.length>remainingToolCharacters)content=JSON.stringify({error:"Tool result exceeds the remaining context budget. Use the evidence already collected to finish."});
         remainingToolCharacters=Math.max(0,remainingToolCharacters-content.length);
         messages.push({role:"tool",tool_call_id:call.id,content});
       }
-      if(repeated||toolCalls>=Math.min(12,request.maxToolCalls??12))break;
+      if(validated||repeated||toolCalls>=Math.min(12,request.maxToolCalls??12))break;
     }
     messages.push({role:"user",content:"Using only the collected tool evidence and supplied context, return the final answer now. Output must match the required JSON schema."});
     const final=await this.completion({messages,response_format:{type:"json_schema",json_schema:{name:request.schemaName,strict:true,schema:request.schema}},max_tokens:request.maxOutputTokens??4_096,temperature:0},signal,onAttempt,request.priority),choice=final.choices?.[0];

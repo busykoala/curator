@@ -489,6 +489,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
       const intent=playlistIntentSchema.parse(JSON.parse(cached.intent_json));
       if(intent.sourceRevision!==expected)throw Error('The preview intent changed; generate a new preview');
       const snapshot=await listenerMusicSnapshot(definition.ownerUserId),pool=loadEvidencedCandidates(definition,snapshot),byId=new Map(pool.map(track=>[track.fileId,track]));
+      if(intent.hard.singleArtist&&new Set(items.map(item=>item.artist.normalize('NFKC').toLowerCase())).size>1)throw Error('Only one artist was requested; kept the previous mix');
       for(const item of items){
         const track=byId.get(item.fileId);
         if(!track||!assessCandidate(track,definition,intent,snapshot).eligible)throw Error('Track evidence or availability changed; kept the previous mix');

@@ -20,7 +20,7 @@ const fieldAliases:Record<string,Record<string,string>>={
   recordingTypes:{studio_album_recording:"studio_recording",studio_track:"studio_recording",instrumental_recording:"standard_track",alternate_mix:"alternate_version",radio_version:"radio_edit",extended_version:"extended_mix"},
   vocalProfile:{sung_vocals:"clean_sung",rap_vocals:"rap",shouted_accents:"powerful",spoken_vocals:"spoken",group_voices:"mixed_vocal_styles"},
   production:{processed:"heavily_processed",electronic_processing:"heavily_processed"},
-  mood:{melancholy:"melancholic",dreamlike:"dreamy",dream_like:"dreamy",eerie_mysterious:"eerie"},
+  mood:{melancholy:"melancholic",dreamlike:"dreamy",dream_like:"dreamy",eerie_mysterious:"eerie",atmospheric:'dreamy',calm:'serene',relaxed:'peaceful',unhurried:'serene'},
 };
 
 const languageAliases:Record<string,string>={english:"English",french:"French",german:"German",spanish:"Spanish",portuguese:"Portuguese",italian:"Italian",japanese:"Japanese",korean:"Korean",arabic:"Arabic",jamaican_patois:"Jamaican Patois",jamaican_english:"Jamaican English"};

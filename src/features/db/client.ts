@@ -267,16 +267,24 @@ function migrate(instance: Database.Database) {
     request_id TEXT PRIMARY KEY,playlist_id INTEGER NOT NULL REFERENCES smart_playlists(id) ON DELETE CASCADE,
     owner_user_id INTEGER NOT NULL REFERENCES curator_users(id) ON DELETE CASCADE,
     job_id TEXT NOT NULL REFERENCES playlist_refresh_jobs(id) ON DELETE CASCADE);`));
+  migration(21,()=>instance.exec('CREATE INDEX IF NOT EXISTS evidence_playlist_lookup ON evidence(entity_key,provider,fetched_at DESC)'));
+  migration(22,()=>addColumns(instance,'listener_music_snapshots',[['identity_version','INTEGER NOT NULL DEFAULT 1']]));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;
   mkdirSync(dirname(config.DATABASE_PATH), { recursive: true });
-  const instance = new Database(config.DATABASE_PATH);
-  instance.pragma("journal_mode = WAL");
-  instance.pragma("synchronous = NORMAL");
-  instance.pragma("foreign_keys = ON");
-  instance.pragma("busy_timeout = 2000");
+  const instance = new Database(config.DATABASE_PATH,{timeout:5000});
   try {
+    // On an empty file, simultaneous workers can race the first DELETE→WAL
+    // transition before the migration transaction exists. SQLite can report
+    // SQLITE_BUSY immediately for this pragma; retry the transition briefly.
+    const deadline=Date.now()+5000,pause=new Int32Array(new SharedArrayBuffer(4));
+    for(;;){try{
+      if(instance.pragma('journal_mode',{simple:true})!=='wal')instance.pragma('journal_mode=WAL');
+      break;
+    }catch(error){if((error as {code?:string}).code!=='SQLITE_BUSY'||Date.now()>=deadline)throw error;Atomics.wait(pause,0,0,50)}}
+    instance.pragma("synchronous = NORMAL");
+    instance.pragma("foreign_keys = ON");
     instance
       .transaction(() => {
         instance.exec(schemaSql);
@@ -305,6 +313,7 @@ export function db(): Database.Database {
         migrate(instance);
       })
       .immediate();
+    instance.pragma("busy_timeout = 2000");
   } catch (error) {
     instance.close();
     throw error;

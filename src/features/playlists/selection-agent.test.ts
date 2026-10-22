@@ -21,7 +21,8 @@ test('typed read-only tools expose bounded evidence and validate exact inspected
     const context=await request.tools![0].execute({}) as {complete:boolean};assert.equal(context.complete,false);
     const page=await request.tools![1].execute({query:'',offset:0,limit:2}) as {tracks:Array<{fileId:number}>;nextOffset:number};assert.equal(page.nextOffset,2);
     const valid=await request.tools![4].execute({fileIds:[1,2]}) as {valid:boolean};assert.equal(valid.valid,true);
-    const unseen=await request.tools![4].execute({fileIds:[1,3]}) as {valid:boolean};assert.equal(unseen.valid,false);
+    const supplied=await request.tools![4].execute({fileIds:[1,3]}) as {valid:boolean};assert.equal(supplied.valid,true);
+    const unseen=await request.tools![4].execute({fileIds:[1,999]}) as {valid:boolean};assert.equal(unseen.valid,false);
     return{data:output([1,2]) as T,usage};
   }));
   assert.equal(result.detail.repair,false);assert.equal(result.items.length,2);assert.ok(result.items[0].reason.includes('(inferred)'));
@@ -67,6 +68,7 @@ test('a needlessly repetitive artist selection is repaired against the explicit 
   });
   request.candidates=[pool[0],sameArtist,pool[2]];request.limits={maxPerArtist:1,maxPerAlbum:1,retained:[]};
   const result=await choosePlaylistAdditions(request);assert.equal(result.detail.repair,true);assert.deepEqual(result.items.map(track=>track.fileId),[1,3]);
+  assert.equal(calls,1);assert.equal(result.detail.repairKind,'application_distribution');
 });
 test('candidate exposure and repair budgets stay bounded across batches and deadlines',async()=>{
   const request=input(async<T>()=>({data:output([1,2]) as T,usage}));request.candidates=Array.from({length:61},(_,i)=>track(i+1));

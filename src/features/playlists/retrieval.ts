@@ -26,6 +26,13 @@ export function canonicalTrackDescription(track:Pick<PlaylistCandidate,'artist'|
   return[`${track.artist} — ${track.title}`,`album: ${track.album}`,...text,evidence.originalYear?`original year: ${evidence.originalYear}`:''].filter(Boolean).join('\n').slice(0,1100);
 }
 export const descriptionHash=(description:string)=>hash(`playlist-description:${descriptionVersion}\n${description}`);
+export function rerankingDescription(track:EvidencedCandidate){
+  const fields=['genre','style','mood','listeningContexts','instrumentation','vocalProfile','energy','acousticElectronicCharacter'];
+  return[track.artist+' — '+track.title,...fields.flatMap(key=>{
+    const field=track.evidence.fields[key];if(field?.value==null||['unknown','conflict'].includes(field.source))return[];
+    return[key+': '+(Array.isArray(field.value)?field.value.slice(0,6).join(', '):String(field.value))];
+  })].join('\n').slice(0,600);
+}
 function vector(values:number[]){
   if(values.length!==dimensions||values.some(value=>!Number.isFinite(value))||!values.some(value=>value!==0))throw Error('Retrieval service returned an invalid embedding');
   const result=Float32Array.from(values);if(result.some(value=>!Number.isFinite(value)))throw Error('Embedding exceeds the supported numeric range');return result;
@@ -115,7 +122,7 @@ export async function retrievePlaylistCandidates(query:string,pool:EvidencedCand
   const merged=mergeHybridRanks(lexical.map(track=>track.fileId),semantic,options.mandatoryIds),retrieved=merged.map(id=>byId.get(id)!);
   let candidates=retrieved;
   try{
-    const ranked=await provider.rerank(query,retrieved.map(track=>descriptions.get(track.fileId)!),options.signal);
+    const ranked=await provider.rerank(query,retrieved.map(rerankingDescription),options.signal);
     if(ranked.length!==retrieved.length||new Set(ranked.map(row=>row.index)).size!==retrieved.length||ranked.some(row=>!retrieved[row.index]||!Number.isFinite(row.score)))throw Error('Incomplete reranking result');
     // Sorting by the returned scores makes batch ordering explicit. The model
     // cannot change eligibility, identities, or the deterministic hard rules.
@@ -134,9 +141,12 @@ export async function preparePlaylistEmbeddings(limit=128,provider=localRetrieva
       max(coalesce(unixepoch(p.updated_at)*1000,0),coalesce(unixepoch(f.updated_at)*1000,0),coalesce(unixepoch(o.updated_at)*1000,0),coalesce(unixepoch(v.updated_at)*1000,0),coalesce(r.updated_at,0)))
     ORDER BY e.file_id IS NOT NULL,f.id LIMIT ?`).all(config.CURATOR_EMBEDDING_VERSION,Math.max(0,Math.min(128,limit))) as Array<{id:number;artist_name:string;album_name:string;tags_json:string;content_hash:string|null}>;
   let completed=0;
-  for(let offset=0;offset<rows.length;offset+=32){
+  // The deployed four-thread, single-slot embedding server processes texts
+  // sequentially. Eight descriptions fit its 12-second request deadline;
+  // a 32-document batch timed out before any vectors could be committed.
+  for(let offset=0;offset<rows.length;offset+=8){
     if(db().prepare("SELECT 1 FROM playlist_chat_jobs WHERE status IN ('queued','running') LIMIT 1").get())break;
-    const batch=rows.slice(offset,offset+32).flatMap(row=>{
+    const batch=rows.slice(offset,offset+8).flatMap(row=>{
       const evidence=playlistTrackEvidence(row.id);if(!evidence)return[];
       const tags=JSON.parse(row.tags_json),title=String(Array.isArray(tags.title)?tags.title[0]:tags.title??'');
       const description=canonicalTrackDescription({artist:row.artist_name,title,album:row.album_name},evidence);

@@ -11,6 +11,28 @@ function track(id:number,profile:Record<string,unknown>={genre:['jazz'],mood:['w
   const evidence=buildTrackEvidence({artist,title,profile,tags:{},provenance:{model:'curator'}});
   return{fileId:id,title,artist,album,year:0,profile,evidence,songId:'native-'+id,listener:{id:'native-'+id,title,artist,album,playCount:0,hasPlayed:false,lastPlayed:null,favourite:false,rating:null,providerIds:{}},exposureCount:0,removedAt:null,score:0,reason:'',origin:'catalog'};
 }
+test('a single-artist request chooses one eligible group and reports a real shortage without padding',()=>{
+  const def=definition('rediscovery');def.config.targetTracks=4;
+  const intent=configuredIntent(def,'single');intent.hard.singleArtist=true;intent.hard.favouritesOnly=true;
+  const pool=Array.from({length:8},(_,i)=>{const song=track(i+1);song.artist=i<3?'One':'Two';song.album='Album '+i;song.listener!.favourite=i<6;return song});
+  const result=selectPlaylist({definition:def,intent,pool,previous:[],snapshot,now});
+  assert.equal(new Set(result.items.map(song=>song.artist)).size,1);assert.equal(result.items.length,3);assert.equal(result.evaluation.shortage,1);
+  assert.ok(result.items.every(song=>song.listener!.favourite));
+  intent.pinnedRecordings=pool.slice(0,1).map(song=>({fileId:song.fileId,recordingKey:song.evidence.recordingKey}));
+  const pinned=selectPlaylist({definition:def,intent,pool,previous:[],snapshot,now});assert.equal(pinned.items[0].artist,'One');
+});
+test('an album-level listening exclusion also rejects an unplayed track on a recently heard album',()=>{
+  const def=definition('rediscovery'),intent=configuredIntent(def,'album');intent.hard.excludeRecentlyPlayedAlbums=true;
+  const song=track(1);song.listener!.favourite=true;song.albumLastPlayed=new Date(now-day).toISOString();
+  assert.equal(assessCandidate(song,def,intent,snapshot,now).eligible,false);
+  song.albumLastPlayed=new Date(now-90*day).toISOString();assert.equal(assessCandidate(song,def,intent,snapshot,now).eligible,true);
+  assert.equal(assessCandidate(song,def,intent,{complete:true,stale:true},now).eligible,false);
+});
+test('an explicit vocal override is not silently defeated by lower-priority external credits',()=>{
+  const def=definition(),intent=configuredIntent(def,'override');intent.hard.vocal='instrumental';
+  const song=track(1);song.evidence=buildTrackEvidence({artist:song.artist,title:song.title,profile:{vocalProfile:['clean_sung']},tags:{},manual:{vocalProfile:['instrumental']},external:[{field:'vocalPresence',value:true,scope:'recording',url:'https://example.com/credits'}]});
+  assert.equal(assessCandidate(song,def,intent,snapshot,now).eligible,true);
+});
 test('mood fit and specific style eligibility cannot be replaced by a broad genre match',()=>{
   const def=definition(),intent=canonicalIntent(configuredIntent({...def,config:{...def.config,genres:['jazz'],moods:['warm'],contexts:['dinner']}},'1'));
   assert.equal(assessCandidate(track(1,{genre:['jazz'],mood:['aggressive']}),def,intent,snapshot,now).eligible,false);
@@ -79,6 +101,10 @@ test('journey sequencing follows the arc after eligibility and retains locked po
   const pool=['very_low','low','medium','high','very_high'].map((energy,i)=>track(i+1,{genre:['rock'],energy}));pool.push(track(8,{genre:['ambient'],energy:'very_low'}));
   const result=selectPlaylist({definition:def,intent,pool,previous:[],snapshot,now});
   assert.deepEqual(result.items.map(t=>t.profile.energy),['very_low','low','medium','high','very_high']);assert.equal(result.items.length,5);
+  intent.energyCurve='descent';
+  const descending=selectPlaylist({definition:def,intent,pool,previous:[],snapshot,now});
+  assert.equal(descending.items[0].profile.energy,'very_high');assert.ok(['very_low','low'].includes(String(descending.items.at(-1)?.profile.energy)));
+  assert.equal(def.config.energyCurve,'ascent','Resolved intent does not rewrite the saved control');
 });
 test('narrow pools use the smallest feasible variety relaxation and retain configured rotation afterwards',()=>{
   const def=definition('depth');def.config.targetTracks=12;const intent=configuredIntent(def,'1');
@@ -96,4 +122,11 @@ test('strict tempo ranges reject model guesses and ambiguous audio estimates',()
   item.evidence.fields.bpm={value:110,source:'audio',scope:'recording',confidence:'medium',references:[],note:'Half/double-time ambiguity'};
   assert.equal(assessCandidate(item,def,intent,snapshot,now).eligible,false);
   item.evidence.fields.bpm={value:110,source:'embedded',scope:'recording',confidence:'medium',references:[]};assert.equal(assessCandidate(item,def,intent,snapshot,now).eligible,true);
+});
+test('bass alone is not a guitar arrangement and Live Forever is not a live-version annotation',()=>{
+  const def=definition('journey'),intent=configuredIntent(def,'1');intent.hard.requirements=[{field:'instrumentation',values:['guitar'],match:'any'}];
+  assert.equal(assessCandidate(track(1,{instrumentation:['bass_guitar']}),def,intent,snapshot,now).eligible,false);
+  assert.equal(assessCandidate(track(2,{instrumentation:['electric_guitar']}),def,intent,snapshot,now).eligible,true);
+  intent.hard.requirements=[];intent.hard.recording='live';const song=track(3,{recordingTypes:['studio_recording']});song.title='Live Forever';
+  assert.equal(assessCandidate(song,def,intent,snapshot,now).eligible,false);song.title='Song (Live at the venue)';assert.equal(assessCandidate(song,def,intent,snapshot,now).eligible,true);
 });
