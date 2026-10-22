@@ -25,3 +25,10 @@ test('German correction retains only compatible instrumental position locks and 
   assert.deepEqual(scenarioViolations('chat-german',[quietLive],{stage:'correction',previous:[quietLive,sung]}),[]);
   assert.ok(scenarioViolations('chat-german',[{...quietLive,fileId:3,evidence:{...quietLive.evidence,recordingKey:'other'}}],{stage:'correction',previous:[quietLive]}).includes('Requested first-two position lock lost'));
 });
+test('a named available opener is checked independently without corrupting the eligible-pool denominator',()=>{
+  const basket=track(1,{genre:['rock'],style:['punk_rock']},'Green Day'),other=track(2,{genre:['rock'],style:['punk_rock']},'Green Day');basket.title='Basket Case';basket.evidence.originalYear=1994;other.evidence.originalYear=1994;
+  const options={stage:'correction' as const,available:[basket,other]};
+  assert.ok(scenarioViolations('chat-artist-decade',[other,basket],options).includes('Requested Basket Case opener was available but not first'));
+  assert.deepEqual(scenarioViolations('chat-artist-decade',[basket,other],options),[]);
+  assert.equal(independentEligibleCount('chat-artist-decade',[basket,other],options),2);
+});

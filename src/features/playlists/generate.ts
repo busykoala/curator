@@ -3,6 +3,7 @@ import {
   currentChatItems,
   releaseChatLease,
   assertPlaylistLease,
+  chatState,
 } from "./chat-state";
 import { createHash } from "node:crypto";
 import { db } from "@/features/db/client";
@@ -18,8 +19,8 @@ import {playlistRevisionHash} from './refresh-policy';
 import {playlistRefreshMode,refreshManaged} from './refresh-jobs';
 import {generateIntentSelection,recordPlaylistExposure,loadEvidencedCandidates,previewEvaluation} from './selection-repository';
 import {listenerMusicSnapshot} from './listening-snapshot';
-import {playlistIntentSchema} from './intent-schema';
-import {assessCandidate} from './selection-policy';
+import {playlistIntentSchema,type PlaylistIntent} from './intent-schema';
+import {assertIntentPublication} from './selection-validation';
 import {storeRefreshedChatSelection} from './chat-state';
 import type { PlaylistCandidate, PlaylistDefinition } from "./types";
 
@@ -297,6 +298,11 @@ async function generatePlaylistRun(
     let songIds = new Map<number, string>(selection?.items.map(item=>[item.fileId,item.songId]));
     if (!preview) {
       if(selection?.evaluation.violations.length)throw Error(selection.evaluation.violations.join('; '));
+      const savedIntent=definition.category==='chat'&&!selection?chatState(id).result?.detail.intent:undefined;
+      if(savedIntent){
+        const snapshot=await listenerMusicSnapshot(definition.ownerUserId),pool=loadEvidencedCandidates(definition,snapshot);
+        assertIntentPublication(definition,playlistIntentSchema.parse(savedIntent),items,pool,snapshot);
+      }
       const ignored = new Set<number>();
       for (
         let attempt = 0;
@@ -358,7 +364,7 @@ async function generatePlaylistRun(
       );if(!preview){
         recordPlaylistExposure(definition,run.id,items);
         setNavidromeId(id,navidromeId!);markRun(id);
-        if(selection&&definition.category==='chat')storeRefreshedChatSelection(id,lease,items);
+        if(selection&&definition.category==='chat')storeRefreshedChatSelection(id,lease,items,selection.intent);
       }
       db()
       .prepare(
@@ -482,17 +488,18 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
       retained: Boolean(row.retained),
     })) as PlaylistCandidate[];
     const evaluation=previewEvaluation(previewRunId);
+    let previewIntent:PlaylistIntent|undefined;
     if(evaluation?.shortage||evaluation?.violations.length)throw Error(`Kept the previous mix: ${evaluation.shortage?'insufficient matching tracks':evaluation.violations.join('; ')}`);
     if(JSON.parse(preview.detail_json).selectionVersion===1){
       const cached=db().prepare('SELECT intent_json FROM playlist_intents WHERE playlist_id=?').get(id) as {intent_json:string}|undefined;
       if(!cached)throw Error('The preview intent is unavailable; generate a new preview');
       const intent=playlistIntentSchema.parse(JSON.parse(cached.intent_json));
+      previewIntent=intent;
       if(intent.sourceRevision!==expected)throw Error('The preview intent changed; generate a new preview');
       const snapshot=await listenerMusicSnapshot(definition.ownerUserId),pool=loadEvidencedCandidates(definition,snapshot),byId=new Map(pool.map(track=>[track.fileId,track]));
-      if(intent.hard.singleArtist&&new Set(items.map(item=>item.artist.normalize('NFKC').toLowerCase())).size>1)throw Error('Only one artist was requested; kept the previous mix');
+      assertIntentPublication(definition,intent,items,pool,snapshot);
       for(const item of items){
-        const track=byId.get(item.fileId);
-        if(!track||!assessCandidate(track,definition,intent,snapshot).eligible)throw Error('Track evidence or availability changed; kept the previous mix');
+        const track=byId.get(item.fileId)!;
         const proposed=rows.find(row=>row.file_id===item.fileId)?.navidrome_song_id;
         if(proposed&&proposed!==track.songId)throw Error('A proposed native song identity changed; generate a fresh preview');
       }
@@ -546,7 +553,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
         ),
       );
       recordPlaylistExposure(definition,run.id,items);
-      if(JSON.parse(preview.detail_json).selectionVersion===1&&definition.category==='chat')storeRefreshedChatSelection(id,lease,items);
+      if(JSON.parse(preview.detail_json).selectionVersion===1&&definition.category==='chat')storeRefreshedChatSelection(id,lease,items,previewIntent);
       setNavidromeId(id, synced.playlistId);
       markRun(id);
     }).immediate();

@@ -18,5 +18,8 @@ test('specific discovery styles cannot be satisfied by a stray broad genre and a
     const playlist={id:1,ownerUserId:1,config:{...defaultConfig('discovery'),tasteLanes:['melodic_techno','techno'],genres:['electronic']}} as PlaylistDefinition;
     const seeds=discoverySeedArtists(playlist);
     assert.equal(seeds.length,1);assert.equal(seeds[0].artist,'Relevant Artist');assert.ok(seeds[0].styles.includes('melodic techno'));
+    database.prepare('INSERT INTO track_profile_overrides(file_id,patch_json) VALUES(1,?)').run(JSON.stringify({style:['melodic_techno']}));
+    database.prepare("UPDATE track_profiles SET profile_json=? WHERE file_id IN (2,3)").run(JSON.stringify({genre:['rock'],style:['pop_rock'],scenes:['detroit_techno_scene']}));
+    const overridden=discoverySeedArtists(playlist);assert.equal(overridden.length,1);assert.equal(overridden[0].artist,'Pop Artist','User overrides win; scene association alone cannot qualify the former seed');
   }finally{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})}
 });

@@ -53,6 +53,9 @@ export function canonicalSemanticValue(field:string,value:unknown){
   const key=canonicalSemanticField(field),token=canonicalToken(value);
   return fieldAliases[key]?.[token]??(key==='genre'?genre(token):token);
 }
+export function semanticTermVariants(value:string){
+  return canonicalToken(value)==='festival_edm'?['festival_edm','big_room','big_room_house','festival_progressive_house','mainstage_edm']:[value];
+}
 
 function production(value:string):string{
   if(/studio.*polish|polish.*studio/.test(value))return"studio_polished";if(/polish/.test(value))return"polished";if(/compress/.test(value))return"compressed";if(/lo_fi|lo_fidel/.test(value))return"lo_fi";if(/hi_fi|high_fidel/.test(value))return"hi_fi";if(/reverb/.test(value))return"reverb_heavy";if(/delay/.test(value))return"delay_heavy";if(/spacious|wide_stereo/.test(value))return"spacious";if(/analog/.test(value))return"analog_feel";if(/digital.*clean|clean.*digital/.test(value))return"digital_clean";if(/sample/.test(value))return"sample_based";if(/heavy.*process/.test(value))return"heavily_processed";if(/live.*feel|live_band/.test(value))return"live_feel";if(/\bdry\b/.test(value))return"dry";if(/\braw\b/.test(value))return"raw";if(/dynamic/.test(value))return"dynamic";if(/vintage/.test(value))return"vintage";if(/modern/.test(value))return"modern";return value;

@@ -7,7 +7,9 @@ import {norm} from './candidate-score';
 import {discoveryJson,discoveryPage,discoveryWebSearch} from './discovery-sources';
 import type {DiscoveryRelease,DiscoveryEvidence} from './discovery-repository';
 import type {PlaylistDefinition} from './types';
-import {musicBrainzGroup,radioRecordings,recommendedAlbumGroup,recommendedRecording} from './discovery-identities';
+import {musicBrainzGroup,radioRecordings,tagRadioRecordings,recommendedAlbumGroup,recommendedRecording} from './discovery-identities';
+import {playlistTrackEvidence} from './evidence-repository';
+import {evidenceValues} from './selection-policy';
 
 const uuid=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 type MbCredit={name?:string;artist:{id:string;name:string};joinphrase?:string};
@@ -31,10 +33,11 @@ export async function verifiedDiscoveryRelease(id:string,evidence:DiscoveryEvide
 export function discoverySeedArtists(playlist:PlaylistDefinition){
   const clusters=db().prepare('SELECT evidence_json FROM listening_clusters WHERE user_id=? ORDER BY weight DESC LIMIT 5').all(playlist.ownerUserId) as Array<{evidence_json:string}>;
   const familiar=new Set(clusters.flatMap(c=>{try{return(JSON.parse(c.evidence_json).albums??[]).map((a:string)=>norm(a.split(' / ')[0]))}catch{return[]}}));
-  const rows=db().prepare("SELECT f.artist_name,f.tags_json,p.profile_json,m.artist_mbid FROM files f JOIN track_profiles p ON p.file_id=f.id AND p.status='complete' LEFT JOIN manual_overrides m ON m.album_key=f.album_key AND m.confirmed=1 WHERE f.status='written' ORDER BY f.id").all() as Array<{artist_name:string;tags_json:string;profile_json:string;artist_mbid:string|null}>;
+  const rows=db().prepare("SELECT f.id,f.artist_name,f.tags_json,m.artist_mbid FROM files f JOIN track_profiles p ON p.file_id=f.id AND p.status='complete' LEFT JOIN manual_overrides m ON m.album_key=f.album_key AND m.confirmed=1 WHERE f.status='written' ORDER BY f.id").all() as Array<{id:number;artist_name:string;tags_json:string;artist_mbid:string|null}>;
   const wanted=(playlist.config.tasteLanes.length?playlist.config.tasteLanes:playlist.config.genres).map(norm),best=new Map<string,{id:string;artist:string;score:number;styles:string[]}>();
   for(const row of rows){
-    const tags=JSON.parse(row.tags_json),profile=JSON.parse(row.profile_json),text=' '+norm([...(profile.genre??[]),...(profile.style??[]),...(profile.scenes??[])].join(' '))+' ';
+    const tags=JSON.parse(row.tags_json),evidence=playlistTrackEvidence(row.id);if(!evidence)continue;
+    const text=' '+norm(evidenceValues({evidence},'genre').join(' '))+' ';
     const styles=wanted.filter(term=>text.includes(' '+term+' '));
     const ids=Object.entries(tags).filter(([key])=>['musicbrainz_artistid','musicbrainzartistid'].includes(key.toLowerCase())).flatMap(([,value])=>Array.isArray(value)?value:[value]).map(String);
     const id=row.artist_mbid??ids.find(id=>uuid.test(id));if(!id||!uuid.test(id)||wanted.length&&!styles.length)continue;
@@ -64,6 +67,24 @@ export async function listenBrainzCandidates(playlist:PlaylistDefinition,recent:
         if(output.size>=10)return[...output.values()];
       }catch(error){if(/budget|cooling|retry/i.test(String(error)))return[...output.values()]}
     }
+  }
+  return[...output.values()];
+}
+
+export async function listenBrainzTagCandidates(playlist:PlaylistDefinition,recent:boolean){
+  const tags=[...new Set((playlist.config.tasteLanes.length?playlist.config.tasteLanes:playlist.config.genres).map(norm))].slice(0,3);if(!tags.length)return[];
+  const query=new URLSearchParams({operator:'OR',pop_begin:'0',pop_end:'85',count:'6'});for(const tag of tags)query.append('tag',tag);
+  const endpoint='https://api.listenbrainz.org/1/lb-radio/tags?'+query;
+  // Artist and tag radio share one provider limiter, cooldown and cache budget.
+  const result=await discoveryJson('listenbrainz',endpoint,7,'api',undefined,raw=>tagRadioRecordings.parse(raw)),output=new Map<string,DiscoveryRelease>();
+  for(const item of result.value){
+    try{
+      const recording=await mb(`recording/${item.recording_mbid}?inc=artist-credits+releases+release-groups`,raw=>recommendedRecording.parse(raw));
+      const artistId=recording.value['artist-credit'][0].artist.id,groupId=recommendedAlbumGroup(recording.value,item.recording_mbid,artistId);if(!groupId)continue;
+      const evidence:DiscoveryEvidence={provider:'listenbrainz-tags',url:endpoint,fetchedAt:result.fetchedAt,scope:'recording',claims:{recordingId:item.recording_mbid,requestedTags:tags,tagMatch:'any',recommendedArtistId:artistId}};
+      const release=await verifiedDiscoveryRelease(groupId,[evidence]);
+      if(release&&release.artistId===artistId&&(!recent||release.releaseDate&&Date.parse(release.releaseDate)>=Date.now()-120*86400_000))output.set(release.id,release);
+    }catch(error){if(/budget|cooling|retry/i.test(String(error)))break}
   }
   return[...output.values()];
 }

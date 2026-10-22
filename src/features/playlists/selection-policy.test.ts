@@ -45,6 +45,13 @@ test('broad genres include known substyles without weakening a specific style re
   const tripHop=track(1,{genre:['Trip-Hop'],style:['downtempo']});assert.equal(assessCandidate(tripHop,def,intent,snapshot,now).eligible,true);
   intent.hard.requirements=[{field:'style',values:['melodic_techno'],match:'any'}];assert.equal(assessCandidate(tripHop,def,intent,snapshot,now).eligible,false);
 });
+test('a scene or artist association cannot substitute for track genre/style evidence',()=>{
+  const def=definition('chat'),intent=configuredIntent(def,'direction');intent.soft.styles=['trip_hop'];
+  const sceneOnly=track(1,{genre:['electronic'],style:['downtempo','chillout'],scenes:['bristol_trip_hop_scene']});
+  assert.equal(assessCandidate(sceneOnly,def,intent,snapshot,now).eligible,false);
+  const trackStyle=track(2,{genre:['electronic'],style:['trip_hop'],scenes:['bristol_trip_hop_scene']});
+  assert.equal(assessCandidate(trackStyle,def,intent,snapshot,now).eligible,true);
+});
 test('strict instrumental piano requirements reject missing, contradictory and spoken evidence',()=>{
   const def=definition('depth'),intent=configuredIntent(def,'1');
   intent.hard.vocal='instrumental';intent.hard.requirements=[{field:'instrumentation',values:['piano'],match:'all'}];
@@ -110,6 +117,18 @@ test('journey sequencing follows the arc after eligibility and retains locked po
   const descending=selectPlaylist({definition:def,intent,pool,previous:[],snapshot,now});
   assert.equal(descending.items[0].profile.energy,'very_high');assert.ok(['very_low','low'].includes(String(descending.items.at(-1)?.profile.energy)));
   assert.equal(def.config.energyCurve,'ascent','Resolved intent does not rewrite the saved control');
+});
+test('wave sequencing reserves a calm landing even when only two low-energy tracks were selected',()=>{
+  const def=definition('journey');def.config.targetTracks=12;const intent=configuredIntent(def,'wave');intent.energyCurve='wave';
+  const pool=Array.from({length:12},(_,i)=>track(i+1,{genre:['electronic'],energy:i<2?'low':'high'}));
+  const selected=selectPlaylist({definition:def,intent,pool,previous:[],snapshot,now});
+  assert.equal(selected.items[0].profile.energy,'low');assert.equal(selected.items.at(-1)?.profile.energy,'low');assert.equal(selected.items[6].profile.energy,'high');
+  assert.equal(new Set(selected.items.map(track=>track.fileId)).size,12);
+});
+test('festival EDM exclusions cover canonical big-room labels without banning all house music',()=>{
+  const def=definition('discovery'),intent=configuredIntent(def,'festival');intent.hard.exclusions=['festival_edm'];
+  assert.equal(assessCandidate(track(1,{genre:['electronic'],style:['big_room_house']}),def,intent,snapshot,now).eligible,false);
+  assert.equal(assessCandidate(track(2,{genre:['electronic'],style:['deep_house']}),def,intent,snapshot,now).eligible,true);
 });
 test('narrow pools use the smallest feasible variety relaxation and retain configured rotation afterwards',()=>{
   const def=definition('depth');def.config.targetTracks=12;const intent=configuredIntent(def,'1');

@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {canonicalSemanticValue} from '@/features/categorization/vocabulary';
+import {canonicalSemanticValue,semanticTermVariants} from '@/features/categorization/vocabulary';
 import {identityName as norm,trackArtistMatches} from '@/features/integrations/navidrome-identity';
 import type {TrackEvidenceView} from './track-evidence';
 import type {ListenerSong,ListenerSnapshot} from './listening-snapshot';
@@ -13,7 +13,7 @@ export type PlaylistEvaluation={eligible:number;selected:number;requested:number
 const values=(v:unknown):string[]=>Array.isArray(v)?v.map(String):v==null?[]:[String(v)];
 const days=86400_000;
 
-export function evidenceValues(track:EvidencedCandidate,field:string):string[]{
+export function evidenceValues(track:Pick<EvidencedCandidate,'evidence'>,field:string):string[]{
   const fields=field==='genre'?['genre','style']:[field];
   return fields.flatMap(key=>{
     const evidence=track.evidence.fields[key];
@@ -24,9 +24,9 @@ export function evidenceValues(track:EvidencedCandidate,field:string):string[]{
 // Phrase boundaries prevent rock matching hard rock's antonym-like substrings
 // (or an artist named Rockwell). Synonyms use the shared vocabulary.
 function matches(term:string,available:string[]){
-  const wanted=norm(term);return Boolean(wanted)&&available.some(value=>{
+  return semanticTermVariants(term).some(term=>{const wanted=norm(term);return Boolean(wanted)&&available.some(value=>{
     const actual=norm(value);return actual===wanted||(' '+actual+' ').includes(' '+wanted+' ');
-  });
+  })});
 }
 function ruleSatisfied(track:EvidencedCandidate,rule:SemanticRequirement){
   const available=evidenceValues(track,rule.field),found=rule.values.map(term=>matches(term,
@@ -37,6 +37,8 @@ function ruleSatisfied(track:EvidencedCandidate,rule:SemanticRequirement){
 export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefinition,intent:PlaylistIntent,snapshot:Pick<ListenerSnapshot,'complete'|'stale'>,now=Date.now()):CandidateAssessment{
   const violations:string[]=[],reasons:string[]=[],uncertainty:string[]=[];
   const hard=intent.hard,soft=intent.soft;
+  if(intent.excludedFileIds.includes(track.fileId)||intent.excludedRecordings.includes(track.evidence.recordingKey))violations.push('Current listener exclusion');
+  if(intent.trackRequests.some(request=>request.action==='exclude'&&norm(request.title)===norm(track.title)&&(!request.artist||norm(request.artist)===norm(track.artist))))violations.push('Explicitly excluded song');
   for(const requirement of hard.requirements)if(!ruleSatisfied(track,requirement))violations.push(`${requirement.field}: ${requirement.match} ${requirement.values.join(', ')}`);
   const exactArtist=(artist:string)=>trackArtistMatches([track.artist],artist,undefined);
   if(hard.artists.length&&!hard.artists.some(exactArtist))violations.push('Required artist');
@@ -69,8 +71,9 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
     if(age!=null&&age<definition.config.noveltyDays)violations.push('Played too recently');
     if(known&&!violations.length)reasons.push(listener?.favourite?'A saved favourite, not heard recently':`Last heard ${Math.floor(age!)} days ago`);
   }
-  const directionValues=['genre','style','instrumentation','texture','timbre','production','scenes','groove','acousticElectronicCharacter'].flatMap(field=>evidenceValues(track,field));
+  const directionValues=evidenceValues(track,'genre');
   const styleHits=soft.styles.filter(term=>matches(term,directionValues));
+  const sceneHits=soft.styles.filter(term=>matches(term,evidenceValues(track,'scenes')));
   const moodHits=soft.moods.filter(term=>matches(term,evidenceValues(track,'mood')));
   const contextHits=soft.contexts.filter(term=>matches(term,evidenceValues(track,'listeningContexts')));
   // Soft styles express the playlist's centre; adjacent candidates must have
@@ -80,7 +83,7 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
   if(styleHits.length)reasons.push(`Style: ${styleHits.slice(0,2).join(', ')}`);
   if(moodHits.length)reasons.push(`Mood: ${moodHits.slice(0,2).join(', ')}`);
   if(contextHits.length)reasons.push(`Context: ${contextHits.slice(0,2).join(', ')}`);
-  let score=40+styleHits.length*14+moodHits.length*14+contextHits.length*10;
+  let score=40+styleHits.length*14+moodHits.length*14+contextHits.length*10+Math.min(2,sceneHits.length)*3;
   if(soft.energy!=='any'){
     const levels=['very_low','low','medium','high','very_high'],current=levels.indexOf(String(track.evidence.fields.energy?.value));
     score+=current<0?-6:12-Math.abs(levels.indexOf(soft.energy)-current)*9;
@@ -99,8 +102,9 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
   if(definition.category==='rediscovery')score+=(listener?.favourite?24:0)+Math.min(20,Math.log1p(listener?.playCount??0)*7)+(age==null?0:Math.min(14,age/10));
   score-=Math.min(30,track.exposureCount*5);
   score+=track.discoveryBoost??0;
-  for(const field of [...hard.requirements.map(r=>r.field),...(hard.vocal!=='any'?['vocalProfile']:[])]){
+  for(const field of [...new Set([...hard.requirements.map(r=>r.field),...(hard.vocal!=='any'?['vocalProfile']:[]),...(soft.styles.length?['genre','style']:[]),...(soft.moods.length?['mood']:[]),...(soft.contexts.length?['listeningContexts']:[]),...(soft.energy!=='any'||definition.category==='journey'?['energy']:[])])]){
     if(track.evidence.fields[field]?.source==='model_inference')uncertainty.push(`${field} is model inference`);
+    else if(!track.evidence.fields[field]||['unknown','conflict'].includes(track.evidence.fields[field].source))uncertainty.push(`${field} is not established`);
   }
   return{eligible:!violations.length,score,reasons,violations,uncertainty:[...new Set(uncertainty)]};
 }
@@ -109,13 +113,13 @@ const tie=(seed:string,fileId:number)=>parseInt(createHash('sha256').update(seed
 export function selectPlaylist(input:{definition:PlaylistDefinition;intent:PlaylistIntent;pool:EvidencedCandidate[];previous:EvidencedCandidate[];snapshot:Pick<ListenerSnapshot,'complete'|'stale'>;now?:number;seed?:string}){
   const {definition,intent}=input,now=input.now??Date.now(),seed=input.seed??new Date(now).toISOString().slice(0,10),target=definition.config.targetTracks;
   const assessments=new Map(input.pool.map(track=>[track.fileId,assessCandidate(track,definition,intent,input.snapshot,now)]));
-  const priorIds=new Set(input.previous.map(track=>track.fileId)),canonical=new Map<string,EvidencedCandidate>();
+  const priorIds=new Set(input.previous.map(track=>track.fileId)),protectedIds=new Set([...intent.pinnedRecordings.map(pin=>pin.fileId),...intent.positionLocks.map(lock=>lock.fileId)]),canonical=new Map<string,EvidencedCandidate>();
   for(const track of input.pool.filter(track=>assessments.get(track.fileId)!.eligible)){
     const key=track.evidence.recordingKey,existing=canonical.get(key);
-    if(!existing||priorIds.has(track.fileId)&&!priorIds.has(existing.fileId))canonical.set(key,track);
+    if(!existing||protectedIds.has(track.fileId)&&!protectedIds.has(existing.fileId)||!protectedIds.has(existing.fileId)&&priorIds.has(track.fileId)&&!priorIds.has(existing.fileId))canonical.set(key,track);
   }
   let pool=[...canonical.values()].map(track=>({...track,score:assessments.get(track.fileId)!.score,reason:assessments.get(track.fileId)!.reasons.join(' · ')||'Fits the saved musical direction'}));
-  const allEligible=new Set(pool.map(track=>track.fileId));
+  const allEligible=new Set([...assessments].filter(([,assessment])=>assessment.eligible).map(([id])=>id));
   if(intent.hard.singleArtist){
     const groups=new Map<string,typeof pool>(),pinned=new Set([...intent.pinnedRecordings.map(pin=>pin.fileId),...intent.positionLocks.map(lock=>lock.fileId)]);
     for(const track of pool){const key=norm(track.artist);groups.set(key,[...(groups.get(key)??[]),track])}
@@ -183,11 +187,20 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
   // recycling a recording removed during the last 14 days.
   if(chosen.length<target){fill(prior);if(chosen.length>=target)relaxations.push('Rotation reduced because too few suitable replacements were available')}
   const ordered:EvidencedCandidate[]=[],remaining=[...chosen],locks=new Map(intent.positionLocks.filter(lock=>byId.has(lock.fileId)&&chosen.some(t=>t.fileId===lock.fileId)).map(lock=>[lock.position,lock.fileId]));
+  const curve=intent.energyCurve==='configured'?definition.config.energyCurve:intent.energyCurve,assignedEnergy=new Map<number,number>();
+  if(definition.category==='journey'&&curve!=='steady'){
+    const reserved=new Set(locks.values()),tracks=chosen.filter(track=>!reserved.has(track.fileId)).sort((a,b)=>energyValue(a)-energyValue(b)||tie(seed,a.fileId)-tie(seed,b.fileId));
+    const positions=Array.from({length:chosen.length},(_,position)=>position).filter(position=>!locks.has(position)).sort((a,b)=>energyTarget(curve,a,chosen.length)-energyTarget(curve,b,chosen.length)||a-b);
+    // Sorted matching minimises total one-dimensional energy deviation. It
+    // reserves low-energy closers for a wave instead of spending them all on
+    // its opening. Artist spacing still chooses among equal-energy tracks.
+    if(tracks.length===positions.length)positions.forEach((position,index)=>assignedEnergy.set(position,energyValue(tracks[index])));
+  }
   for(let position=0;position<chosen.length;position++){
     const lock=locks.get(position);
-    const available=remaining.filter(track=>lock?track.fileId===lock:![...locks.values()].includes(track.fileId));
+    const available=remaining.filter(track=>lock?track.fileId===lock:![...locks.values()].includes(track.fileId)&&(!assignedEnergy.has(position)||energyValue(track)===assignedEnergy.get(position)));
     if(!available.length)break;
-    const desired=energyTarget(intent.energyCurve==='configured'?definition.config.energyCurve:intent.energyCurve,position,chosen.length),previous=ordered.at(-1);
+    const desired=energyTarget(curve,position,chosen.length),previous=ordered.at(-1);
     available.sort((a,b)=>{
       const cost=(t:EvidencedCandidate)=>(previous&&norm(previous.artist)===norm(t.artist)?30:0)+(definition.category==='journey'?Math.abs(energyValue(t)-desired)*35:0)-t.score*.05;
       return cost(a)-cost(b)||tie(seed,a.fileId)-tie(seed,b.fileId);
@@ -195,9 +208,9 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
     const track=available[0];ordered.push(track);remaining.splice(remaining.indexOf(track),1);
   }
   const violations:string[]=[];
-  for(const pin of intent.pinnedRecordings)if(allEligible.has(pin.fileId)&&!ordered.some(track=>track.evidence.recordingKey===pin.recordingKey))violations.push('A valid pinned recording could not be preserved');
+  for(const pin of intent.pinnedRecordings)if(allEligible.has(pin.fileId)&&!ordered.some(track=>track.fileId===pin.fileId||track.evidence.recordingKey===pin.recordingKey))violations.push('A valid pinned recording could not be preserved');
   if(intent.hard.singleArtist&&new Set(ordered.map(track=>norm(track.artist))).size>1)violations.push('Only one artist was requested');
-  for(const lock of intent.positionLocks)if(byId.has(lock.fileId)&&ordered[lock.position]?.fileId!==lock.fileId)violations.push('A valid position lock could not be preserved');
+  for(const lock of intent.positionLocks)if(allEligible.has(lock.fileId)&&ordered[lock.position]?.fileId!==lock.fileId)violations.push('A valid position lock could not be preserved');
   const evaluation:PlaylistEvaluation={eligible:pool.length,selected:ordered.length,requested:target,changed:ordered.filter(t=>!t.retained).length,retained:ordered.filter(t=>t.retained).length,
     artistDiversity:new Set(ordered.map(t=>norm(t.artist))).size,albumDiversity:new Set(ordered.map(t=>norm(t.artist)+'|'+norm(t.album))).size,
     unheard:input.snapshot.complete&&!input.snapshot.stale?ordered.filter(t=>t.listener&&!t.listener.hasPlayed&&!t.listener.favourite&&!t.listener.playCount).length:null,

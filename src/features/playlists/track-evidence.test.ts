@@ -13,6 +13,12 @@ test('model-generated tags do not corroborate their own inference',()=>{
   const result=buildTrackEvidence({artist:'A',title:'T',profile:{instrumentation:['piano'],vocalProfile:['instrumental']},tags:{instrumentation:['piano'],vocalProfile:['instrumental']},provenance:{model:'curator'}});
   assert.equal(result.fields.instrumentation.source,'model_inference');assert.equal(result.fields.instrumentation.confidence,'low');
 });
+test('a specific embedded genre is preserved when the generated profile uses its broader parent genre',()=>{
+  const specific=buildTrackEvidence({artist:'Artist',title:'Song',tags:{genre:['Trip-Hop']},profile:{genre:['electronic'],style:['downtempo','chillout']},provenance:{model:'curator'}});
+  assert.equal(specific.fields.genre.source,'embedded');assert.deepEqual(specific.fields.genre.value,['Trip-Hop']);
+  const copied=buildTrackEvidence({artist:'Artist',title:'Song',tags:{genre:['Trip-Hop']},profile:{genre:['trip_hop']},provenance:{model:'curator'}});
+  assert.equal(copied.fields.genre.source,'model_inference');
+});
 test('user overrides survive conflicting inference and independent facts remain separate',()=>{
   const result=buildTrackEvidence({artist:'A',title:'T',profile:{instruments:['piano']},tags:{},manual:{instrumentation:['guitar']},external:[{field:'instruments',value:['piano'],url:'https://example.com/credits',scope:'recording'}]});
   assert.equal(result.fields.instrumentation.source,'user_override');assert.deepEqual(result.fields.instrumentation.value,['guitar']);

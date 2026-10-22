@@ -14,6 +14,7 @@ import {retrievePlaylistCandidates,type RetrievalProvider} from './retrieval';
 import {aiClient,aiModel,type CuratorAiClient} from '@/features/ai/client';
 import {recordAiUsage} from '@/features/ai/usage';
 import {playlistAttemptRecorder} from './inference-metrics';
+import {resolveIntentTrackRequests} from './intent-track-requests';
 
 type CatalogRow={id:number;path:string;artist_name:string;album_name:string;tags_json:string;profile_json:string;jellyfin_song_id:string|null;identity_hash:string|null};
 const list=(value:unknown)=>Array.isArray(value)?value.map(String):value==null?[]:[String(value)];
@@ -127,6 +128,9 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
     AND (expires_at IS NULL OR expires_at>CURRENT_TIMESTAMP)`).all(definition.ownerUserId,definition.id) as Array<{file_id:number;artist:string;action:string}>;
   const excluded=new Set(feedback.filter(row=>row.action==='exclude'||row.action==='snooze').map(row=>row.file_id));
   const excludedKeys=new Set(pool.filter(track=>excluded.has(track.fileId)).map(track=>track.evidence.recordingKey));
+  // These fields are application-owned, rebuilt from current owner feedback.
+  // Never freeze an expired snooze into the saved conversational intent.
+  compiled.intent.excludedFileIds=[...excluded];compiled.intent.excludedRecordings=[...excludedKeys];
   compiled.intent.hard.excludeArtists.push(...feedback.filter(row=>row.action==='artist_exclude').map(row=>row.artist));
   for(const pin of feedback.filter(row=>row.action==='pin')){const track=pool.find(t=>t.fileId===pin.file_id);if(track)compiled.intent.pinnedRecordings.push({fileId:track.fileId,recordingKey:track.evidence.recordingKey})}
   // One representative per researched release receives the temporary boost,
@@ -140,6 +144,8 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
     for(const track of tracks)if(track!==representative){track.discoveryBoost=0;track.origin='catalog'}
   }
   const available=pool.filter(track=>!excludedKeys.has(track.evidence.recordingKey));
+  const trackRequests=resolveIntentTrackRequests(compiled.intent,selectionDefinition,available,current,snapshot);
+  db().prepare("UPDATE playlist_intents SET intent_json=? WHERE playlist_id=? AND json_extract(intent_json,'$.sourceRevision')=?").run(JSON.stringify(compiled.intent),definition.id,compiled.intent.sourceRevision);
   let selected=selectPlaylist({definition:selectionDefinition,intent:compiled.intent,pool:available,previous:current,snapshot});
   const previousKeys=new Set(current.map(track=>track.evidence.recordingKey));
   const lockedIds=new Set([...compiled.intent.pinnedRecordings.map(pin=>pin.fileId),...compiled.intent.positionLocks.map(lock=>lock.fileId)]);
@@ -184,7 +190,7 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
     const reasons=new Map(chosen.map(track=>[track.fileId,track.reason]));for(const item of selected.items)if(reasons.has(item.fileId))item.reason=reasons.get(item.fileId)!;
   }
   signal.throwIfAborted();
-  return{...selected,intent:compiled.intent,detail:{selectionVersion:1,evaluation:selected.evaluation,intent:compiled.detail,retrieval:retrievalDetail,ai:aiDetails,listener:{complete:snapshot.complete,stale:snapshot.stale,capturedAt:snapshot.capturedAt,error:snapshot.error},latencyMs:Date.now()-started}};
+  return{...selected,intent:compiled.intent,detail:{selectionVersion:1,evaluation:selected.evaluation,intent:compiled.detail,trackRequests,retrieval:retrievalDetail,ai:aiDetails,listener:{complete:snapshot.complete,stale:snapshot.stale,capturedAt:snapshot.capturedAt,error:snapshot.error},latencyMs:Date.now()-started}};
 }
 
 // Called in the local publication transaction only after native verification.

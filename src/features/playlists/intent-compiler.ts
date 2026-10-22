@@ -12,9 +12,9 @@ import type {PlaylistDefinition} from './types';
 import {playlistAttemptRecorder} from './inference-metrics';
 import {enforceSoftPreferences} from './intent-preferences';
 
-const compilerVersion=4;
+const compilerVersion=5;
 export type ChatIntentContext=ReturnType<typeof chatState>;
-const compiledSchema=playlistIntentSchema.omit({version:true,sourceRevision:true,pinnedRecordings:true}).extend({
+const compiledSchema=playlistIntentSchema.omit({version:true,sourceRevision:true,pinnedRecordings:true,excludedFileIds:true,excludedRecordings:true}).extend({
   pinFileIds:z.array(z.number().int().positive()).max(100),conflicts:z.array(z.string().max(240)).max(10),
   mandatoryPreferences:z.array(z.object({field:z.enum(['mood','listeningContexts']),quote:z.string().min(1).max(300)})).max(10).default([]),
   replaceUnpinned:z.boolean().default(false),
@@ -33,6 +33,7 @@ export async function compilePlaylistIntent(definition:PlaylistDefinition,curren
     base.soft={...savedIntent.soft,styles:[...new Set([...base.soft.styles,...savedIntent.soft.styles])],moods:[...new Set([...base.soft.moods,...savedIntent.soft.moods])],contexts:[...new Set([...base.soft.contexts,...savedIntent.soft.contexts])]};
     base.pinnedRecordings=savedIntent.pinnedRecordings.filter(pin=>current.some(track=>track.fileId===pin.fileId));
     base.positionLocks=savedIntent.positionLocks.filter(lock=>current.some(track=>track.fileId===lock.fileId));
+    base.trackRequests=savedIntent.trackRequests??[];
   }else if(saved&&!options.interactive){
     if(saved.genres.length)base.hard.requirements.push({field:'genre',values:saved.genres,match:'any'});
     if(saved.excludeGenres.length)base.hard.requirements.push({field:'genre',values:saved.excludeGenres,match:'none'});
@@ -48,10 +49,11 @@ Examples: "Warm dinner jazz" => soft.styles jazz, soft.moods warm, soft.contexts
 Set replaceUnpinned=true only when the latest real user correction explicitly asks to replace the other songs or start over. Preserve compatible pins and positions requested earlier, unless a newer correction revokes them. Nightly work uses the saved intent and rotation settings; it never invents a correction.
 "No recently played albums" means hard.excludeRecentlyPlayedAlbums=true: another song on an album heard recently is still excluded. This differs from the default Rediscovery gap for the individual recording.
 For a Journey, interpret an explicit energy arc: quiet opening, middle peak, calm landing => energyCurve wave; steadily building => ascent; winding down => descent; steady running => steady. Use configured when no arc is expressed, preserving the existing control. A clear textual arc takes precedence over a default control. Energy and relevance are separate: never include unrelated music merely to hit an energy target.
+For explicitly named songs, use trackRequests rather than inventing IDs or ignoring songs outside the current selection. Each request needs the real song title, artist when specified, include/exclude, zero-based position (-1 means no position), required (false for "if available"), and a short exact quote from a real user direction containing that title. The application searches the eligible native library and resolves identities. "Put Basket Case first if available" => include Basket Case, position 0, required false. Do not convert general musical references into mandatory named-song requests. Keep/include requests must not be inferred merely because a song appears in current selections; use actual user instructions.
 Use availableVocabulary to express optional direction in terms actually present in the library. Keep moods, geography, instruments and styles separate: do not invent composite styles such as calm_electronic, guitar_rock or atmospheric_trip_hop. Japanese jazz and quiet electronic music are alternative directions, not a requirement that every electronic track be Japanese jazz. Express that optional centre as styles jazz/electronic and mood serene; regional preference belongs in scenes. Preserve real specific styles such as melodic_techno and trip_hop. Unavailable explicit hard requirements remain hard, with an honest shortage; vocabulary is never permission to weaken them.
 Use this canonical semantic vocabulary; preserve specific genre/style names rather than broadening them:
 ${canonicalPrompt}`,
-      input:JSON.stringify({category:definition.category,configured:base,direction:definition.intent,
+      input:JSON.stringify({category:definition.category,targetTracks:definition.config.targetTracks,configured:base,direction:definition.intent,
         savedGuidance:chat?.result?.guidance??'',savedRequirements:chat?.result?.detail.requirements,savedIntent:chat?.result?.detail.intent,availableVocabulary:options.vocabulary,
         conversation:chat?.messages.filter(message=>message.role==='user').slice(-16),
         current:current.map(track=>({fileId:track.fileId,title:track.title,artist:track.artist,vocalProfile:track.evidence.fields.vocalProfile?.value})),
@@ -60,13 +62,16 @@ ${canonicalPrompt}`,
     });
     recordAiUsage('playlist_intent',aiModel,output);
     const compiled=compiledSchema.parse(output.data);
+    const directions=[definition.intent,...(chat?.messages.filter(message=>message.role==='user').map(message=>message.content)??[])];
+    const normal=(value:string)=>value.normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();
+    for(const request of compiled.trackRequests)if(!directions.some(direction=>normal(direction).includes(normal(request.quote)))||!normal(request.quote).includes(normal(request.title)))throw Error('Named-song request is not supported by a real user direction');
     if(compiled.conflicts.length)throw Error('Playlist intent needs clarification: '+compiled.conflicts.join('; '));
     const currentById=new Map(current.map(track=>[track.fileId,track]));
     if([...compiled.pinFileIds,...compiled.positionLocks.map(lock=>lock.fileId)].some(id=>!currentById.has(id)))throw Error('Intent referenced a song outside the current selection');
     if(base.hard.vocal!=='any'&&compiled.hard.vocal!=='any'&&base.hard.vocal!==compiled.hard.vocal)throw Error('Compiled intent conflicts with saved vocal requirements');
     if(base.hard.artists.length&&compiled.hard.artists.length&&!compiled.hard.artists.every(artist=>base.hard.artists.includes(artist)))throw Error('Compiled intent conflicts with saved artist requirements');
     const upperBound=(first:number,second:number)=>first&&second?Math.min(first,second):first||second;
-    intent=canonicalIntent({...compiled,version:1,sourceRevision:revision,energyCurve:base.energyCurve!=='configured'?base.energyCurve:compiled.energyCurve,
+    intent=canonicalIntent({...compiled,version:1,sourceRevision:revision,excludedFileIds:[],excludedRecordings:[],energyCurve:base.energyCurve!=='configured'?base.energyCurve:compiled.energyCurve,
       hard:{...compiled.hard,
         requirements:[...base.hard.requirements,...compiled.hard.requirements],
         artists:base.hard.artists.length?base.hard.artists:compiled.hard.artists,
@@ -81,6 +86,7 @@ ${canonicalPrompt}`,
       soft:{...compiled.soft,styles:[...new Set([...base.soft.styles,...compiled.soft.styles])],moods:[...new Set([...base.soft.moods,...compiled.soft.moods])],contexts:[...new Set([...base.soft.contexts,...compiled.soft.contexts])]},
       pinnedRecordings:[...base.pinnedRecordings,...compiled.pinFileIds.filter(fileId=>!base.pinnedRecordings.some(pin=>pin.fileId===fileId)).map(fileId=>({fileId,recordingKey:currentById.get(fileId)!.evidence.recordingKey}))],
       positionLocks:[...base.positionLocks,...compiled.positionLocks.filter(lock=>!base.positionLocks.some(existing=>existing.position===lock.position))],
+      trackRequests:[...base.trackRequests,...compiled.trackRequests.filter(request=>!base.trackRequests.some(existing=>existing.title===request.title&&existing.artist===request.artist&&existing.action===request.action&&existing.position===request.position))],
     });
     const demoted=enforceSoftPreferences(intent,compiled.mandatoryPreferences,[definition.intent,...(chat?.messages.filter(message=>message.role==='user').map(message=>message.content)??[])]);
     detail={...detail,usage:output.usage,latencyMs:Date.now()-started,demotedPreferences:demoted,replaceUnpinned:compiled.replaceUnpinned};

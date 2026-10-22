@@ -90,8 +90,9 @@ test('nightly chat results retain real conversation and saved strict corrections
   database.prepare('UPDATE playlist_chat_state SET revision=1,conversation_json=?,result_json=? WHERE playlist_id=?').run(JSON.stringify(messages),JSON.stringify(result),chat.id);
   const client={async structured<T>(){const base=configuredIntent(chat,'ignored');return{data:{summary:'Piano',hard:base.hard,soft:base.soft,positionLocks:[],pinFileIds:[],conflicts:[]} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}}}};
   const compiled=await compilePlaylistIntent(chat,[],{client});assert.equal(compiled.intent.hard.vocal,'instrumental');assert.ok(compiled.intent.hard.requirements.some(rule=>rule.field==='instrumentation'&&rule.values.includes('piano')));
-  storeRefreshedChatSelection(chat.id,lease,[]);releaseChatLease(chat.id,lease);
+  storeRefreshedChatSelection(chat.id,lease,[],compiled.intent);releaseChatLease(chat.id,lease);
   assert.deepEqual(chatState(chat.id).messages,messages);assert.equal(chatState(chat.id).result?.guidance,result.guidance);assert.equal(chatState(chat.id).revision,2);
+  assert.equal(chatState(chat.id).result?.detail.intent?.hard.vocal,'instrumental');
 });
 test('managed chat uses bounded retrieval and lets real corrections supersede earlier intent while nightly refresh cannot weaken it',async()=>{
   const chat=createPlaylist({name:'Bounded conversation',category:'chat',enabled:false,ownerUserId:user.id,config:{targetTracks:1}});
@@ -118,6 +119,16 @@ test('managed chat uses bounded retrieval and lets real corrections supersede ea
   const nightly=await generateIntentSelection(chat,{client,snapshot,provider});
   assert.deepEqual(nightly.intent.hard.artists,['Artist 2']);assert.equal(nightly.intent.hard.vocal,'instrumental');assert.equal(nightly.items[0].artist,'Artist 2');
   assert.equal(compileCalls,3);assert.equal(chatState(chat.id).messages.length,4);assert.equal(chatState(chat.id).messages[2].content,'Only Artist 2 instead');
+});
+test('named-song interpretation requires a real user quote and may resolve an identity after compilation',async()=>{
+  const chat=createPlaylist({name:'Named-song proof',category:'chat',ownerUserId:user.id,config:{targetTracks:2}});
+  let quote='Keep Song 1 first',message='Make a jazz mix';
+  const client={async structured<T>(){const intent=configuredIntent(chat,'ignored');return{data:{...intent,summary:'Jazz',trackRequests:[{title:'Song 1',artist:'Artist 1',action:'include',position:0,required:false,quote}],pinFileIds:[],conflicts:[]} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}}}};
+  const context=()=>({revision:1,messages:[{role:'user' as const,content:message}],result:null});
+  await assert.rejects(compilePlaylistIntent(chat,[],{client,chat:context(),interactive:true}),/not supported by a real user direction/);
+  message='Keep Song 1 first if available';quote=message;
+  const compiled=await compilePlaylistIntent(chat,[],{client,chat:context(),interactive:true});
+  assert.equal(compiled.intent.trackRequests[0].title,'Song 1');assert.deepEqual(compiled.intent.pinnedRecordings,[],'The model supplies names; the application resolves native library IDs');
 });
 test('collaborative native identities use full credits and exact paths rather than stale cached editions',()=>{
   const tags={title:['Duet'],artist:['Charlie Byrd feat. Stan Getz'],album:['Jazz Samba'],trackNumber:1,discNumber:1};

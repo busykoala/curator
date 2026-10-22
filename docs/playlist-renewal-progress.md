@@ -298,3 +298,52 @@ changes in the infrastructure repository. Update this record at each handoff.
   recording-key upgrades and file deletion must not erase recent exposure or
   removal cooldown. Provider tag-radio fallback would improve sparse artist
   coverage. None of these should be hidden by calling the goal complete.
+- Closer inspection corrected the earlier Trip-Hop diagnosis: punctuation was
+  only part of it. “You Wish” qualified through a scene association while its
+  track style fields said downtempo/chillout. Track genre/style now establishes
+  the centre; scene associations receive only a small ranking bonus. The new
+  real creation/correction/nightly replay passed 3/3 with independent checks
+  (`evaluation/strict-trip-hop-v5.json`). The old outputs remain failures.
+- Evidence view v4 preserves a specific original genre tag when a model uses its
+  broader parent genre; parent-category equivalence cannot prove a tag mirrors
+  the classifier. The fixed-library index is now running with this version and
+  accurate backlog detection at `embeddings-v4` in the private pod directory.
+  Wait for zero backlog before final acceptance replays. No blanket profile or
+  tag rewriting occurred. Two earlier exact-output oracle rechecks remain
+  archived; neither replaces a live rerun.
+- Named-song inspection exposed another real gap: the earlier Green Day
+  correction saved “Basket Case first” without enforcing it immediately when
+  absent from the current selection. Intent now carries quoted named requests;
+  application code resolves owner-visible eligible native IDs, pins and positions
+  before selection. An independent opener check catches the old omission without
+  reducing its sufficiency denominator. The new real three-stage replay passed
+  3/3 (`evaluation/named-opener-v6.json`), including the immediate correction.
+  Requests cannot invent IDs or bypass newer exclusions. Newer playlist edits
+  also fence an in-flight interactive reply before it commits conversation state.
+- Managed publication now revalidates exact size, current metadata, duplicate
+  identities, pins and positions. Current owner feedback is application-owned
+  intent state, rebuilt on each generation so expired snoozes are not frozen
+  into conversation intent. Nightly chat saves the full resolved intent along
+  with its selection, preserving the real messages and clearing old shortages.
+- Journey ordering now globally assigns selected energy levels to the requested
+  arc, reserving a calm landing rather than spending all quiet tracks early.
+  Equal-energy choices still favour artist spacing; pins retain priority.
+  Festival-EDM exclusions recognise canonical big-room labels without excluding
+  all house. Evaluation now also records uncertainty in soft fields it used.
+- Free ListenBrainz tag radio is implemented with the documented OR semantics,
+  sharing the artist-radio limiter/cache/cooldown. A live ten-request proof
+  resolved three fitting catalogue albums (Drexciya, The Japanese Popstars,
+  Moby). OR queries do not assert every requested tag describes a recording.
+  Proof traffic is cumulatively capped at 40 (29 used so far), below the goal's
+  global 100-request discovery budget. Source seed selection now uses the same
+  evidence view and user overrides as selection. Fresh research can verify a
+  legacy association without dropping its existing acquisition state.
+- Native owner preflight confirms the currently enabled playlists belong to
+  busykoala; its complete snapshot has 16,359 songs, 1,952 played songs and two
+  favourites. The native favourite filter returns the same two with implicit
+  and explicit owner context. Counts only are reported; histories remain local.
+- Current full checkpoint: 247/247 tests and production/worker build passed
+  (`/private/tmp/curator-renewal-v10-{tests,build}.log`), followed by TypeScript.
+  The full 72 initial replays, independent 40-case improvement gate, real-library
+  simulation, recovery/cooldown review and staged production nights are still
+  outstanding. Production image and pipeline mode remain unchanged.

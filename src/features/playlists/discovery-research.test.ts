@@ -7,7 +7,7 @@ import {config} from '@/config';
 import {db,stateSet,stateGet} from '@/features/db/client';
 import {createPlaylist} from './repository';
 import {researchDiscoveryPools,discoveryPoolNeedsResearch,runDiscoveryMaintenance} from './discovery-research';
-import {discoveryRecommendations,type DiscoveryRelease} from './discovery-repository';
+import {discoveryRecommendations,storeDiscoveryRecommendation,verifiedDiscoveryRecommendation,type DiscoveryRelease} from './discovery-repository';
 const directory=mkdtempSync(join(tmpdir(),'curator-discovery-research-'));config.DATABASE_PATH=join(directory,'test.sqlite');const database=db();
 database.exec("INSERT INTO curator_users(id,navidrome_user_id,username,display_name) VALUES(1,'one','one','One')");
 const p=createPlaylist({name:'Techno',category:'discovery',enabled:true,ownerUserId:1,config:{genres:['electronic']}});
@@ -23,6 +23,15 @@ test('an acquisition dependency outage cannot suppress independent discovery res
   let researched=0,admitted=0;
   await runDiscoveryMaintenance({lifecycle:async()=>{throw Error('Lidarr unavailable')},admit:async()=>{admitted++;return{admitted:0,active:0}},research:async()=>{researched++;return{researched:1,queued:0}}});
   assert.equal(researched,1);assert.equal(admitted,0);assert.match(stateGet('playlist_discovery_error'),/Lidarr unavailable/);
+});
+test('fresh verified evidence upgrades an associated legacy acquisition without changing its ID or dropping the queue state',async()=>{
+  storeDiscoveryRecommendation(p,releases[0],'Legacy association','legacy');
+  database.prepare("UPDATE playlist_discovery_recommendations SET status='queued',evidence_json='[]' WHERE release_id=?").run(releases[0].id);
+  database.prepare('UPDATE playlist_discovery_releases SET identity_verified_at=NULL WHERE id=?').run(releases[0].id);
+  const before=discoveryRecommendations(p.id,1)[0];assert.equal(verifiedDiscoveryRecommendation(before),false);
+  const result=await researchDiscoveryPools([{name:'working',load:async()=>releases}]);
+  const after=discoveryRecommendations(p.id,1).find(rec=>rec.release_id===releases[0].id)!;
+  assert.equal(after.id,before.id);assert.equal(after.status,'queued');assert.equal(verifiedDiscoveryRecommendation(after),true);assert.equal(result.researched,10);
 });
 test('a bare URL or incorrect identity claim cannot admit an automatic recommendation',async()=>{
   const malformed=releases.map(r=>({...r,evidence:r.evidence.filter(e=>e.provider==='musicbrainz')}));

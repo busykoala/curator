@@ -77,6 +77,10 @@ test("published chat corrections replace the exact playlist; failed sync retains
     assert.equal(aiRequests,beforeRecovery);assert.equal(chatState(playlist.id).revision,5);
     assert.equal(latestChatJob(playlist.id)?.synced,true);assert.equal(latestChatJob(playlist.id)?.status,"completed");
     assert.deepEqual(publishedIds,["song-1"]);assert.equal(chatState(playlist.id).messages.length,10);
+    const {updatePlaylist}=await import('./repository'),beforeEdit=chatState(playlist.id),delegate=aiClient.structured;
+    aiClient.structured=async<T>(request:StructuredRequest)=>{const result=await delegate<T>(request);updatePlaylist(playlist.id,{name:'Newer user title'});return result};
+    await assert.rejects(sendPlaylistMessage(playlist.id,{message:'An interrupted correction',targetTracks:1,revision:beforeEdit.revision}),/settings changed while the AI was working/);
+    assert.equal(chatState(playlist.id).revision,beforeEdit.revision);assert.deepEqual(chatState(playlist.id).messages,beforeEdit.messages);assert.deepEqual(publishedIds,['song-1']);
   }finally{
     globalThis.fetch=originalFetch;aiClient.structured=originalStructured;database.close();delete (globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true});
   }

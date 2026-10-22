@@ -38,13 +38,15 @@ export async function sendPlaylistMessage(id:number,raw:unknown,job?:{lease:stri
     if(!managed)recordAiUsage("playlist_chat",aiModel,{usage:result.detail.usage});
     const messages=[...state.messages,{role:"user" as const,content:request.message},{role:"assistant" as const,content:result.reply}];
     db().transaction(()=>{
+      const current=getPlaylist(id);
+      if(!current||current.ownerUserId!==definition.ownerUserId||current.revision!==definition.revision)throw Error('Playlist settings changed while the AI was working. Reopen the playlist and retry.');
       let name=result.name;
       for(let suffix=2;db().prepare("SELECT 1 FROM smart_playlists WHERE owner_user_id=? AND lower(name)=lower(?) AND id<>?").get(definition.ownerUserId,name,id);suffix++)name=result.name.slice(0,90)+` (${suffix})`;
       result.name=name;
       storeChatResult(id,lease,messages,result);
       updatePlaylist(id,{name:result.name,config:{targetTracks:request.targetTracks}});
       job?.stored();
-    })();
+    }).immediate();
     // Once published, corrections also update the listener's playlist immediately.
     let syncError="",synced=false;
     if(definition.navidromePlaylistId){

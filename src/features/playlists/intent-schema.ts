@@ -7,6 +7,7 @@ export const intentFields=['genre','style','mood','listeningContexts','instrumen
 export const semanticRequirementSchema=z.object({
   field:z.enum(intentFields),values:terms.min(1),match:z.enum(['any','all','none']),
 });
+export const trackRequestSchema=z.object({title:z.string().trim().min(1).max(200),artist:z.string().trim().max(200),action:z.enum(['include','exclude']),position:z.number().int().min(-1).max(99),required:z.boolean(),quote:z.string().trim().min(1).max(600)});
 export const playlistIntentSchema=z.object({
   version:z.literal(1),sourceRevision:z.string(),summary:z.string().max(2000),energyCurve:z.enum(['configured','steady','ascent','slow_burn','wave','descent']).default('configured'),
   hard:z.object({
@@ -21,6 +22,8 @@ export const playlistIntentSchema=z.object({
   soft:z.object({styles:terms,moods:terms,contexts:terms,energy:z.enum(['any','very_low','low','medium','high','very_high']),valence:terms}),
   pinnedRecordings:z.array(z.object({fileId:z.number().int().positive(),recordingKey:z.string().max(300)})).max(100),
   positionLocks:z.array(z.object({fileId:z.number().int().positive(),position:z.number().int().min(0).max(99)})).max(100),
+  trackRequests:z.array(trackRequestSchema).max(20).default([]),
+  excludedFileIds:z.array(z.number().int().positive()).default([]),excludedRecordings:z.array(z.string()).default([]),
 });
 export type PlaylistIntent=z.infer<typeof playlistIntentSchema>;
 export type SemanticRequirement=z.infer<typeof semanticRequirementSchema>;
@@ -31,7 +34,7 @@ export function configuredIntent(definition:PlaylistDefinition,revision:string):
     requirements:config.genres.length?[{field:'genre',values:config.genres,match:'any'}]:[],
     artists:[],excludeArtists:[],exclusions:config.exclusions,vocal:'any',recording:'any',
     minYear:0,maxYear:0,minBpm:0,maxBpm:0,favouritesOnly:false,singleArtist:false,excludeRecentlyPlayedAlbums:false,
-  },soft:{styles:config.tasteLanes,moods:config.moods,contexts:config.contexts,energy:'any',valence:[]},pinnedRecordings:[],positionLocks:[]};
+  },soft:{styles:config.tasteLanes,moods:config.moods,contexts:config.contexts,energy:'any',valence:[]},pinnedRecordings:[],positionLocks:[],trackRequests:[],excludedFileIds:[],excludedRecordings:[]};
 }
 
 export function canonicalIntent(intent:PlaylistIntent):PlaylistIntent{
@@ -48,5 +51,6 @@ export function canonicalIntent(intent:PlaylistIntent):PlaylistIntent{
   if(result.hard.minYear&&result.hard.maxYear&&result.hard.minYear>result.hard.maxYear)throw Error('Conflicting original-year requirements');
   if(result.hard.minBpm&&result.hard.maxBpm&&result.hard.minBpm>result.hard.maxBpm)throw Error('Conflicting tempo requirements');
   if(new Set(result.positionLocks.map(lock=>lock.position)).size!==result.positionLocks.length)throw Error('Two songs cannot occupy the same locked position');
+  if(new Set(result.positionLocks.map(lock=>lock.fileId)).size!==result.positionLocks.length)throw Error('One recording cannot occupy two locked positions');
   return result;
 }

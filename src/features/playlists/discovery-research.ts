@@ -2,14 +2,14 @@ import {createHash} from 'node:crypto';
 import {stateGet,stateSet} from '@/features/db/client';
 import {listPlaylists} from './repository';
 import {discoveryRecommendations,discoveryPoolTarget,storeDiscoveryRecommendation,verifiedDiscoveryRecommendation,type DiscoveryRelease} from './discovery-repository';
-import {editorialCandidates,lastFmCandidates,listenBrainzCandidates} from './discovery-providers';
+import {editorialCandidates,lastFmCandidates,listenBrainzCandidates,listenBrainzTagCandidates} from './discovery-providers';
 import {queueDiscoveryRecommendations,refreshDiscoveryLifecycle} from './discovery-lifecycle';
 import type {PlaylistDefinition} from './types';
 import {playlistRefreshMode,refreshManaged} from './refresh-jobs';
 import {compilePlaylistIntent} from './intent-compiler';
 import {discoveryReleaseFit} from './discovery-fit';
 
-const providers=[{name:'listenbrainz',load:listenBrainzCandidates},{name:'editorial',load:editorialCandidates},{name:'lastfm',load:lastFmCandidates}];
+const providers=[{name:'listenbrainz',load:listenBrainzCandidates},{name:'listenbrainz-tags',load:listenBrainzTagCandidates},{name:'editorial',load:editorialCandidates},{name:'lastfm',load:lastFmCandidates}];
 export function discoveryPoolNeedsResearch(playlist:PlaylistDefinition,now=Date.now()){
   return discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(r=>verifiedDiscoveryRecommendation(r)&&['researched','queued','downloading','ready'].includes(r.status)).length<discoveryPoolTarget&&Number(stateGet(`playlist_research_next:${playlist.id}`,'0'))<=now;
 }
@@ -36,10 +36,11 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
       const releases=await provider.load(direction,recent);let accepted=0;
       for(const release of releases){
         if(!usableEvidence(release))continue;
-        const fit=discoveryReleaseFit(direction,release);if(!fit)continue;
+        const fit=discoveryReleaseFit(direction,release,compiled.intent);if(!fit)continue;
         if(recent&&(!release.releaseDate||Date.parse(release.releaseDate)<now.getTime()-120*86400_000))continue;
         const existing=discoveryRecommendations(playlist.id,playlist.ownerUserId);
-        if(existing.some(r=>r.release_id===release.id))continue;
+        const prior=existing.find(r=>r.release_id===release.id);
+        if(prior&&(verifiedDiscoveryRecommendation(prior)||['dismissed','presented','deferred'].includes(prior.status)))continue;
         if(existing.filter(r=>verifiedDiscoveryRecommendation(r)&&['researched','queued','downloading','ready'].includes(r.status)).length>=discoveryPoolTarget)break;
         const recommendation=release.evidence.find(e=>e.provider!=='musicbrainz')!;
         const reason=recommendation.claims.seedArtist?`Recommended from ${String(recommendation.claims.seedArtist)} by ${recommendation.provider}`:`Supported by ${recommendation.provider} release evidence`;

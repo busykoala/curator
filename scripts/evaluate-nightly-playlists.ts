@@ -67,7 +67,7 @@ async function main(){
     try{storeChatResult(playlistId,lease,[...state.messages,{role:'user',content:message},{role:'assistant',content:result.reply}],result)}finally{releaseChatLease(playlistId,lease)}
   };
   const evaluate=async(scenario:typeof scenarios[number],repeat:number,stage:'initial'|'correction'|'nightly',playlist:PlaylistDefinition,previous:EvidencedCandidate[]=[])=>{
-    const started=Date.now(),oracleOptions={stage,previous,snapshot,now:Date.parse(report.at)};
+    const started=Date.now(),oracleOptions={stage,previous,snapshot,now:Date.parse(report.at),available:referencePool};
     const independentlyEligible=independentEligibleCount(scenario.id,referencePool,oracleOptions);
     try{
       let generated:Awaited<ReturnType<typeof generateIntentSelection>>;

@@ -9,7 +9,7 @@ const field=(track:EvidencedCandidate,key:string)=>{
   return(Array.isArray(evidence.value)?evidence.value:evidence.value==null?[]:[evidence.value]).map(value=>normal(String(value)));
 };
 const matches=(values:string[],term:string)=>values.some(value=>(' '+value+' ').includes(' '+term+' '));
-export function scenarioViolations(id:string,items:EvidencedCandidate[],options:{stage?:'initial'|'correction'|'nightly';previous?:EvidencedCandidate[];snapshot?:ListenerSnapshot;now?:number}={}){
+export function scenarioViolations(id:string,items:EvidencedCandidate[],options:{stage?:'initial'|'correction'|'nightly';previous?:EvidencedCandidate[];snapshot?:ListenerSnapshot;now?:number;available?:EvidencedCandidate[];checkOrdering?:boolean}={}){
   const violations=new Set<string>(),corrected=options.stage==='correction'||options.stage==='nightly',now=options.now??Date.now();
   for(const track of items){
     const genres=[...field(track,'genre'),...field(track,'style')],has=(term:string)=>matches(genres,term);
@@ -53,14 +53,17 @@ export function scenarioViolations(id:string,items:EvidencedCandidate[],options:
     }
   }
   if(id==='rediscovery-small'&&new Set(items.map(track=>normal(track.artist))).size>1)violations.add('Only one artist requested');
-  if(corrected&&['chat-keep-order','chat-german'].includes(id))for(const[index,prior]of(options.previous??[]).slice(0,2).entries()){
+  if(options.checkOrdering!==false&&corrected&&id==='chat-artist-decade'&&options.available?.some(track=>normal(track.artist)==='green day'&&normal(track.title)==='basket case'&&track.evidence.originalYear&&track.evidence.originalYear>=1990&&track.evidence.originalYear<=1999)){
+    if(normal(items[0]?.artist??'')!=='green day'||normal(items[0]?.title??'')!=='basket case')violations.add('Requested Basket Case opener was available but not first');
+  }
+  if(options.checkOrdering!==false&&corrected&&['chat-keep-order','chat-german'].includes(id))for(const[index,prior]of(options.previous??[]).slice(0,2).entries()){
     if(id==='chat-german'&&(!field(prior,'vocalProfile').length||field(prior,'vocalProfile').some(value=>value!=='instrumental')))continue;
     if(items[index]?.evidence.recordingKey!==prior.evidence.recordingKey)violations.add('Requested first-two position lock lost');
   }
   return[...violations];
 }
 export function independentEligibleCount(id:string,pool:EvidencedCandidate[],options:Parameters<typeof scenarioViolations>[2]={}){
-  const eligible=pool.filter(track=>!scenarioViolations(id,[track],{...options,previous:[]}).length);
+  const eligible=pool.filter(track=>!scenarioViolations(id,[track],{...options,previous:[],checkOrdering:false}).length);
   if(id==='rediscovery-small'){
     const artists=new Map<string,Set<string>>();for(const track of eligible){const key=normal(track.artist),recordings=artists.get(key)??new Set<string>();recordings.add(track.evidence.recordingKey);artists.set(key,recordings)}
     return Math.max(0,...[...artists.values()].map(recordings=>recordings.size));
