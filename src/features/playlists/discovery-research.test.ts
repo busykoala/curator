@@ -5,7 +5,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {config} from '@/config';
 import {db,stateSet,stateGet} from '@/features/db/client';
-import {createPlaylist} from './repository';
+import {createPlaylist,updatePlaylist} from './repository';
+import {aiClient} from '@/features/ai/client';
 import {researchDiscoveryPools,discoveryPoolNeedsResearch,runDiscoveryMaintenance} from './discovery-research';
 import {discoveryRecommendations,storeDiscoveryRecommendation,verifiedDiscoveryRecommendation,type DiscoveryRelease} from './discovery-repository';
 const directory=mkdtempSync(join(tmpdir(),'curator-discovery-research-'));config.DATABASE_PATH=join(directory,'test.sqlite');const database=db();
@@ -44,5 +45,16 @@ test('every fourth research cycle targets recent releases without excluding old 
   let recent=false;stateSet(`playlist_research_cycles:${p.id}`,'3');
   const result=await researchDiscoveryPools([{name:'test',load:async(_p,r)=>{recent=r;return releases}}]);
   assert.equal(recent,true);assert.equal(result.researched,0);
+});
+test('an invalid playlist description cannot freeze the research cursor for other playlists',async()=>{
+  const original=aiClient.structured;updatePlaylist(p.id,{intent:'INVALID direction'});
+  createPlaylist({name:'Other research',category:'discovery',enabled:true,ownerUserId:1,config:{genres:['electronic']}});
+  stateSet('playlist_research_cursor','1'); // Names sort Other research before Techno.
+  aiClient.structured=async()=>{throw Error('Invalid direction fixture')};
+  try{
+    const adapters=[{name:'working',load:async()=>releases}];
+    await assert.rejects(researchDiscoveryPools(adapters),/Invalid direction/);
+    assert.equal((await researchDiscoveryPools(adapters)).researched,10);
+  }finally{aiClient.structured=original;updatePlaylist(p.id,{intent:''})}
 });
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

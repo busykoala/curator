@@ -51,7 +51,7 @@ export async function webSearch(query:string):Promise<WebResult[]>{
   return results;
 }
 
-export async function openWebPage(value:string):Promise<OpenedPage>{
+export async function openWebPage(value:string,options:{textCharacters?:number}={}):Promise<OpenedPage>{
   const {url,text}=await boundedFetch(value,1_500_000),head=text.slice(0,250_000);
   const title=plain(head.match(/<title\b[^>]*>[\s\S]*?<\/title>/i)?.[0]??"").slice(0,240);
   const metas=[...head.matchAll(/<meta\b[^>]*>/gi)].map((match)=>match[0]),images:string[]=[];let description="";
@@ -63,5 +63,5 @@ export async function openWebPage(value:string):Promise<OpenedPage>{
     if(links.length>=160)break;
   }
   const body=text.match(/<(?:article|main)\b[^>]*>([\s\S]*?)<\/(?:article|main)>/i)?.[1]??text;
-  return{url:canonicalUrl(url),title,description,images:images.slice(0,8),text:plain(body).slice(0,8_000),links};
+  return{url:canonicalUrl(url),title,description,images:images.slice(0,8),text:plain(body).slice(0,Math.max(1000,Math.min(32000,options.textCharacters??8000))),links};
 }

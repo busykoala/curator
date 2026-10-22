@@ -69,7 +69,7 @@ export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:L
     WHERE f.status='written' AND p.status='complete'`).all() as CatalogRow[];
   const exposure=playlistExposure(definition.ownerUserId),boosts=discoveryTrackBoosts(definition.id,definition.ownerUserId);
   const recommendations=db().prepare(`SELECT r.id,r.genres_json,d.origin FROM playlist_discovery_recommendations d JOIN playlist_discovery_releases r ON r.id=d.release_id
-    WHERE d.playlist_id=? AND d.owner_user_id=? AND d.status='ready' AND d.boost_until>CURRENT_TIMESTAMP`).all(definition.id,definition.ownerUserId) as Array<{id:string;genres_json:string;origin:string}>;
+    WHERE d.playlist_id=? AND d.owner_user_id=? AND d.direction_revision=? AND d.status='ready' AND d.boost_until>CURRENT_TIMESTAMP`).all(definition.id,definition.ownerUserId,definition.revision??1) as Array<{id:string;genres_json:string;origin:string}>;
   const pool:EvidencedCandidate[]=[],mappings:Array<{fileId:number;hash:string;songId:string}>=[];
   for(const row of rows){
     const tags=JSON.parse(row.tags_json),title=list(tags.title)[0]??'';
@@ -193,7 +193,9 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
     const reasons=new Map(chosen.map(track=>[track.fileId,track.reason]));for(const item of selected.items)if(reasons.has(item.fileId))item.reason=reasons.get(item.fileId)!;
   }
   signal.throwIfAborted();
-  return{...selected,intent:compiled.intent,detail:{selectionVersion:1,evaluation:selected.evaluation,intent:compiled.detail,trackRequests,retrieval:retrievalDetail,ai:aiDetails,listener:{complete:snapshot.complete,stale:snapshot.stale,capturedAt:snapshot.capturedAt,error:snapshot.error},latencyMs:Date.now()-started}};
+  const validProtection=(fileId:number)=>{const track=available.find(track=>track.fileId===fileId);return Boolean(track&&assessCandidate(track,selectionDefinition,compiled.intent,snapshot).eligible)};
+  const protectedSelection={pins:compiled.intent.pinnedRecordings.filter(pin=>validProtection(pin.fileId)),positions:compiled.intent.positionLocks.filter(lock=>validProtection(lock.fileId))};
+  return{...selected,intent:compiled.intent,detail:{selectionVersion:1,evaluation:selected.evaluation,resolvedIntent:compiled.intent,protectedSelection,intent:compiled.detail,trackRequests,retrieval:retrievalDetail,ai:aiDetails,listener:{complete:snapshot.complete,stale:snapshot.stale,capturedAt:snapshot.capturedAt,error:snapshot.error},latencyMs:Date.now()-started}};
 }
 
 // Called in the local publication transaction only after native verification.

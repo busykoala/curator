@@ -223,6 +223,7 @@ export async function generatePlaylist(
   preview = false,
   heldChatLease?: string,
   refreshIntent=false,
+  sourceKind:'manual'|'background'|'shadow'='manual',
 ) {
   const definition = getPlaylist(id);
   if (!definition) throw new Error("Playlist not found");
@@ -231,7 +232,7 @@ export async function generatePlaylist(
       ? acquireChatLease(id)
       : undefined;
   try {
-    return await generatePlaylistRun(definition, preview, heldChatLease??lease!,refreshIntent);
+    return await generatePlaylistRun(definition, preview, heldChatLease??lease!,refreshIntent,sourceKind);
   } finally {
     if (lease) releaseChatLease(id, lease);
   }
@@ -242,6 +243,7 @@ async function generatePlaylistRun(
   preview: boolean,
   lease: string,
   refreshIntent:boolean,
+  sourceKind:'manual'|'background'|'shadow',
 ) {
   const id = definition.id;
   const configHash = playlistRevisionHash(definition);
@@ -253,9 +255,9 @@ async function generatePlaylistRun(
   assertCurrent();
   const run = db()
     .prepare(
-      "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,owner_user_id) VALUES (?,'running',?,?,?) RETURNING id",
+      "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,owner_user_id,source_kind) VALUES (?,'running',?,?,?,?) RETURNING id",
     )
-    .get(id, preview ? 1 : 0, configHash, definition.ownerUserId) as {
+    .get(id, preview ? 1 : 0, configHash, definition.ownerUserId,sourceKind) as {
     id: number;
   };
 
@@ -435,9 +437,10 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
     assertCurrent();
     const preview = db()
       .prepare(
-        "SELECT id,config_hash,detail_json FROM playlist_runs WHERE id=? AND playlist_id=? AND preview=1 AND status='complete'",
+        "SELECT id,config_hash,detail_json,source_kind FROM playlist_runs WHERE id=? AND playlist_id=? AND preview=1 AND status='complete'",
       )
-      .get(previewRunId, id) as { id: number; config_hash: string;detail_json:string } | undefined;
+      .get(previewRunId, id) as { id: number; config_hash: string;detail_json:string;source_kind:string } | undefined;
+    if(preview?.source_kind==='shadow'||preview&&preview.source_kind!=='manual'&&!heldLease)throw Error('This background comparison is not a saved preview. Create a new preview before saving.');
     if (
       !preview ||
       preview.config_hash !==
@@ -491,9 +494,10 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
     let previewIntent:PlaylistIntent|undefined;
     if(evaluation?.shortage||evaluation?.violations.length)throw Error(`Kept the previous mix: ${evaluation.shortage?'insufficient matching tracks':evaluation.violations.join('; ')}`);
     if(JSON.parse(preview.detail_json).selectionVersion===1){
-      const cached=db().prepare('SELECT intent_json FROM playlist_intents WHERE playlist_id=?').get(id) as {intent_json:string}|undefined;
-      if(!cached)throw Error('The preview intent is unavailable; generate a new preview');
-      const intent=playlistIntentSchema.parse(JSON.parse(cached.intent_json));
+      const resolved=JSON.parse(preview.detail_json).resolvedIntent;
+      const cached=resolved?undefined:db().prepare('SELECT intent_json FROM playlist_intents WHERE playlist_id=?').get(id) as {intent_json:string}|undefined;
+      if(!resolved&&!cached)throw Error('The preview intent is unavailable; generate a new preview');
+      const intent=playlistIntentSchema.parse(resolved??JSON.parse(cached!.intent_json));
       previewIntent=intent;
       if(intent.sourceRevision!==expected)throw Error('The preview intent changed; generate a new preview');
       const snapshot=await listenerMusicSnapshot(definition.ownerUserId),pool=loadEvidencedCandidates(definition,snapshot),byId=new Map(pool.map(track=>[track.fileId,track]));
@@ -523,7 +527,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
       if(completed)return;
       const run = db()
         .prepare(
-          "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,owner_user_id,detail_json,finished_at,source_preview_id) VALUES (?,'complete',0,?,?,?,CURRENT_TIMESTAMP,?) RETURNING id",
+          "INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,owner_user_id,detail_json,finished_at,source_preview_id,source_kind) VALUES (?,'complete',0,?,?,?,CURRENT_TIMESTAMP,?,?) RETURNING id",
         )
         .get(
           id,
@@ -535,6 +539,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
             navidromeId: synced.playlistId,
           }),
           previewRunId,
+          preview.source_kind,
         ) as { id: number };
       const insert = db().prepare(
         "INSERT INTO playlist_items(run_id,playlist_id,file_id,navidrome_song_id,position,score,origin,reason,retained) VALUES (?,?,?,?,?,?,?,?,?)",

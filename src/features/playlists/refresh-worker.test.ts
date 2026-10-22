@@ -18,7 +18,7 @@ test.beforeEach(()=>{database.exec('DELETE FROM playlist_refresh_jobs');stateSet
 test('a failed publication retries the persisted proposal rather than regenerating it',async()=>{
   scheduleRefreshJobs();let generations=0,publications=0;
   const run=database.prepare("INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,detail_json) VALUES (?,'complete',1,'test','{\"tracks\":2}') RETURNING id").get(p.id) as {id:number};
-  const deps={generate:async()=>{generations++;return{runId:run.id,definition:getPlaylist(p.id)!,items:[],detail:{tracks:2,retained:0,pending:0,navidromeId:null}}},
+  const deps={generate:async(...args:unknown[])=>{assert.equal(args[4],'background');generations++;return{runId:run.id,definition:getPlaylist(p.id)!,items:[],detail:{tracks:2,retained:0,pending:0,navidromeId:null}}},
     publish:async(_id:number,proposal:number)=>{publications++;assert.equal(proposal,run.id);if(publications===1)throw Error('Temporary failure');return{definition:getPlaylist(p.id)!,items:[{} as never,{} as never],detail:{tracks:2,navidromeId:'native'}}}};
   await runNextRefreshJob(deps);
   const failed=database.prepare('SELECT run_id,phase,status FROM playlist_refresh_jobs').get() as {run_id:number;phase:string;status:string};
@@ -30,7 +30,7 @@ test('a failed publication retries the persisted proposal rather than regenerati
 test('shadow jobs save a complete proposal and never invoke the publisher',async()=>{
   stateSet('playlist_refresh_mode','shadow');scheduleRefreshJobs();
   const run=database.prepare("INSERT INTO playlist_runs(playlist_id,status,preview,config_hash,detail_json) VALUES (?,'complete',1,'test','{\"tracks\":2}') RETURNING id").get(p.id) as {id:number};
-  const deps={generate:async()=>({runId:run.id,definition:getPlaylist(p.id)!,items:[],detail:{tracks:2,retained:0,pending:0,navidromeId:null}}),publish:async()=>{throw Error('Shadow must not publish')}};
+  const deps={generate:async(...args:unknown[])=>{assert.equal(args[4],'shadow');return{runId:run.id,definition:getPlaylist(p.id)!,items:[],detail:{tracks:2,retained:0,pending:0,navidromeId:null}}},publish:async()=>{throw Error('Shadow must not publish')}};
   await runNextRefreshJob(deps);
   const result=database.prepare('SELECT status,result_json FROM playlist_refresh_jobs').get() as {status:string;result_json:string};
   assert.equal(result.status,'completed');assert.equal(JSON.parse(result.result_json).unpublished,true);

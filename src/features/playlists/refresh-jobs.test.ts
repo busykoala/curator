@@ -85,4 +85,14 @@ test('old retries are superseded instead of replaying every missed date',()=>{
   const live=database.prepare("SELECT scheduled_date FROM playlist_refresh_jobs WHERE status='queued'").all() as Array<{scheduled_date:string}>;
   assert.deepEqual(live,[{scheduled_date:'2026-10-28'}]);
 });
+test('changing rollout mode cannot execute queued jobs outside the current canary',()=>{
+  updatePlaylist(other.id,{enabled:true});
+  try{
+    scheduleRefreshJobs(at);stateSet('playlist_refresh_mode','canary');stateSet('playlist_refresh_canary_ids',String(other.id));
+    assert.equal(claimRefreshJob(at.getTime())?.playlist_id,other.id);
+    assert.equal(claimRefreshJob(at.getTime()),null,'The other queued playlist must remain outside the canary');
+    stateSet('playlist_refresh_mode','shadow');assert.equal(claimRefreshJob(at.getTime()),null,'Shadow mode cannot publish an older nightly job');
+    stateSet('playlist_refresh_mode','off');assert.equal(claimRefreshJob(at.getTime()),null);
+  }finally{updatePlaylist(other.id,{enabled:false})}
+});
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

@@ -64,9 +64,10 @@ export function scenarioViolations(id:string,items:EvidencedCandidate[],options:
 }
 export function independentEligibleCount(id:string,pool:EvidencedCandidate[],options:Parameters<typeof scenarioViolations>[2]={}){
   const eligible=pool.filter(track=>!scenarioViolations(id,[track],{...options,previous:[],checkOrdering:false}).length);
+  const identity=(track:EvidencedCandidate)=>track.recordingGroupKey??track.evidence.recordingKey;
   if(id==='rediscovery-small'){
-    const artists=new Map<string,Set<string>>();for(const track of eligible){const key=normal(track.artist),recordings=artists.get(key)??new Set<string>();recordings.add(track.evidence.recordingKey);artists.set(key,recordings)}
+    const artists=new Map<string,Set<string>>();for(const track of eligible){const key=normal(track.artist),recordings=artists.get(key)??new Set<string>();recordings.add(identity(track));artists.set(key,recordings)}
     return Math.max(0,...[...artists.values()].map(recordings=>recordings.size));
   }
-  return new Set(eligible.map(track=>track.evidence.recordingKey)).size;
+  return new Set(eligible.map(identity)).size;
 }

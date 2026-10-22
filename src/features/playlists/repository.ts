@@ -147,7 +147,7 @@ export function refreshNextRunTimes() {
 export function playlistRuns(id: number) {
   return db()
     .prepare(
-      "SELECT id,status,preview,detail_json,error,started_at,finished_at FROM playlist_runs WHERE playlist_id=? ORDER BY id DESC LIMIT 12",
+      "SELECT id,status,preview,detail_json,error,started_at,finished_at FROM playlist_runs WHERE playlist_id=? AND (preview=0 OR source_kind='manual') ORDER BY id DESC LIMIT 12",
     )
     .all(id);
 }
@@ -225,7 +225,7 @@ export function playlistSnapshot(id: number) {
   const definition = getPlaylist(id);
   const run = db()
     .prepare(
-      "SELECT id,preview,started_at,config_hash FROM playlist_runs WHERE playlist_id=? AND status='complete' ORDER BY id DESC LIMIT 1",
+      "SELECT id,preview,started_at,config_hash FROM playlist_runs WHERE playlist_id=? AND status='complete' AND (preview=0 OR source_kind='manual') ORDER BY id DESC LIMIT 1",
     )
     .get(id) as
     | { id: number; preview: number; started_at: string; config_hash: string }
@@ -239,7 +239,7 @@ export function playlistSnapshot(id: number) {
     : [];
   const latestRun = db()
     .prepare(
-      "SELECT status FROM playlist_runs WHERE playlist_id=? ORDER BY id DESC LIMIT 1",
+      "SELECT status FROM playlist_runs WHERE playlist_id=? AND (preview=0 OR source_kind='manual') ORDER BY id DESC LIMIT 1",
     )
     .get(id);
   return {

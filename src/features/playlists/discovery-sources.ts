@@ -66,5 +66,5 @@ export async function discoveryJson<T>(provider:string,url:string,ttlDays=7,kind
     return gate?gate(request):request();
   },decode);
 }
-export function discoveryPage(provider:string,url:string){return cachedDiscoveryRequest<OpenedPage>(provider,url,'editorial',7,()=>openWebPage(url))}
+export function discoveryPage(provider:string,url:string){return cachedDiscoveryRequest<OpenedPage>(provider,'page:v2:'+url,'editorial',7,()=>openWebPage(url,{textCharacters:32000}))}
 export function discoveryWebSearch(query:string){return cachedDiscoveryRequest('web-search',query,'search',7,()=>webSearch(query))}

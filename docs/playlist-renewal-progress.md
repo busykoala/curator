@@ -469,3 +469,27 @@ changes in the infrastructure repository. Update this record at each handoff.
   fell from 6,792 to 3,953 while new-document embedding continued. This avoids
   spending model work or twenty-plus minutes on unchanged bookkeeping. A test
   proves changed documents are never marked fresh by this utility.
+
+- Added migrations 26–27: unpublished background/shadow proposals are excluded
+  from the displayed saved mix, and Discovery recommendations must be validated
+  against the playlist's current direction revision before admission or boosts.
+  Persisted proposals now carry their exact resolved intent and valid pins/locks;
+  a later mutable intent cache cannot weaken publication validation.
+- Research reserves its fair cursor and short backoff before compiling intent,
+  preventing an invalid description from blocking other playlists. Current-mode
+  checks also prevent older queued jobs from escaping a narrowed canary.
+- Source pages retain up to 32,000 characters (bounded fetch remains unchanged).
+  Editorial style quotes must bind artist and album, exclude negated claims, and
+  establish style beyond words in the title. Wrong-album attribution tests pass.
+- Added a read-only production-night observer with owner-authenticated native GET
+  verification, new-pipeline receipts, requested counts, pins/positions, ordered
+  song identity hashes, duplicate-publication checks and operational budgets. Its
+  fixture proves it does not modify SQLite and detects accidental shadow writes.
+- Checkpoint v14: 277/277 tests, production/worker build, TypeScript and all four
+  acquisition audits passed. Two subsequent focused regressions (recording-group
+  sufficiency and rollout-mode fencing) pass; they require the next full check.
+- Current-direction source proof (`discovery/live-pool-v7-current-direction.json`)
+  conservatively validates nine of the earlier ten candidates. Cached results
+  use zero network requests and do not restore the dismissed recommendation.
+  The remaining slot must be filled by future evidenced research, not a weaker
+  genre rule. Production image/flag and recommendations remain unchanged.

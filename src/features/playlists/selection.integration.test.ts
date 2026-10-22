@@ -83,6 +83,17 @@ test('a shortage preview cannot replace the previous mix',async()=>{
   const preview=await generatePlaylist(foreign.id,true);assert.equal(preview.items.length,3);
   await assert.rejects(savePlaylistPreview(foreign.id,preview.runId),/Kept the previous mix.*insufficient matching tracks/);
 });
+test('publication enforces the proposal intent even if a later cache entry is weaker',async()=>{
+  const p=createPlaylist({name:'Immutable proposal',category:'mood',ownerUserId:user.id,config:{targetTracks:2,genres:['jazz'],moods:['warm']}}),preview=await generatePlaylist(p.id,true);
+  const row=database.prepare('SELECT detail_json FROM playlist_runs WHERE id=?').get(preview.runId) as {detail_json:string},detail=JSON.parse(row.detail_json);
+  assert.ok(detail.resolvedIntent);detail.resolvedIntent.hard.vocal='instrumental';
+  database.prepare('UPDATE playlist_runs SET detail_json=? WHERE id=?').run(JSON.stringify(detail),preview.runId);
+  const cached=database.prepare('SELECT intent_json FROM playlist_intents WHERE playlist_id=?').get(p.id) as {intent_json:string},weaker=JSON.parse(cached.intent_json);weaker.hard.vocal='any';
+  database.prepare('UPDATE playlist_intents SET intent_json=? WHERE playlist_id=?').run(JSON.stringify(weaker),p.id);
+  const selected=preview.items[0],original=database.prepare('SELECT profile_json FROM track_profiles WHERE file_id=?').get(selected.fileId) as {profile_json:string},changed=JSON.parse(original.profile_json);changed.vocalProfile=['clean_sung'];
+  database.prepare('UPDATE track_profiles SET profile_json=? WHERE file_id=?').run(JSON.stringify(changed),selected.fileId);
+  try{await assert.rejects(savePlaylistPreview(p.id,preview.runId),/evidence or availability changed/)}finally{database.prepare('UPDATE track_profiles SET profile_json=? WHERE file_id=?').run(original.profile_json,selected.fileId)}
+});
 test('nightly chat results retain real conversation and saved strict corrections',async()=>{
   const chat=createPlaylist({name:'Night chat',category:'chat',enabled:true,ownerUserId:user.id,config:{targetTracks:2}}),lease=acquireChatLease(chat.id);
   const messages=[{role:'user',content:'Only instrumental piano now'},{role:'assistant',content:'Saved your correction'}];

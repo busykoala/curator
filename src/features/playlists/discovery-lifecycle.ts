@@ -8,6 +8,10 @@ import type {PlaylistCandidate} from './types';
 import {activeDiscoveryRecommendations,reserveDiscoveryAdmission,type DiscoveryRecommendation} from './discovery-repository';
 import {playlistRefreshMode,refreshManaged} from './refresh-jobs';
 import {claimMaintenanceLease,heartbeatMaintenanceLease,assertMaintenanceLease,releaseMaintenanceLease} from './maintenance-lease';
+import {getPlaylist} from './repository';
+import {compilePlaylistIntent} from './intent-compiler';
+import {discoveryResearchDirection,recommendationRelease} from './discovery-direction-state';
+import {discoveryReleaseFit} from './discovery-fit';
 
 function timestamp(value:string|null){return value?Date.parse(value.endsWith('Z')?value:value.replace(' ','T')+'Z'):0}
 export function discoveryProgressDecision(row:DiscoveryRecommendation,sizeLeft:number|null,targetProgress:string|null,now=Date.now()){
@@ -107,6 +111,7 @@ async function queueDiscoveryRecommendationsLocked(dependencies:typeof defaults,
   const [queue,torrents]=await Promise.all([dependencies.queue(),dependencies.torrents()]);
   const rows=activeDiscoveryRecommendations();
   let active=activeDiscoveryHashes(rows,torrents,dependencies.target,now.getTime()).size,admitted=0;
+  const directions=new Map<string,Awaited<ReturnType<typeof compilePlaylistIntent>>|null>();
   for(const row of rows.filter(r=>['researched','deferred'].includes(r.status))){
     assertLease();
     if(playlistRefreshMode()==='canary'&&!refreshManaged(row.playlist_id))continue;
@@ -119,7 +124,13 @@ async function queueDiscoveryRecommendationsLocked(dependencies:typeof defaults,
     // The shared release may already be in the native queue even if its
     // acquisition target has not yet been synchronized.
     if(row.lidarr_album_id&&queue.some(item=>item.albumId===row.lidarr_album_id))continue;
-    assertLease();const reservation=reserveDiscoveryAdmission(row,active,now);if(!reservation)continue;
+    const playlist=getPlaylist(row.playlist_id);
+    if(!playlist||!playlist.enabled||playlist.ownerUserId!==row.owner_user_id||!(playlist.category==='discovery'||playlist.category==='depth'&&playlist.config.externalDiscovery))continue;
+    const directionKey=playlist.id+':'+playlist.revision;
+    if(!directions.has(directionKey))try{directions.set(directionKey,await compilePlaylistIntent(playlist,[]))}catch(error){directions.set(directionKey,null);db().prepare('UPDATE playlist_discovery_recommendations SET message=? WHERE id=?').run('Direction needs review: '+String(error).slice(0,200),row.id)}
+    const compiled=directions.get(directionKey);if(!compiled||!discoveryReleaseFit(discoveryResearchDirection(playlist,compiled.intent),recommendationRelease(row),compiled.intent))continue;
+    db().prepare('UPDATE playlist_discovery_recommendations SET direction_revision=? WHERE id=? AND EXISTS(SELECT 1 FROM smart_playlists p WHERE p.id=playlist_id AND p.revision=?)').run(playlist.revision??1,row.id,playlist.revision??1);
+    assertLease();const reservation=reserveDiscoveryAdmission(row,active,now,playlist.revision??1);if(!reservation)continue;
     try{
       const added=await dependencies.add(row.artist_id,[row.release_id],'playlist');
       assertLease();
@@ -140,6 +151,6 @@ async function queueDiscoveryRecommendationsLocked(dependencies:typeof defaults,
 }
 
 export function discoveryTrackBoosts(playlistId:number,ownerId:number){
-  const releases=db().prepare("SELECT r.id,r.artist,r.album FROM playlist_discovery_recommendations d JOIN playlist_discovery_releases r ON r.id=d.release_id WHERE d.playlist_id=? AND d.owner_user_id=? AND d.status='ready' AND d.boost_until>CURRENT_TIMESTAMP").all(playlistId,ownerId) as Array<{id:string;artist:string;album:string}>;
+  const releases=db().prepare("SELECT r.id,r.artist,r.album FROM playlist_discovery_recommendations d JOIN playlist_discovery_releases r ON r.id=d.release_id JOIN smart_playlists p ON p.id=d.playlist_id AND p.owner_user_id=d.owner_user_id WHERE d.playlist_id=? AND d.owner_user_id=? AND d.direction_revision=p.revision AND d.status='ready' AND d.boost_until>CURRENT_TIMESTAMP").all(playlistId,ownerId) as Array<{id:string;artist:string;album:string}>;
   return new Map(releases.map(r=>[r.id,{artist:r.artist,album:r.album,boost:12}]));
 }

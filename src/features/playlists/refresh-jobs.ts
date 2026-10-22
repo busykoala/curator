@@ -39,6 +39,7 @@ export function scheduleRefreshJobs(now=new Date()){
   }).immediate();
 }
 export function claimRefreshJob(now=Date.now()):PlaylistRefreshJob|null{
+  const mode=playlistRefreshMode();if(mode==='off')return null;
   return db().transaction(()=>{
     // Cancel stale queued proposals. A running publication retains its lease
     // until it can verify/roll back; its revision is fenced at the native API.
@@ -50,10 +51,11 @@ export function claimRefreshJob(now=Date.now()):PlaylistRefreshJob|null{
       if(renewed)db().prepare("UPDATE playlist_refresh_jobs SET status='retry',next_attempt_at=0 WHERE id=?").run(j.id);
     }
     // Interactive work and any active mutation lease take priority.
-    const row=db().prepare(`SELECT j.* FROM playlist_refresh_jobs j WHERE j.status IN ('queued','retry') AND j.next_attempt_at<=?
+    const rows=db().prepare(`SELECT j.* FROM playlist_refresh_jobs j WHERE j.status IN ('queued','retry') AND j.next_attempt_at<=?
       AND NOT EXISTS (SELECT 1 FROM playlist_chat_jobs c WHERE c.playlist_id=j.playlist_id AND c.status IN ('queued','running'))
       AND NOT EXISTS (SELECT 1 FROM playlist_chat_state s WHERE s.playlist_id=j.playlist_id AND s.lease_until>?)
-      ORDER BY j.created_at,j.id LIMIT 1`).get(now,now) as PlaylistRefreshJob|undefined;
+      ORDER BY j.created_at,j.id`).all(now,now) as PlaylistRefreshJob[];
+    const row=rows.find(job=>job.mode==='shadow'?mode==='shadow':mode!=='shadow'&&refreshManaged(job.playlist_id,mode));
     if(!row)return null;
     const token=randomUUID();
     db().prepare("UPDATE playlist_refresh_jobs SET status='running',attempts=attempts+1,lease_token=?,lease_until=?,updated_at=? WHERE id=?").run(token,now+refreshLeaseMs,now,row.id);

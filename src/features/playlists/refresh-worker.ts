@@ -13,7 +13,7 @@ export async function runNextRefreshJob(dependencies={generate:generatePlaylist,
     assertRefreshCurrent(job);
     let runId=job.run_id;
     if(!runId){
-      const generated=await dependencies.generate(job.playlist_id,true,job.lease_token!,true);
+      const generated=await dependencies.generate(job.playlist_id,true,job.lease_token!,true,job.mode==='shadow'?'shadow':'background');
       assertRefreshCurrent(job);runId=generated.runId;
       const updated=db().prepare("UPDATE playlist_refresh_jobs SET run_id=?,phase='publish',updated_at=? WHERE id=? AND lease_token=? AND lease_until>?")
         .run(runId,Date.now(),job.id,job.lease_token,Date.now());

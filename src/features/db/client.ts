@@ -301,6 +301,8 @@ function migrate(instance: Database.Database) {
       UPDATE playlist_recording_exposure SET removed_at=NEW.removed_at WHERE run_id=NEW.run_id AND file_id=NEW.file_id;
     END;
   `));
+  migration(26,()=>addColumns(instance,'playlist_runs',[['source_kind',"TEXT NOT NULL DEFAULT 'manual'"]]));
+  migration(27,()=>addColumns(instance,'playlist_discovery_recommendations',[['direction_revision','INTEGER NOT NULL DEFAULT 0']]));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

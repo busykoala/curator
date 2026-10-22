@@ -7,8 +7,8 @@ import Database from 'better-sqlite3';
 import {config} from '@/config';
 import {db} from '@/features/db/client';
 import {schemaSql} from '@/features/db/schema';
-import {createPlaylist,updatePlaylist} from './repository';
-import {storeDiscoveryRecommendation,discoveryRecommendations,reserveDiscoveryAdmission,dismissDiscoveryRecommendation,type DiscoveryRecommendation} from './discovery-repository';
+import {createPlaylist,updatePlaylist,getPlaylist} from './repository';
+import {storeDiscoveryRecommendation,discoveryRecommendations,reserveDiscoveryAdmission,dismissDiscoveryRecommendation,currentDiscoveryPoolSize,type DiscoveryRecommendation} from './discovery-repository';
 import {discoveryProgressDecision,refreshDiscoveryLifecycle,queueDiscoveryRecommendations,genuinelyActiveDiscoveryTorrent} from './discovery-lifecycle';
 import {claimMaintenanceLease,heartbeatMaintenanceLease,releaseMaintenanceLease,assertMaintenanceLease} from './maintenance-lease';
 
@@ -21,6 +21,7 @@ const database=db();
 const playlists=Array.from({length:4},(_,i)=>createPlaylist({name:'Pool '+i,category:'discovery',ownerUserId:i%2+1,enabled:true,config:{}}));
 let serial=0;
 function recommend(p=playlists[0],id='release-'+(++serial)){
+  p=getPlaylist(p.id)!;
   storeDiscoveryRecommendation(p,{id,artistId:'artist',artist:'Artist',album:'Album '+id,genres:['electronic'],identityVerified:true,
     evidence:[{provider:'fixture',url:'https://example.com/recommendation',fetchedAt:new Date().toISOString(),scope:'release',claims:{releaseGroupId:id,seedArtist:'private-seed-'+p.ownerUserId}}]},'Fits the style','fixture');
   return discoveryRecommendations(p.id,p.ownerUserId).find(r=>r.release_id===id)!;
@@ -100,5 +101,14 @@ test('a crashed admission lease expires and its stale owner cannot release the r
   const current=claimMaintenanceLease('fixture-crash',1000,now+1001)!;assert.ok(current);assert.notEqual(current,old);
   assert.equal(heartbeatMaintenanceLease('fixture-crash',old,1000,now+1100),false);releaseMaintenanceLease('fixture-crash',old);
   assert.doesNotThrow(()=>assertMaintenanceLease('fixture-crash',current,now+1100));releaseMaintenanceLease('fixture-crash',current);
+});
+test('changed playlist direction fences old research and prevents a now-unrelated acquisition',async()=>{
+  const original=getPlaylist(playlists[0].id)!,row=recommend(original);
+  assert.equal(currentDiscoveryPoolSize(original),1);
+  updatePlaylist(original.id,{config:{genres:['metal']}});
+  assert.equal(currentDiscoveryPoolSize(getPlaylist(original.id)!),0);assert.equal(reserveDiscoveryAdmission(row,0),null);
+  assert.throws(()=>storeDiscoveryRecommendation(original,{id:'stale',artistId:'artist',artist:'Artist',album:'Album',genres:['electronic'],identityVerified:true,evidence:[{provider:'fixture',url:'https://example.com/review',fetchedAt:'',scope:'release',claims:{album:'Album'}}]},'Old direction','fixture'),/settings changed/);
+  let additions=0;const dependencies={queue:async()=>[],torrents:async()=>[],ready:async()=>[],target:()=>undefined,lookup:async()=>({albums:[]}),add:async()=>{additions++;return{albumIds:[123]}}} as unknown as NonNullable<Parameters<typeof queueDiscoveryRecommendations>[0]>;
+  try{await queueDiscoveryRecommendations(dependencies);assert.equal(additions,0)}finally{updatePlaylist(original.id,{config:original.config})}
 });
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

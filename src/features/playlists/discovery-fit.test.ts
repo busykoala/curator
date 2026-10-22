@@ -19,10 +19,13 @@ test('a bound artist similarity recommendation permits adjacent research without
   assert.equal(discoveryReleaseFit(playlist,{...related,evidence:[{...related.evidence[0],claims:{...related.evidence[0].claims,seedStyleTerms:['electronic']}}]}),null);
 });
 test('editorial musical claims require their exact supporting quote instead of a model-invented genre',()=>{
-  const editorial={provider:'bandcamp',url:'https://daily.bandcamp.com/',fetchedAt:'',scope:'release' as const,claims:{styleQuote:'Patient hypnotic techno textures.',supportedStyleTerms:['techno']}};
+  const editorial={provider:'bandcamp',url:'https://daily.bandcamp.com/',fetchedAt:'',scope:'release' as const,claims:{artist:'Artist',album:'Album',styleQuote:'Artist’s Album offers patient hypnotic techno textures.',supportedStyleTerms:['techno']}};
   assert.equal(discoveryReleaseFit(playlist,{...release,genres:[],evidence:[editorial]})?.lane,'familiar');
   assert.equal(discoveryReleaseFit(playlist,{...release,evidence:[editorial]}),null,'Contradictory release genres require review');
   assert.equal(discoveryReleaseFit(playlist,{...release,evidence:[{...editorial,claims:{...editorial.claims,styleQuote:'A reggae classic.'}}]}),null);
+  assert.equal(discoveryReleaseFit(playlist,{...release,genres:[],evidence:[{...editorial,claims:{...editorial.claims,styleQuote:'Other Artist’s Different Album offers hypnotic techno textures.'}}]}),null,'A different album on the same page cannot establish this release’s style');
+  assert.equal(discoveryReleaseFit(playlist,{...release,genres:[],evidence:[{...editorial,claims:{...editorial.claims,styleQuote:'Artist’s Album is not techno.'}}]}),null,'A negated style is not positive evidence');
+  assert.equal(discoveryReleaseFit(playlist,{...release,album:'Techno',genres:[],evidence:[{...editorial,claims:{...editorial.claims,album:'Techno',styleQuote:'Artist’s Techno offers acoustic folk songs.'}}]}),null,'A word in the title does not establish the musical style');
 });
 test('tag-radio evidence establishes an alternative within the requested styles and cannot bypass an artist exclusion',()=>{
   const evidence={provider:'listenbrainz-tags',url:'https://api.listenbrainz.org/1/lb-radio/tags',fetchedAt:'',scope:'recording' as const,claims:{recordingId:'recording',recommendedArtistId:'artist',tagMatch:'any',requestedTags:['techno']}};

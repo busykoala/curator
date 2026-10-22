@@ -19,6 +19,10 @@ test('single-artist sufficiency uses the largest eligible group instead of summi
   assert.equal(independentEligibleCount('rediscovery-small',pool),6);
   assert.ok(scenarioViolations('rediscovery-small',pool).includes('Only one artist requested'));
 });
+test('sufficiency counts verified duplicate copies as one recording',()=>{
+  const one=track(1,{genre:['rock']}),copy={...track(2,{genre:['rock']}),recordingGroupKey:one.evidence.recordingKey};
+  assert.equal(independentEligibleCount('depth-rock',[one,copy]),1);
+});
 test('German correction retains only compatible instrumental position locks and permits quiet live music',()=>{
   const quietLive=track(1,{recordingTypes:['live_recording'],energy:'low',vocalProfile:['instrumental']}),sung=track(2,{vocalProfile:['clean_sung']});
   assert.deepEqual(scenarioViolations('chat-german',[quietLive]),[]);
