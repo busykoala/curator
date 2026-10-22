@@ -217,8 +217,8 @@ async function jellyfinSongId(
   refresh = false,
 ) {
   const cached = db()
-    .prepare("SELECT jellyfin_song_id FROM navidrome_track_map WHERE file_id=?")
-    .get(item.fileId) as { jellyfin_song_id: string | null } | undefined;
+    .prepare("SELECT jellyfin_song_id FROM navidrome_track_map WHERE file_id=? AND identity_hash=?")
+    .get(item.fileId,createHash('sha256').update(`${item.title}|${item.artist}|${item.album}`).digest('hex')) as { jellyfin_song_id: string | null } | undefined;
   if (cached?.jellyfin_song_id && !refresh) return cached.jellyfin_song_id;
   const file = db()
     .prepare("SELECT path,tags_json FROM files WHERE id=?")

@@ -51,7 +51,7 @@ export async function listenBrainzCandidates(playlist:PlaylistDefinition,recent:
       const recording=await mb<{id:string;title:string;releases?:Array<{id:string;status?:string;'release-group'?:{id:string}}>}>(`recording/${item.recording_mbid}?inc=releases+release-groups`);
       const release=recording.value.releases?.find(r=>r.status==='Official'&&uuid.test(r['release-group']?.id??''))??recording.value.releases?.find(r=>uuid.test(r['release-group']?.id??''));
       if(!release?.['release-group'])continue;
-      const evidence:DiscoveryEvidence={provider:'listenbrainz',url:endpoint,fetchedAt:result.fetchedAt,scope:'recording',claims:{seedArtistId:seed.id,seedArtist:seed.artist,recordingId:item.recording_mbid,recommendedArtist:item.similar_artist_name}};
+      const evidence:DiscoveryEvidence={provider:'listenbrainz',url:endpoint,fetchedAt:result.fetchedAt,scope:'recording',claims:{seedArtistId:seed.id,seedArtist:seed.artist,recordingId:item.recording_mbid,recommendedArtist:item.similar_artist_name,explorationMode:query.get('mode')!}};
       const verified=await verifiedDiscoveryRelease(release['release-group'].id,[evidence]);
       if(verified&&(!recent||verified.releaseDate&&Date.parse(verified.releaseDate)>=Date.now()-120*86400_000))output.push(verified);
     }catch(error){if(/budget|cooling|retry/i.test(String(error)))break}

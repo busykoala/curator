@@ -36,7 +36,8 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
         if(existing.filter(r=>['researched','queued','downloading','ready'].includes(r.status)).length>=discoveryPoolTarget)break;
         const recommendation=release.evidence.find(e=>e.provider!=='musicbrainz')!;
         const reason=recommendation.claims.seedArtist?`Recommended from ${String(recommendation.claims.seedArtist)} by ${recommendation.provider}`:`Supported by ${recommendation.provider} release evidence`;
-        storeDiscoveryRecommendation(playlist,release,reason,provider.name);researched++;accepted++;
+        const origin=provider.name==='listenbrainz'&&recommendation.claims.explorationMode==='medium'?'listenbrainz-adjacent':provider.name;
+        storeDiscoveryRecommendation(playlist,release,reason,origin);researched++;accepted++;
       }
       outcomes.push({provider:provider.name,candidates:accepted});
     }catch(error){outcomes.push({provider:provider.name,candidates:0,error:String(error).slice(0,250)})}

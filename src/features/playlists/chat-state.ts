@@ -34,3 +34,9 @@ export function currentChatItems(id:number):PlaylistCandidate[]{
   if(!result)throw new Error("Describe your playlist in chat first.");
   return result.items;
 }
+// A nightly publication updates the visible selection, without inventing a
+// conversational turn or rewriting the listener's saved corrections.
+export function storeRefreshedChatSelection(id:number,lease:string,items:PlaylistCandidate[]){
+  const state=chatState(id);if(!state.result)throw Error('The saved conversation intent is unavailable');
+  storeChatResult(id,lease,state.messages,{...state.result,items:items.map(item=>({...item,retained:Boolean(item.retained)}))});
+}

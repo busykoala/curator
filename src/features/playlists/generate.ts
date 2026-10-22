@@ -15,7 +15,12 @@ import { type ListeningProfile, norm, scoreCandidate } from "./candidate-score";
 import { getPlaylist, markRun, setNavidromeId } from "./repository";
 import { sequenceJourney } from "./sequence";
 import {playlistRevisionHash} from './refresh-policy';
-import {refreshManaged} from './refresh-jobs';
+import {playlistRefreshMode,refreshManaged} from './refresh-jobs';
+import {generateIntentSelection,recordPlaylistExposure,loadEvidencedCandidates,previewEvaluation} from './selection-repository';
+import {listenerMusicSnapshot} from './listening-snapshot';
+import {playlistIntentSchema} from './intent-schema';
+import {assessCandidate} from './selection-policy';
+import {storeRefreshedChatSelection} from './chat-state';
 import type { PlaylistCandidate, PlaylistDefinition } from "./types";
 
 type Row = {
@@ -216,6 +221,7 @@ export async function generatePlaylist(
   id: number,
   preview = false,
   heldChatLease?: string,
+  refreshIntent=false,
 ) {
   const definition = getPlaylist(id);
   if (!definition) throw new Error("Playlist not found");
@@ -224,7 +230,7 @@ export async function generatePlaylist(
       ? acquireChatLease(id)
       : undefined;
   try {
-    return await generatePlaylistRun(definition, preview, heldChatLease??lease!);
+    return await generatePlaylistRun(definition, preview, heldChatLease??lease!,refreshIntent);
   } finally {
     if (lease) releaseChatLease(id, lease);
   }
@@ -234,6 +240,7 @@ async function generatePlaylistRun(
   definition: PlaylistDefinition,
   preview: boolean,
   lease: string,
+  refreshIntent:boolean,
 ) {
   const id = definition.id;
   const configHash = playlistRevisionHash(definition);
@@ -252,17 +259,20 @@ async function generatePlaylistRun(
   };
 
   try {
+    const newSelection=(definition.category!=='chat'||refreshIntent)&&(refreshManaged(id)||preview&&playlistRefreshMode()==='shadow'&&Boolean(db().prepare("SELECT 1 FROM playlist_refresh_jobs WHERE playlist_id=? AND status='running' AND lease_token=? AND mode='shadow'").get(id,lease)));
+    const selection=newSelection?await generateIntentSelection(definition):null;
+    assertCurrent();
     const listening =
-      definition.category === "chat"
+      selection||definition.category === "chat"
         ? undefined
         : ((await navidromeListeningProfile(definition.ownerUserId).catch(
             () => ({ frequent: [], starred: [] }),
           )) as ListeningProfile);
-    let items =
+    let items:PlaylistCandidate[] = selection?selection.items:
       definition.category === "chat"
         ? currentChatItems(id)
         : select(definition, listening);
-    if (definition.category === "chat") {
+    if (definition.category === "chat"&&!selection) {
       const feedback = activeFeedback(id);
       const available = new Set(
         (
@@ -284,8 +294,9 @@ async function generatePlaylistRun(
         );
     }
     let navidromeId = definition.navidromePlaylistId;
-    let songIds = new Map<number, string>();
+    let songIds = new Map<number, string>(selection?.items.map(item=>[item.fileId,item.songId]));
     if (!preview) {
+      if(selection?.evaluation.violations.length)throw Error(selection.evaluation.violations.join('; '));
       const ignored = new Set<number>();
       for (
         let attempt = 0;
@@ -297,7 +308,7 @@ async function generatePlaylistRun(
           definition.ownerUserId,
         );
         if (!unresolved.length) break;
-        if (definition.category === "chat") break;
+        if (definition.category === "chat"||selection) break;
         const ignoredBefore = ignored.size;
         unresolved.forEach((item) => ignored.add(item.fileId));
         items = select(definition, listening, ignored);
@@ -319,15 +330,20 @@ async function generatePlaylistRun(
       const synced = await replaceManagedPlaylist(definition, items,assertCurrent);
       navidromeId = synced.playlistId;
       songIds = synced.songIds;
-      setNavidromeId(id, synced.playlistId);
-      markRun(id);
     }
     assertCurrent();
     const insert = db().prepare(
       "INSERT INTO playlist_items(run_id,playlist_id,file_id,navidrome_song_id,position,score,origin,reason,retained) VALUES (?,?,?,?,?,?,?,?,?)",
     );
+    const detail = {
+      ...(selection?.detail??{}),
+      tracks: items.length,
+      retained: items.filter((item) => item.retained).length,
+      pending: Math.max(0, definition.config.targetTracks - items.length),
+      navidromeId,
+    };
     db().transaction(() =>
-      items.forEach((item, index) =>
+      {assertCurrent();items.forEach((item, index) =>
         insert.run(
           run.id,
           id,
@@ -339,19 +355,17 @@ async function generatePlaylistRun(
           item.reason,
           item.retained ? 1 : 0,
         ),
-      ),
-    )();
-    const detail = {
-      tracks: items.length,
-      retained: items.filter((item) => item.retained).length,
-      pending: Math.max(0, definition.config.targetTracks - items.length),
-      navidromeId,
-    };
-    db()
+      );if(!preview){
+        recordPlaylistExposure(definition,run.id,items);
+        setNavidromeId(id,navidromeId!);markRun(id);
+        if(selection&&definition.category==='chat')storeRefreshedChatSelection(id,lease,items);
+      }
+      db()
       .prepare(
         "UPDATE playlist_runs SET status='complete',detail_json=?,finished_at=CURRENT_TIMESTAMP WHERE id=?",
       )
-      .run(JSON.stringify(detail), run.id);
+      .run(JSON.stringify(detail), run.id)},
+    ).immediate();
     console.log(
       JSON.stringify({
         event: "playlist_run_complete",
@@ -415,9 +429,9 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
     assertCurrent();
     const preview = db()
       .prepare(
-        "SELECT id,config_hash FROM playlist_runs WHERE id=? AND playlist_id=? AND preview=1 AND status='complete'",
+        "SELECT id,config_hash,detail_json FROM playlist_runs WHERE id=? AND playlist_id=? AND preview=1 AND status='complete'",
       )
-      .get(previewRunId, id) as { id: number; config_hash: string } | undefined;
+      .get(previewRunId, id) as { id: number; config_hash: string;detail_json:string } | undefined;
     if (
       !preview ||
       preview.config_hash !==
@@ -466,6 +480,19 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
       reason: row.reason,
       retained: Boolean(row.retained),
     })) as PlaylistCandidate[];
+    const evaluation=previewEvaluation(previewRunId);
+    if(evaluation?.shortage||evaluation?.violations.length)throw Error(`Kept the previous mix: ${evaluation.shortage?'insufficient matching tracks':evaluation.violations.join('; ')}`);
+    if(JSON.parse(preview.detail_json).selectionVersion===1){
+      const cached=db().prepare('SELECT intent_json FROM playlist_intents WHERE playlist_id=?').get(id) as {intent_json:string}|undefined;
+      if(!cached)throw Error('The preview intent is unavailable; generate a new preview');
+      const intent=playlistIntentSchema.parse(JSON.parse(cached.intent_json));
+      if(intent.sourceRevision!==expected)throw Error('The preview intent changed; generate a new preview');
+      const snapshot=await listenerMusicSnapshot(definition.ownerUserId),pool=loadEvidencedCandidates(definition,snapshot),byId=new Map(pool.map(track=>[track.fileId,track]));
+      for(const item of items){
+        const track=byId.get(item.fileId);
+        if(!track||!assessCandidate(track,definition,intent,snapshot).eligible)throw Error('Track evidence or availability changed; kept the previous mix');
+      }
+    }
     if (items.length < definition.config.targetTracks)
       throw new Error(
         "Broaden your settings or reduce the song count before saving.",
@@ -480,6 +507,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
     const synced = await replaceManagedPlaylist(definition, items,assertCurrent);
     assertCurrent();
     db().transaction(() => {
+      assertCurrent();
       const completed=db().prepare("SELECT id FROM playlist_runs WHERE source_preview_id=? AND status='complete'").get(previewRunId);
       if(completed)return;
       const run = db()
@@ -491,6 +519,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
           preview.config_hash,
           definition.ownerUserId,
           JSON.stringify({
+            ...JSON.parse(preview.detail_json),
             tracks: items.length,
             navidromeId: synced.playlistId,
           }),
@@ -512,9 +541,11 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
           item.retained ? 1 : 0,
         ),
       );
+      recordPlaylistExposure(definition,run.id,items);
+      if(JSON.parse(preview.detail_json).selectionVersion===1&&definition.category==='chat')storeRefreshedChatSelection(id,lease,items);
       setNavidromeId(id, synced.playlistId);
       markRun(id);
-    })();
+    }).immediate();
     return {
       definition: getPlaylist(id)!,
       items,

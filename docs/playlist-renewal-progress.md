@@ -89,6 +89,24 @@ changes in the infrastructure repository. Update this record at each handoff.
 
 ## Next continuation
 
+- Package F now has cached configuration/description/chat intent compilation,
+  immutable configured and saved-chat requirements, six selection policies,
+  native identities visible to the owner, recording deduplication, owner-scoped
+  exposure, controlled rotation and safe shortage publication checks. A fixed
+  14-night simulation passes size/30% rotation/pins/positions/cooldown checks;
+  integration tests cover same-name owners, no preview exposure, stale evidence
+  and saved chat corrections. Nightly chat publication updates its selection
+  without adding conversational turns. Live musical-fit verification is pending.
+- Package G transport now caps a request at four minutes, six tool rounds and
+  12 calls, stops identical calls, honours Retry-After and exposes every HTTP
+  attempt's timing/usage (including failures). Seven transport tests pass.
+  Full checkpoint: 177 tests and production/worker build passed. The transport
+  implementation still needs durable attempt accounting and inference priority.
+- Read-only live route probes on 2026-10-22 confirmed the current `curator`
+  alias is Qwen3.8-27B (revision `4ca720788d1e01f1bff70c033e0d0028fd02e502`),
+  98,304-token context; embedding returned 1,024 dimensions in 46 ms; reranking
+  returned ordered scores in 112 ms. No model switch or production mutation.
+
 - Package E's targeted review queue is implemented: at most 100 attempts/day,
   active-selection/new-import priority and chat yielding. Recording facts bind
   title, artist and duration; absent vocal credits never prove instrumental.
