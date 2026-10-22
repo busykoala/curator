@@ -718,6 +718,11 @@ details p {
   margin: 4px 0 8px;
   font-size: 14px;
 }
+.song-reason ul {font-size:14px;padding-left:18px;margin:8px 0;overflow-wrap:anywhere}
+.song-row:has(.song-reason[open]) {align-items:flex-start}
+.song-row:has(.song-reason[open]) > .song-number {padding-top:8px}
+.playlist-refresh-info {margin:16px 0 20px}
+.playlist-refresh-info p {margin:6px 0}
 /* Home, playlists, and focused creation. */
 .home-continue-list {
   display: grid;

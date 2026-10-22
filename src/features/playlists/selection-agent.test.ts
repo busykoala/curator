@@ -58,6 +58,16 @@ test('metadata instructions cannot select IDs outside the batch or weaken requir
   await assert.rejects(choosePlaylistAdditions(request),/outside the supplied eligible candidates/);
   assert.equal(request.intent.hard.vocal,'instrumental');
 });
+test('a needlessly repetitive artist selection is repaired against the explicit diversity allowance',async()=>{
+  let calls=0;const sameArtist={...pool[1],artist:pool[0].artist};
+  const request=input(async<T>(options:StructuredRequest)=>{
+    calls++;if(options.tools)await options.tools.find(tool=>tool.name==='search_library')!.execute({query:'',offset:0,limit:3});
+    else assert.match(JSON.parse(options.input).error,/Artist variety/);
+    return{data:output(calls===1?[1,2]:[1,3]) as T,usage};
+  });
+  request.candidates=[pool[0],sameArtist,pool[2]];request.limits={maxPerArtist:1,maxPerAlbum:1,retained:[]};
+  const result=await choosePlaylistAdditions(request);assert.equal(result.detail.repair,true);assert.deepEqual(result.items.map(track=>track.fileId),[1,3]);
+});
 test('candidate exposure and repair budgets stay bounded across batches and deadlines',async()=>{
   const request=input(async<T>()=>({data:output([1,2]) as T,usage}));request.candidates=Array.from({length:61},(_,i)=>track(i+1));
   await assert.rejects(choosePlaylistAdditions(request),/at most 60/);

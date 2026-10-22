@@ -60,7 +60,7 @@ const directionCopy: Record<
   },
   discovery: {
     label: "Genre, style, or theme",
-    hint: "Choose the direction for new releases and your library mix.",
+    hint: "Choose the direction for unfamiliar music and your library mix.",
     placeholder: "Search melodic techno, future jazz…",
     name: "New alternative soul",
   },
@@ -429,28 +429,28 @@ export function PlaylistEditor({ initial, close, save, page = false }: Props) {
                   }
                 />
                 <small>
-                  Revisit rated or starred favorites and albums from your
-                  listening history. Recently played albums stay out.
+                  Revisit songs you played or saved as favourites. Songs heard
+                  recently stay out.
                 </small>
               </label>
             )}
 
-            {value.category === "discovery" && (
+            {value.category !== "chat" && (
               <label>
                 <span>
-                  Research brief <small>optional</small>
+                  Direction <small>optional</small>
                 </span>
                 <textarea
                   maxLength={1000}
                   value={value.intent}
-                  placeholder="What should Curator look for in new releases?"
+                  placeholder={value.category==='discovery'?'What music would you like to discover?':'Anything else this mix should include or avoid?'}
                   onChange={(event) =>
                     setValue({ ...value, intent: event.target.value })
                   }
                 />
                 <small>
-                  Guides research into recent releases. The direction above
-                  controls which library songs fit.
+                  {value.category==='discovery'?'Guides your mix and research across all release years. ':'Guides your mix. '}
+                  Explicit requirements and exclusions apply to every song.
                 </small>
               </label>
             )}
@@ -528,6 +528,7 @@ export function PlaylistEditor({ initial, close, save, page = false }: Props) {
                   manually or nightly.
                 </small>
               </label>
+              {value.category !== 'chat'&&<>
               {value.category !== "rediscovery" && (
                 <label className="playlist-wide-field">
                   <span>
@@ -556,7 +557,7 @@ export function PlaylistEditor({ initial, close, save, page = false }: Props) {
                 </label>
               )}
               <label>
-                <span>Maximum songs per artist</span>
+                <span>Aim for this many songs per artist</span>
                 <input
                   type="number"
                   min={1}
@@ -568,7 +569,7 @@ export function PlaylistEditor({ initial, close, save, page = false }: Props) {
                 />
               </label>
               <label>
-                <span>Maximum songs per album</span>
+                <span>Aim for this many songs per album</span>
                 <input
                   type="number"
                   min={1}
@@ -628,11 +629,12 @@ export function PlaylistEditor({ initial, close, save, page = false }: Props) {
                     }
                   />
                   <small>
-                    Suggestions for the release research, separated by commas.
-                    Research runs on Tuesday and Friday.
+                    Suggestions for discovery research, separated by commas.
+                    Research replenishes your candidate pool throughout the day.
                   </small>
                 </label>
               )}
+              </>}
             </div>
           </details>
           {error && (

@@ -8,6 +8,7 @@ export function playlistStatus(item: PlaylistDefinition) {
       ? "New reply · Navidrome update failed"
       : "Draft saved · Navidrome update failed";
   if (item.unreadReply) return "New reply";
+  if(item.refreshPipelineEnabled&&item.changeSummary)return item.changeSummary;
   if (item.runs?.[0]?.status === "failed") return "Last update failed";
   return item.navidromePlaylistId ? "Saved to Navidrome" : "Draft";
 }

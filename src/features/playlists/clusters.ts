@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 import { db, stateGet, stateSet } from "@/features/db/client";
 import { navidromeListeningProfile } from "@/features/integrations/navidrome";
 import { defaultConfig, type PlaylistCategory } from "./types";
+import {identityName as norm} from '@/features/integrations/navidrome-identity';
 
 const values=(record:Record<string,unknown>,key:string):string[]=>Array.isArray(record[key])?(record[key] as unknown[]).map(String):[];
-const norm=(value:string)=>value.normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 
 export async function refreshListeningClusters(ownerUserId?: number){
   if(!ownerUserId)return 0;
-  const listening=await navidromeListeningProfile(ownerUserId).catch(()=>({frequent:[],starred:[]}));
+  const listening=await navidromeListeningProfile(ownerUserId).catch(()=>null);
+  if(!listening||!('complete'in listening)||!listening.complete||listening.stale)return(db().prepare('SELECT count(*) n FROM listening_clusters WHERE user_id=?').get(ownerUserId) as {n:number}).n;
   const signals=new Map<string,number>();
   for(const item of listening.frequent as Array<Record<string,unknown>>){
     const playCount=Math.max(0,Number(item.playCount??0));

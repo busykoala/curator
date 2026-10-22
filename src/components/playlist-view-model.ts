@@ -7,8 +7,10 @@ import {
   Telescope,
   type LucideIcon,
 } from "lucide-react";
+import type {PlaylistRefreshView} from '@/features/playlists/refresh-status';
+import type {SongExplanation} from '@/features/playlists/song-explanation';
 
-export type PlaylistDefinition = {
+export type PlaylistDefinition = Partial<PlaylistRefreshView>&{
   id?: number;
   name: string;
   category: string;
@@ -48,6 +50,7 @@ export type PreviewItem = {
   albumKey?: string;
   profile?: Record<string, unknown>;
   retained?: boolean;
+  explanation?:SongExplanation|null;
 };
 
 export type PlaylistPreview = {
@@ -83,7 +86,7 @@ export const categoryMeta: Record<string, CategoryMeta> = {
   discovery: {
     label: "Discovery",
     shortLabel: "New music",
-    description: "Find recent releases and build a mix around your taste.",
+    description: "Find music new to you, from unfamiliar classics to recent releases.",
     icon: Compass,
   },
   depth: {

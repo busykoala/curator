@@ -17,7 +17,7 @@ export function scheduleRefreshJobs(now=new Date()){
   const date=latestScheduledDate(now),stamp=now.getTime(),scheduled=scheduledDateInstant(date);
   return db().transaction(()=>{
     let inserted=0;
-    db().prepare("UPDATE playlist_refresh_jobs SET status='superseded',updated_at=? WHERE scheduled_date<? AND status IN ('queued','retry','auth_wait')").run(stamp,date);
+    db().prepare("UPDATE playlist_refresh_jobs SET status='superseded',updated_at=? WHERE scheduled_date<? AND kind IN ('nightly','shadow') AND status IN ('queued','retry','auth_wait')").run(stamp,date);
     const playlists=db().prepare('SELECT id,owner_user_id,revision,last_run_at,created_at FROM smart_playlists WHERE enabled=1 AND owner_user_id IS NOT NULL ORDER BY id').all() as Array<{id:number;owner_user_id:number;revision:number;last_run_at:string|null;created_at:string}>;
     for(const p of playlists){
       if(mode!=='shadow'&&!refreshManaged(p.id,mode))continue;
@@ -39,7 +39,7 @@ export function claimRefreshJob(now=Date.now()):PlaylistRefreshJob|null{
   return db().transaction(()=>{
     // Cancel stale queued proposals. A running publication retains its lease
     // until it can verify/roll back; its revision is fenced at the native API.
-    db().prepare("UPDATE playlist_refresh_jobs SET status='superseded',updated_at=? WHERE status IN ('queued','retry','auth_wait') AND NOT EXISTS (SELECT 1 FROM smart_playlists p WHERE p.id=playlist_id AND p.enabled=1 AND p.revision=playlist_refresh_jobs.revision AND p.owner_user_id=playlist_refresh_jobs.owner_user_id)").run(now);
+    db().prepare("UPDATE playlist_refresh_jobs SET status='superseded',updated_at=? WHERE status IN ('queued','retry','auth_wait') AND NOT EXISTS (SELECT 1 FROM smart_playlists p WHERE p.id=playlist_id AND (p.enabled=1 OR kind LIKE 'manual:%') AND p.revision=playlist_refresh_jobs.revision AND p.owner_user_id=playlist_refresh_jobs.owner_user_id)").run(now);
     db().prepare("UPDATE playlist_refresh_jobs SET status='retry',lease_token=NULL,lease_until=0,updated_at=? WHERE status='running' AND lease_until<=?").run(now,now);
     const auth=db().prepare("SELECT j.id,p.owner_user_id FROM playlist_refresh_jobs j JOIN smart_playlists p ON p.id=j.playlist_id JOIN curator_users u ON u.id=p.owner_user_id WHERE j.status='auth_wait' AND u.token_status='active' AND u.last_seen_at>datetime(j.updated_at/1000,'unixepoch')").all() as Array<{id:string}>;
     for(const j of auth)db().prepare("UPDATE playlist_refresh_jobs SET status='retry',next_attempt_at=0 WHERE id=?").run(j.id);
@@ -63,8 +63,34 @@ export function heartbeatRefreshJob(job:PlaylistRefreshJob,now=Date.now()){
 }
 export function assertRefreshCurrent(job:PlaylistRefreshJob,now=Date.now()){
   const p=getPlaylist(job.playlist_id),live=db().prepare("SELECT 1 FROM playlist_refresh_jobs WHERE id=? AND status='running' AND lease_token=? AND lease_until>?").get(job.id,job.lease_token,now);
-  if(!live||!p?.enabled||p.revision!==job.revision||p.ownerUserId!==job.owner_user_id)throw new Error('Playlist settings changed; refresh superseded');
+  if(!live||!p||!p.enabled&&!job.kind.startsWith('manual:')||p.revision!==job.revision||p.ownerUserId!==job.owner_user_id)throw new Error('Playlist settings changed; refresh superseded');
   return p;
+}
+export function requestPlaylistRefresh(playlistId:number,ownerId:number,requestId:string,retry=false){
+  return db().transaction(()=>{
+    const playlist=getPlaylist(playlistId);
+    if(!playlist||playlist.ownerUserId!==ownerId)throw Error('Playlist not found');
+    if(!refreshManaged(playlistId))throw Error('Background playlist refresh is not enabled yet');
+    const receipt=db().prepare('SELECT playlist_id,owner_user_id,job_id FROM playlist_refresh_requests WHERE request_id=?').get(requestId) as {playlist_id:number;owner_user_id:number;job_id:string}|undefined;
+    if(receipt){if(receipt.playlist_id!==playlistId||receipt.owner_user_id!==ownerId)throw Error('Refresh request ID is already in use');return receipt.job_id}
+    const remember=(jobId:string)=>{db().prepare('INSERT INTO playlist_refresh_requests(request_id,playlist_id,owner_user_id,job_id) VALUES(?,?,?,?)').run(requestId,playlistId,ownerId,jobId);return jobId};
+    const duplicate=db().prepare('SELECT id,playlist_id,owner_user_id FROM playlist_refresh_jobs WHERE id=?').get(requestId) as {id:string;playlist_id:number;owner_user_id:number}|undefined;
+    if(duplicate){if(duplicate.playlist_id!==playlistId||duplicate.owner_user_id!==ownerId)throw Error('Refresh request ID is already in use');return remember(duplicate.id)}
+    const active=db().prepare("SELECT id,status,revision,run_id,phase FROM playlist_refresh_jobs WHERE playlist_id=? AND owner_user_id=? AND status IN ('queued','running','retry','auth_wait','failed') AND kind<>'shadow' ORDER BY created_at DESC LIMIT 1").get(playlistId,ownerId) as {id:string;status:string;revision:number;run_id:number|null;phase:string}|undefined;
+    if(active?.status==='queued'||active?.status==='running')return remember(active.id);
+    if(retry&&active&&active.revision===playlist.revision){
+      if(active.status==='auth_wait'&&playlist.ownerTokenStatus!=='active')throw Error('Sign in to Navidrome again before retrying');
+      const run=active.run_id?db().prepare('SELECT detail_json FROM playlist_runs WHERE id=?').get(active.run_id) as {detail_json:string}|undefined:undefined;
+      const regenerate=Boolean(run&&JSON.parse(run.detail_json).evaluation?.shortage);
+      db().prepare("UPDATE playlist_refresh_jobs SET status='retry',next_attempt_at=0,attempts=0,run_id=?,phase=?,updated_at=? WHERE id=?").run(regenerate?null:active.run_id,regenerate?'generate':active.phase,Date.now(),active.id);
+      return remember(active.id);
+    }
+    if(active)db().prepare("UPDATE playlist_refresh_jobs SET status='superseded',updated_at=? WHERE id=?").run(Date.now(),active.id);
+    const now=Date.now();
+    db().prepare(`INSERT INTO playlist_refresh_jobs(id,playlist_id,owner_user_id,scheduled_date,kind,revision,mode,created_at,updated_at) VALUES(?,?,?,?,?,?,'enabled',?,?)`)
+      .run(requestId,playlistId,ownerId,latestScheduledDate(new Date(now)),'manual:'+requestId,playlist.revision,now,now);
+    return remember(requestId);
+  }).immediate();
 }
 export function finishRefreshJob(job:PlaylistRefreshJob,result:Record<string,unknown>,error='',now=Date.now()){
   let status=error?(isAuthenticationFailure(error)?'auth_wait':'failed'):'completed',next=0;

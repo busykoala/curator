@@ -4,6 +4,7 @@ import { aiConfigured } from "@/features/ai/client";
 import { chatState, releaseChatLease } from "./chat-state";
 import { chatSubmissionSchema } from "./chat-request";
 import { createPlaylist, getPlaylist } from "./repository";
+import {songExplanation} from './song-explanation';
 
 export type ChatJob = {
   id: string; playlistId: number; message: string; targetTracks: number; revision: number;
@@ -29,7 +30,8 @@ export function latestChatJob(id: number) {
 }
 export function playlistChatView(id: number) {
   const job = latestChatJob(id);
-  return { definition: getPlaylist(id)!, ...chatState(id), job,
+  const definition=getPlaylist(id)!,state=chatState(id),result=state.result?{...state.result,items:state.result.items.map(item=>({...item,explanation:songExplanation(item.fileId,id,definition.ownerUserId)}))}:null;
+  return { definition, ...state,result, job,
     synced: job?.status === "completed" && job.synced,
     syncError: job?.status === "completed" ? job.syncError : "" };
 }

@@ -19,6 +19,8 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { readJson } from "./http";
+import {PlaylistRefreshInfo} from './playlist-refresh-info';
+import {SongEvidence} from './song-evidence';
 import {
   type PlaylistDefinition,
   type PreviewItem,
@@ -368,6 +370,7 @@ export function PlaylistChat({
       </BackLink>
       <PageHeader
         title={title}
+        actions={definition?.id?<Link className="secondary-button" href={`/playlists/${definition.id}/edit`}>Refresh settings</Link>:undefined}
         description={
           working
             ? "Creating mix · you can leave"
@@ -380,6 +383,7 @@ export function PlaylistChat({
                   : "Tell Curator what you’d like to hear."
         }
       />
+      {definition&&<PlaylistRefreshInfo playlist={definition}/>}
       {params.get("native") === "unavailable" && (
         <Notice>
           The playlist could not be found in Navidrome.{" "}
@@ -573,6 +577,7 @@ export function PlaylistChat({
                     <details className="song-reason">
                       <summary>Why this song?</summary>
                       <p>{item.reason}</p>
+                      <SongEvidence explanation={item.explanation}/>
                     </details>
                   </div>
                 </article>

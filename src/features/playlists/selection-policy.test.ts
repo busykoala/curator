@@ -80,3 +80,20 @@ test('journey sequencing follows the arc after eligibility and retains locked po
   const result=selectPlaylist({definition:def,intent,pool,previous:[],snapshot,now});
   assert.deepEqual(result.items.map(t=>t.profile.energy),['very_low','low','medium','high','very_high']);assert.equal(result.items.length,5);
 });
+test('narrow pools use the smallest feasible variety relaxation and retain configured rotation afterwards',()=>{
+  const def=definition('depth');def.config.targetTracks=12;const intent=configuredIntent(def,'1');
+  const pool:EvidencedCandidate[]=[];let id=1;
+  for(const[artist,albumCount]of [['A',3],['B',2],['C',1],['D',1],['E',1]] as const)for(let album=0;album<albumCount;album++)for(let song=0;song<5;song++){
+    const item=track(id++);item.artist=artist;item.album=artist+' Album '+album;item.evidence=buildTrackEvidence({artist,title:item.title,profile:item.profile,tags:{}});pool.push(item);
+  }
+  const first=selectPlaylist({definition:def,intent,pool,previous:[],snapshot,now});assert.equal(first.items.length,12);assert.deepEqual(first.evaluation.diversityLimits,{artist:3,album:2});
+  assert.equal(first.evaluation.artistDiversity,5);
+  const next=selectPlaylist({definition:def,intent,pool,previous:first.items,snapshot,now:now+day});assert.equal(next.items.length,12);assert.equal(next.evaluation.retained,8);assert.equal(next.evaluation.changed,4);
+});
+test('strict tempo ranges reject model guesses and ambiguous audio estimates',()=>{
+  const def=definition('journey'),intent=configuredIntent(def,'1'),item=track(1,{genre:['jazz'],bpm:110});intent.hard.minBpm=100;intent.hard.maxBpm=120;
+  assert.equal(assessCandidate(item,def,intent,snapshot,now).eligible,false);
+  item.evidence.fields.bpm={value:110,source:'audio',scope:'recording',confidence:'medium',references:[],note:'Half/double-time ambiguity'};
+  assert.equal(assessCandidate(item,def,intent,snapshot,now).eligible,false);
+  item.evidence.fields.bpm={value:110,source:'embedded',scope:'recording',confidence:'medium',references:[]};assert.equal(assessCandidate(item,def,intent,snapshot,now).eligible,true);
+});

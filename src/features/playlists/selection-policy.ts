@@ -7,9 +7,9 @@ import type {PlaylistIntent,SemanticRequirement} from './intent-schema';
 import {energyTarget,energyValue} from './sequence';
 import type {PlaylistCandidate,PlaylistDefinition} from './types';
 
-export type EvidencedCandidate=PlaylistCandidate&{evidence:TrackEvidenceView;songId:string;listener:ListenerSong|null;exposureCount:number;removedAt:number|null;discoveryBoost?:number;adjacent?:boolean};
+export type EvidencedCandidate=PlaylistCandidate&{evidence:TrackEvidenceView;songId:string;listener:ListenerSong|null;exposureCount:number;removedAt:number|null;artistPlayCount?:number;discoveryBoost?:number;adjacent?:boolean};
 export type CandidateAssessment={eligible:boolean;score:number;reasons:string[];violations:string[];uncertainty:string[]};
-export type PlaylistEvaluation={eligible:number;selected:number;requested:number;changed:number;retained:number;artistDiversity:number;albumDiversity:number;unheard:number|null;uncertainty:string[];relaxations:string[];shortage:number;violations:string[]};
+export type PlaylistEvaluation={eligible:number;selected:number;requested:number;changed:number;retained:number;artistDiversity:number;albumDiversity:number;unheard:number|null;uncertainty:string[];relaxations:string[];shortage:number;violations:string[];diversityLimits?:{artist:number;album:number}};
 const values=(v:unknown):string[]=>Array.isArray(v)?v.map(String):v==null?[]:[String(v)];
 const days=86400_000;
 
@@ -53,6 +53,7 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
   const year=track.evidence.originalYear,bpm=Number(track.evidence.fields.bpm?.value??0);
   if(hard.minYear&&(!year||year<hard.minYear)||hard.maxYear&&(!year||year>hard.maxYear))violations.push('Required original recording/release year');
   if(hard.minBpm&&(!bpm||bpm<hard.minBpm)||hard.maxBpm&&(!bpm||bpm>hard.maxBpm))violations.push('Required tempo');
+  if((hard.minBpm||hard.maxBpm)&&(!track.evidence.fields.bpm||['low','unknown'].includes(track.evidence.fields.bpm.confidence)||track.evidence.fields.bpm.source==='audio'))violations.push('An inferred or ambiguous tempo cannot establish a strict BPM range');
   if(hard.favouritesOnly&&!track.listener?.favourite)violations.push('Not an observed favourite');
   const listener=track.listener,known=Boolean(listener&&(listener.hasPlayed||listener.playCount>0||listener.favourite));
   const lastPlayed=Date.parse(listener?.lastPlayed??''),age=Number.isFinite(lastPlayed)?Math.max(0,(now-lastPlayed)/days):null;
@@ -79,10 +80,13 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
   }
   if(soft.valence.length&&matches(String(track.evidence.fields.valence?.value??''),soft.valence))score+=8;
   const unheard=snapshot.complete&&!snapshot.stale&&Boolean(listener)&&!known;
+  const familiarity=1-definition.config.explorationPercent/100;
+  if(definition.category!=='rediscovery')score+=familiarity*((listener?.favourite?12:0)+Math.min(12,Math.log1p(track.artistPlayCount??0)*2));
   if(definition.category==='discovery'){
     score+=unheard?28:known?Math.max(-24,10-Math.log1p(listener?.playCount??0)*10):0;
     if(unheard)reasons.push('Unheard in your complete observed history');
     else if(!snapshot.complete||snapshot.stale||!listener)uncertainty.push('Unheard status is not established');
+    if(unheard&&track.artistPlayCount===0)score+=12;
   }
   if(definition.category==='depth')score+=18-Math.min(32,Math.log1p(listener?.playCount??0)*10);
   if(definition.category==='rediscovery')score+=(listener?.favourite?24:0)+Math.min(20,Math.log1p(listener?.playCount??0)*7)+(age==null?0:Math.min(14,age/10));
@@ -111,11 +115,12 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
   const pins=new Set(intent.pinnedRecordings.map(pin=>pin.recordingKey));
   const lockedIds=new Set(intent.positionLocks.map(lock=>lock.fileId));
   const eligibleNew=pool.filter(track=>!priorKeys.has(track.evidence.recordingKey)&&!(track.removedAt&&now-track.removedAt<14*days));
+  let artistLimit=definition.config.maxTracksPerArtist,albumLimit=definition.config.maxTracksPerAlbum;
   pool.sort((a,b)=>b.score-a.score||tie(seed,a.fileId)-tie(seed,b.fileId));
-  function add(track:EvidencedCandidate,pinned=false,relaxDiversity=false){
+  function add(track:EvidencedCandidate,pinned=false){
     const artist=norm(track.artist),album=artist+'|'+norm(track.album),key=track.evidence.recordingKey;
     if(keys.has(key)||chosen.length>=target)return false;
-    if(!pinned&&!relaxDiversity&&((artists.get(artist)??0)>=definition.config.maxTracksPerArtist||(albums.get(album)??0)>=definition.config.maxTracksPerAlbum))return false;
+    if(!pinned&&((artists.get(artist)??0)>=artistLimit||(albums.get(album)??0)>=albumLimit))return false;
     keys.add(key);artists.set(artist,(artists.get(artist)??0)+1);albums.set(album,(albums.get(album)??0)+1);
     chosen.push({...track,retained:priorKeys.has(key)});return true;
   }
@@ -123,14 +128,14 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
   for(const track of pool)if(pins.has(track.evidence.recordingKey)||lockedIds.has(track.fileId))add(track,true);
   const retainTarget=Math.min(target,Math.max(chosen.filter(t=>t.retained).length,Math.round(target*(1-definition.config.rotationPercent/100))));
   for(const track of [...prior].sort((a,b)=>b.score-a.score)){
-    if(chosen.filter(t=>t.retained).length>=retainTarget)break;add(track);
+    if(chosen.filter(t=>t.retained).length>=retainTarget)break;add(track,true);
   }
   const replacements=target-chosen.length;
   const adjacentTarget=definition.category==='discovery'?Math.round(replacements*.3):0;
-  function fill(candidates:EvidencedCandidate[],adjacentLimit=Infinity,relaxDiversity=false){
+  function fill(candidates:EvidencedCandidate[],adjacentLimit=Infinity){
     for(const track of candidates.sort((a,b)=>b.score-a.score||tie(seed,a.fileId)-tie(seed,b.fileId))){
       if(track.adjacent&&chosen.filter(t=>t.adjacent&&!t.retained).length>=adjacentLimit)continue;
-      add(track,false,relaxDiversity);if(chosen.length>=target)break;
+      add(track);if(chosen.length>=target)break;
     }
   }
   // Reserve adjacent exploration slots when validated candidates exist.
@@ -140,7 +145,24 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
     fill(eligibleNew);relaxations.push('Adjacent-style share expanded because familiar-style candidates were insufficient');
   }
   if(chosen.length<target){
-    const before=chosen.length;fill(eligibleNew,Infinity,true);
+    const remaining=eligibleNew.filter(track=>!keys.has(track.evidence.recordingKey));
+    const needed=Math.min(target-chosen.length,remaining.length),grouped=new Map<string,Map<string,number>>();
+    for(const track of remaining){const artist=norm(track.artist),album=artist+'|'+norm(track.album),group=grouped.get(artist)??new Map<string,number>();group.set(album,(group.get(album)??0)+1);grouped.set(artist,group)}
+    let bestCost=Infinity,best={artist:artistLimit,album:albumLimit};
+    // Album groups are nested inside artists, so remaining capacity can be
+    // calculated exactly. Relax the preferences only as far as necessary,
+    // instead of removing both limits when a narrow style has few artists.
+    for(let a=artistLimit;needed&&a<=target;a++){
+      const artistCost=(a-artistLimit)/artistLimit;if(artistCost>=bestCost)break;
+      for(let b=albumLimit;b<=target;b++){
+        const cost=artistCost+(b-albumLimit)/albumLimit;if(cost>=bestCost)break;
+        let capacity=0;
+        for(const[artist,group]of grouped){let albumCapacity=0;for(const[album,count]of group)albumCapacity+=Math.min(count,Math.max(0,b-(albums.get(album)??0)));capacity+=Math.min(albumCapacity,Math.max(0,a-(artists.get(artist)??0)))}
+        if(capacity>=needed){bestCost=cost;best={artist:a,album:b};break}
+      }
+    }
+    artistLimit=best.artist;albumLimit=best.album;
+    const before=chosen.length;fill(eligibleNew);
     if(chosen.length>before)relaxations.push('Artist/album variety preferences relaxed to satisfy the musical requirements and requested size');
   }
   // Prefer keeping more suitable current tracks to violating exclusions or
@@ -163,6 +185,6 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
   const evaluation:PlaylistEvaluation={eligible:pool.length,selected:ordered.length,requested:target,changed:ordered.filter(t=>!t.retained).length,retained:ordered.filter(t=>t.retained).length,
     artistDiversity:new Set(ordered.map(t=>norm(t.artist))).size,albumDiversity:new Set(ordered.map(t=>norm(t.artist)+'|'+norm(t.album))).size,
     unheard:input.snapshot.complete&&!input.snapshot.stale?ordered.filter(t=>t.listener&&!t.listener.hasPlayed&&!t.listener.favourite&&!t.listener.playCount).length:null,
-    uncertainty:[...new Set(ordered.flatMap(t=>assessments.get(t.fileId)?.uncertainty??[]))],relaxations,shortage:Math.max(0,target-ordered.length),violations};
+    uncertainty:[...new Set(ordered.flatMap(t=>assessments.get(t.fileId)?.uncertainty??[]))],relaxations,shortage:Math.max(0,target-ordered.length),violations,diversityLimits:{artist:artistLimit,album:albumLimit}};
   return{items:ordered,evaluation};
 }

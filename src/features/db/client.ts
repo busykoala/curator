@@ -263,6 +263,10 @@ function migrate(instance: Database.Database) {
     CREATE TABLE IF NOT EXISTS playlist_inference_slot(
       id INTEGER PRIMARY KEY CHECK(id=1),lease_token TEXT,lease_until INTEGER NOT NULL DEFAULT 0);
   `));
+  migration(20,()=>instance.exec(`CREATE TABLE IF NOT EXISTS playlist_refresh_requests(
+    request_id TEXT PRIMARY KEY,playlist_id INTEGER NOT NULL REFERENCES smart_playlists(id) ON DELETE CASCADE,
+    owner_user_id INTEGER NOT NULL REFERENCES curator_users(id) ON DELETE CASCADE,
+    job_id TEXT NOT NULL REFERENCES playlist_refresh_jobs(id) ON DELETE CASCADE);`));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

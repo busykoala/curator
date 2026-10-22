@@ -8,7 +8,7 @@ const levels = ["very_low", "low", "medium", "high", "very_high"];
 export function energyValue(item: PlaylistCandidate) {
   const index = levels.indexOf(String(item.profile.energy ?? "medium"));
   const semantic = index < 0 ? 0.5 : index / (levels.length - 1);
-  const bpm = Number(item.profile.bpm ?? 0);
+  const bpm = item.profile.bpmUncertain?0:Number(item.profile.bpm ?? 0);
   const tempo = bpm > 0 ? Math.max(0, Math.min(1, (bpm - 60) / 120)) : semantic;
   return semantic * 0.72 + tempo * 0.28;
 }
@@ -69,8 +69,8 @@ function transitionCost(
   desired: number,
   previous?: PlaylistCandidate,
 ) {
-  const bpm = Number(item.profile.bpm ?? 0);
-  const previousBpm = Number(previous?.profile.bpm ?? 0);
+  const bpm = item.profile.bpmUncertain?0:Number(item.profile.bpm ?? 0);
+  const previousBpm = previous?.profile.bpmUncertain?0:Number(previous?.profile.bpm ?? 0);
   const bpmCost =
     previousBpm && bpm ? Math.min(1, Math.abs(bpm - previousBpm) / 55) : 0.2;
   const keyCost = harmonicCost(String(previous?.profile.musicalKey ?? ""),String(item.profile.musicalKey ?? ""));

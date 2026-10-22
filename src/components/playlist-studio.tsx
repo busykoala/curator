@@ -27,6 +27,8 @@ import {
   nativePlaylistHref,
 } from "./ui";
 import { readJson } from "./http";
+import {PlaylistRefreshInfo} from './playlist-refresh-info';
+import {SongEvidence} from './song-evidence';
 const creationTypes = [
   "chat",
   "mood",
@@ -40,6 +42,7 @@ type Snapshot = PlaylistPreview & {
   runId: number | null;
   latestRun?: { status: string };
   stale?: boolean;
+  discoveries?:Array<{id:number;artist:string;album:string;status:string;releaseId:string}>;
 };
 export function PlaylistStudio({
   id,
@@ -299,7 +302,7 @@ export function PlaylistStudio({
           </a>
         </Notice>
       )}
-      {snapshot?.latestRun?.status === "failed" && (
+      {snapshot?.latestRun?.status === "failed" && !item?.refreshPipelineEnabled && (
         <Notice error>
           The last update failed. Review your settings and try another preview.
         </Notice>
@@ -344,6 +347,19 @@ export function PlaylistStudio({
                   : "Draft"}
               {item?.enabled ? " · Refreshes nightly at 04:30 Zurich" : ""}
             </p>
+            {item&&<PlaylistRefreshInfo playlist={item} changed={load}/>}
+            {Boolean(snapshot.discoveries?.length)&&<details className="playlist-advanced">
+              <summary>Researched albums ({snapshot.discoveries!.length})</summary>
+              <ul>{snapshot.discoveries!.map(release=><li key={release.id}>
+                <a href={`https://musicbrainz.org/release-group/${release.releaseId}`} target="_blank" rel="noreferrer">{release.artist} · {release.album}</a>
+                <span className="muted small"> · {({researched:'Researched',queued:'Waiting for download',downloading:'Downloading',deferred:'Deferred while waiting',ready:'Ready for the mix'} as Record<string,string>)[release.status]??'Waiting'}</span>
+                <button className="text-button" disabled={busy} onClick={async()=>{
+                  setBusy(true);try{await readJson(await fetch(`/api/playlists/${id}/discoveries/${release.id}`,{method:'DELETE'}));await load()}
+                  catch(reason){setError(reason instanceof Error?reason.message:'Recommendation could not be dismissed')}
+                  finally{setBusy(false)}
+                }}>Dismiss</button>
+              </li>)}</ul>
+            </details>}
             {!snapshot.items.length ? (
               <div className="empty-state">
                 <h2>No songs selected yet</h2>
@@ -387,6 +403,7 @@ export function PlaylistStudio({
                         <details className="song-reason">
                           <summary>Why this song?</summary>
                           <p>{song.reason}</p>
+                          <SongEvidence explanation={song.explanation}/>
                         </details>
                       </div>
                       <button
@@ -498,6 +515,11 @@ export function PlaylistStudio({
       {menu && (
         <ActionSheet title={menu.name} close={() => setMenu(undefined)}>
           <div className="action-menu">
+            {menu.refreshPipelineEnabled&&<button disabled={busy||['queued','refreshing'].includes(menu.refreshStatus??'')} onClick={async()=>{
+              setBusy(true);try{await readJson(await fetch(`/api/playlists/${menu.id}/refresh`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestId:crypto.randomUUID()})}));setMenu(undefined);setNotice('Refresh queued. You can leave this page.');await load()}
+              catch(reason){setError(reason instanceof Error?reason.message:'Refresh could not be queued')}
+              finally{setBusy(false)}
+            }}>Refresh now<ArrowRight/></button>}
             {menu.category !== "chat" && (
               <Link href={"/playlists/" + menu.id + "/edit"}>
                 Selection settings and nightly refresh

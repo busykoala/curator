@@ -133,6 +133,41 @@ changes in the infrastructure repository. Update this record at each handoff.
   model revisions against deployment; inspect actual candidate counts, musical
   fit and timings, and iterate. Synthetic tests and route smoke probes do not
   satisfy the 24×3 replay or 40-case quality gates.
+- Operational/UI checkpoint: owner-scoped queued manual refresh, idempotent
+  retry receipts, failure/auth/shortage status, discovery dismissal, and
+  expandable field/source evidence are implemented. Disabled playlists retain
+  no next run even after manual publication. Chat has a refresh-settings link
+  and hides musical-property controls; ordinary types now expose their saved
+  free-text direction. Discovery copy describes new-to-listener music across
+  all release years. Listener-cluster maintenance is independent and retains
+  good data on failure, including Unicode identities.
+  Full suite 200/200, TypeScript and production/worker build passed; local
+  Playwright mobile/desktop audit passed twice (report/screenshots in
+  `delivery/playlist-renewal/ui/`). The audit uses isolated fixture accounts
+  and no workers/real credentials. A legacy migration fixture falsely marked
+  migration 4 complete without its run-owner column; corrected the fixture.
+- Live local-model selection-stage smoke passed: 12 eligible distinct
+  recordings in 17.7 seconds. Inspection found concentration in one artist.
+  A stricter trial revealed that the fixed narrow-style pool has only five
+  artists and cannot fill 12 under the original artist/album preferences.
+  Selection now calculates and records the smallest feasible relaxation instead
+  of dropping both preferences. The revised live smoke passed in 19.3 seconds,
+  without a repair (51,592 total tokens across calls). Preserved original and
+  failed trial evidence under `delivery/playlist-renewal/live-smoke/`.
+  This smoke does NOT establish native playability, listening novelty, compiled
+  intent accuracy, the full 72 replays or musical-rubric quality.
+- A protected temporary production SQLite backup (2,121,740,288 bytes) exists
+  inside the current Curator pod at
+  `/tmp/curator-renewal-eval-20261022.sqlite` for isolated live evaluations.
+  Production database/schema/flags, deployments and playlists are unchanged.
+  Use that copy, frozen baseline metadata and actual owner history/native IDs
+  for the next evaluation; enforce the temporary-path guard before migrations.
+- Before enabling C/D, recheck two lifecycle edges spotted during review:
+  genuinely active transfer counts currently count every unfinished torrent,
+  including old paused/stalled transfers; maintenance's sequential catch block
+  can suppress research when acquisition dependencies fail. Also protect
+  admission inventory against overlapping worker processes/rollouts, not only
+  individual SQL reservations. Add regression and live evidence for these.
 - Finish owner-scoped status/retry/dismiss/evidence UI and perform all stated
   live evaluations, simulations and quality gates. Current passing tests prove
   foundations only. Provider adapters still need live end-to-end validation.

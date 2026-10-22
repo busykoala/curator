@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type {PlaylistRefreshView} from './refresh-status';
 
 export const playlistCategories=["discovery","depth","mood","journey","rediscovery","chat"] as const;
 export const playlistCategorySchema=z.enum(playlistCategories);
@@ -12,7 +13,7 @@ export const playlistConfigSchema=z.object({
   energyCurve:z.enum(["steady","ascent","slow_burn","wave","descent"]).default("steady"), explorationPercent:z.number().int().min(0).max(100).default(35), externalDiscovery:z.boolean().default(false), noveltyDays:z.number().int().min(7).max(365).default(30),
 });
 export type PlaylistConfig=z.infer<typeof playlistConfigSchema>;
-export type PlaylistDefinition={id:number;revision?:number;name:string;category:PlaylistCategory;enabled:boolean;intent:string;config:PlaylistConfig;ownerUserId:number;ownerDisplayName:string;ownerTokenStatus:string;navidromePlaylistId:string|null;lastRunAt:string|null;nextRunAt:string|null;createdAt:string;updatedAt:string};
+export type PlaylistDefinition={id:number;revision?:number;name:string;category:PlaylistCategory;enabled:boolean;intent:string;config:PlaylistConfig;ownerUserId:number;ownerDisplayName:string;ownerTokenStatus:string;navidromePlaylistId:string|null;lastRunAt:string|null;nextRunAt:string|null;createdAt:string;updatedAt:string}&Partial<PlaylistRefreshView>;
 export type PlaylistCandidate={fileId:number;title:string;artist:string;album:string;year:number;profile:Record<string,unknown>;score:number;reason:string;origin:"catalog"|"discovery";retained?:boolean};
 export function defaultConfig(category:PlaylistCategory):PlaylistConfig{return playlistConfigSchema.parse({targetTracks:category==="journey"?12:category==="mood"?40:category==="discovery"?24:30,energyCurve:category==="journey"?"slow_burn":"steady",externalDiscovery:category==="discovery"})}
 export const definitionInputSchema=z.object({name:z.string().trim().min(2).max(100),category:playlistCategorySchema,enabled:z.boolean().default(false),intent:z.string().trim().max(1000).default(""),ownerUserId:z.number().int().positive(),config:playlistConfigSchema});

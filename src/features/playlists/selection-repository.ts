@@ -53,7 +53,9 @@ export function playlistExposure(ownerId:number){
 export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:ListenerSnapshot){
   ensurePlaylistExposureHistory(definition.ownerUserId);
   const songsById=new Map(snapshot.songs.map(song=>[song.id,song])),songsByTitle=new Map<string,ListenerSong[]>();
+  const artistPlays=new Map<string,number>();
   for(const song of snapshot.songs){const key=norm(song.title);songsByTitle.set(key,[...(songsByTitle.get(key)??[]),song])}
+  for(const song of snapshot.songs)artistPlays.set(norm(song.artist),(artistPlays.get(norm(song.artist))??0)+song.playCount+(song.favourite?1:0));
   const rows=db().prepare(`SELECT f.id,f.artist_name,f.album_name,f.tags_json,p.profile_json,m.jellyfin_song_id,m.identity_hash
     FROM files f JOIN track_profiles p ON p.file_id=f.id LEFT JOIN navidrome_track_map m ON m.file_id=f.id
     WHERE f.status='written' AND p.status='complete'`).all() as CatalogRow[];
@@ -77,8 +79,9 @@ export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:L
     const groupId=Object.entries(tags).find(([key])=>key.toLowerCase().replace(/[^a-z]/g,'')==='musicbrainzreleasegroupid')?.[1];
     const releaseId=list(groupId)[0],boost=boosts.get(releaseId),recommendation=recommendations.find(rec=>rec.id===releaseId);
     pool.push({fileId:row.id,title,artist:row.artist_name,album:row.album_name,year:evidence.originalYear??0,
-      profile:Object.fromEntries(Object.entries(evidence.fields).map(([key,field])=>[key,field.value])),evidence,
+      profile:{...Object.fromEntries(Object.entries(evidence.fields).map(([key,field])=>[key,field.value])),bpmUncertain:evidence.fields.bpm?.confidence==='low'||evidence.fields.bpm?.source==='audio'},evidence,
       songId:song.id,listener:song,exposureCount:history?.exposure_count??0,removedAt:history?.removed_at??null,
+      artistPlayCount:artistPlays.get(norm(song.artist))??0,
       score:0,reason:'',origin:boost?'discovery':'catalog',discoveryBoost:boost?.boost??0,
       // The research adapter explicitly records adjacent mode; a genre mismatch
       // or a model's guess is never sufficient adjacent-style evidence.
@@ -146,6 +149,9 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
         adjacentTarget:definition.category==='discovery'?required.filter(track=>track.adjacent).length:undefined,
         listenerContext:{complete:snapshot.complete,stale:snapshot.stale,capturedAt:snapshot.capturedAt,observedSongs:snapshot.songs.length},
         retainedArtists:[...new Set([...fixed,...chosen].map(track=>track.artist))],signal,
+        limits:{maxPerArtist:selected.evaluation.diversityLimits?.artist??definition.config.maxTracksPerArtist,
+          maxPerAlbum:selected.evaluation.diversityLimits?.album??definition.config.maxTracksPerAlbum,
+          retained:[...fixed,...chosen].map(track=>({artist:track.artist,album:track.album}))},
         maxToolTurns:Math.floor(6/chunks),maxToolCalls:Math.floor(12/chunks),repairBudget,onAttempt:playlistAttemptRecorder(definition,'selection'),
       });
       recordAiUsage('playlist_selection',aiModel,result.detail);aiDetails.push(result.detail);chosen.push(...result.items);

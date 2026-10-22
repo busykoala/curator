@@ -6,6 +6,9 @@ import {
 } from "./types";
 import { nextZurichRunSql } from "./schedule-time";
 import {playlistRevisionHash} from './refresh-policy';
+import {playlistRefreshView} from './refresh-status';
+import {songExplanation} from './song-explanation';
+import {discoveryRecommendations} from './discovery-repository';
 
 type Row = {
   id: number;
@@ -26,7 +29,7 @@ type Row = {
 };
 const select = `SELECT p.*,coalesce(u.display_name,'Unknown user') owner_display_name,coalesce(u.token_status,'missing') owner_token_status FROM smart_playlists p LEFT JOIN curator_users u ON u.id=p.owner_user_id`;
 function definition(row: Row): PlaylistDefinition {
-  return {
+  const result:PlaylistDefinition = {
     id: row.id,
     revision: row.revision,
     name: row.name,
@@ -43,6 +46,7 @@ function definition(row: Row): PlaylistDefinition {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+  return{...result,...playlistRefreshView(result)};
 }
 function ownerExists(id: number) {
   return Boolean(
@@ -127,7 +131,7 @@ export function setNavidromeId(id: number, value: string) {
 export function markRun(id: number) {
   db()
     .prepare(
-      "UPDATE smart_playlists SET last_run_at=CURRENT_TIMESTAMP,next_run_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      "UPDATE smart_playlists SET last_run_at=CURRENT_TIMESTAMP,next_run_at=CASE WHEN enabled=1 THEN ? ELSE NULL END,updated_at=CURRENT_TIMESTAMP WHERE id=?",
     )
     .run(nextZurichRunSql(), id);
 }
@@ -231,7 +235,7 @@ export function playlistSnapshot(id: number) {
         .prepare(
           `SELECT i.file_id fileId,f.artist_name artist,f.album_name album,f.album_key albumKey,coalesce(json_extract(f.tags_json,'$.title[0]'),json_extract(f.tags_json,'$.title'),'Untitled') title,i.reason,i.retained FROM playlist_items i JOIN files f ON f.id=i.file_id WHERE i.run_id=? ORDER BY i.position`,
         )
-        .all(run.id)
+        .all(run.id).map(row=>({...row as Record<string,unknown>,explanation:definition?songExplanation((row as {fileId:number}).fileId,id,definition.ownerUserId):null}))
     : [];
   const latestRun = db()
     .prepare(
@@ -241,6 +245,7 @@ export function playlistSnapshot(id: number) {
   return {
     definition,
     items,
+    discoveries:definition?discoveryRecommendations(id,definition.ownerUserId).filter(row=>!['dismissed','presented'].includes(row.status)).map(row=>({id:row.id,artist:row.artist,album:row.album,status:row.status,releaseId:row.release_id})):[],
     latestRun,
     preview: Boolean(run?.preview),
     runId: run?.id ?? null,
