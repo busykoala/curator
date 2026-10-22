@@ -3,6 +3,7 @@ const schema = z.object({
   MUSIC_ROOT: z.string().default("/music"), LIDARR_MUSIC_ROOT:z.string().default('/data/library'), CURATOR_DB_PATH: z.string().optional(), DATABASE_PATH: z.string().optional(),
   LIDARR_URL: z.string().url().default("http://lidarr:8686"), LIDARR_API_KEY: z.string().default(""),
   CURATOR_AI_API_KEY: z.string().default(""), CURATOR_AI_BASE_URL: z.string().url().default("http://inference-api.inference.svc.cluster.local:8080/v1"), CURATOR_AI_MODEL: z.string().default("curator"),
+  LASTFM_API_KEY:z.string().default(''),
   PROWLARR_URL: z.string().url().default("http://prowlarr:9696"), PROWLARR_API_KEY: z.string().default(""),
   QBITTORRENT_URL: z.string().url().default("http://qbittorrent:8080"), QBITTORRENT_USERNAME: z.string().default(""), QBITTORRENT_PASSWORD: z.string().default(""), QBITTORRENT_CATEGORY: z.string().default("music"),
   NAVIDROME_URL: z.string().url().default("http://navidrome:4533"), NAVIDROME_PUBLIC_URL: z.string().url().default("http://localhost:4533"), NAVIDROME_USERNAME: z.string().default(""), NAVIDROME_PASSWORD: z.string().default(""),

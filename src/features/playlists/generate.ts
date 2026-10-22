@@ -14,7 +14,6 @@ import {
 import { type ListeningProfile, norm, scoreCandidate } from "./candidate-score";
 import { getPlaylist, markRun, setNavidromeId } from "./repository";
 import { sequenceJourney } from "./sequence";
-import { playlistAwaitingAcquisition } from "./discovery";
 import {playlistRevisionHash} from './refresh-policy';
 import {refreshManaged} from './refresh-jobs';
 import type { PlaylistCandidate, PlaylistDefinition } from "./types";
@@ -391,15 +390,6 @@ export async function generateEnabledPlaylists() {
   const results = [];
   for (const row of rows) {
     if(refreshManaged(row.id))continue;
-    const acquisition = playlistAwaitingAcquisition(row.name);
-    if (acquisition) {
-      results.push({
-        playlistId: row.id,
-        waitingForAcquisition: true,
-        acquisition,
-      });
-      continue;
-    }
     try {
       results.push(await generatePlaylist(row.id, false));
     } catch (error) {

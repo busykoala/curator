@@ -183,6 +183,41 @@ function migrate(instance: Database.Database) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(playlist_id,revision,selection_hash));`);
   });
+  migration(14,()=>{
+    addColumns(instance,'discovery_candidates',[["playlist_id","INTEGER REFERENCES smart_playlists(id) ON DELETE SET NULL"],["owner_user_id","INTEGER REFERENCES curator_users(id) ON DELETE SET NULL"]]);
+    instance.exec(`UPDATE discovery_candidates SET playlist_id=(SELECT min(p.id) FROM smart_playlists p WHERE lower(p.name)=lower(discovery_candidates.lane) AND p.owner_user_id IS NOT NULL)
+      WHERE (SELECT count(*) FROM smart_playlists p WHERE lower(p.name)=lower(discovery_candidates.lane) AND p.owner_user_id IS NOT NULL)=1;
+      UPDATE discovery_candidates SET owner_user_id=(SELECT owner_user_id FROM smart_playlists WHERE id=playlist_id) WHERE playlist_id IS NOT NULL;
+      CREATE TABLE IF NOT EXISTS playlist_discovery_releases(
+        id TEXT PRIMARY KEY,artist_id TEXT NOT NULL,artist TEXT NOT NULL,album TEXT NOT NULL,release_date TEXT,
+        genres_json TEXT NOT NULL DEFAULT '[]',evidence_json TEXT NOT NULL DEFAULT '[]',identity_verified_at TEXT,
+        lidarr_album_id INTEGER,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE IF NOT EXISTS playlist_discovery_recommendations(
+        id INTEGER PRIMARY KEY,playlist_id INTEGER NOT NULL REFERENCES smart_playlists(id) ON DELETE CASCADE,
+        owner_user_id INTEGER NOT NULL REFERENCES curator_users(id) ON DELETE CASCADE,
+        release_id TEXT NOT NULL REFERENCES playlist_discovery_releases(id),status TEXT NOT NULL DEFAULT 'researched',
+        rationale TEXT NOT NULL DEFAULT '',origin TEXT NOT NULL DEFAULT 'research',message TEXT NOT NULL DEFAULT '',
+        queued_at TEXT,last_progress_at TEXT,last_size_left INTEGER,cooldown_until TEXT,ready_at TEXT,boost_until TEXT,presented_at TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(playlist_id,release_id));
+      CREATE INDEX IF NOT EXISTS playlist_discovery_work ON playlist_discovery_recommendations(playlist_id,status,cooldown_until);
+      CREATE TABLE IF NOT EXISTS playlist_discovery_admissions(
+        id TEXT PRIMARY KEY,playlist_id INTEGER NOT NULL REFERENCES smart_playlists(id) ON DELETE CASCADE,
+        release_id TEXT NOT NULL REFERENCES playlist_discovery_releases(id),status TEXT NOT NULL DEFAULT 'reserved',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      CREATE INDEX IF NOT EXISTS playlist_discovery_admissions_date ON playlist_discovery_admissions(created_at,status);
+      INSERT OR IGNORE INTO playlist_discovery_releases(id,artist_id,artist,album,release_date,genres_json,evidence_json,lidarr_album_id,created_at)
+        SELECT foreign_album_id,foreign_artist_id,artist,album,release_date,genres_json,json_object('legacySources',json(CASE WHEN json_valid(sources_json) THEN sources_json ELSE '[]' END)),lidarr_album_id,created_at FROM discovery_candidates
+        WHERE playlist_id IS NOT NULL AND coalesce(foreign_album_id,'')<>'' AND coalesce(foreign_artist_id,'')<>'';
+      INSERT OR IGNORE INTO playlist_discovery_recommendations(playlist_id,owner_user_id,release_id,status,rationale,origin,message,queued_at,last_progress_at,last_size_left,created_at)
+        SELECT playlist_id,owner_user_id,foreign_album_id,CASE WHEN status IN ('queued','downloading') THEN status ELSE 'researched' END,rationale,'legacy',coalesce(message,''),queued_at,last_progress_at,last_size_left,created_at
+        FROM discovery_candidates WHERE playlist_id IS NOT NULL AND coalesce(foreign_album_id,'')<>'' AND coalesce(foreign_artist_id,'')<>'';`);
+  });
+  migration(15,()=>instance.exec(`
+    CREATE TABLE IF NOT EXISTS playlist_source_cache(cache_key TEXT PRIMARY KEY,provider TEXT NOT NULL,kind TEXT NOT NULL,payload_json TEXT NOT NULL,fetched_at INTEGER NOT NULL,expires_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS playlist_source_requests(id INTEGER PRIMARY KEY,provider TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'started',detail TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS playlist_source_requests_daily ON playlist_source_requests(created_at,kind);
+  `));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;

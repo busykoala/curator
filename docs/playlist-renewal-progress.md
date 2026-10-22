@@ -49,3 +49,19 @@ changes in the infrastructure repository. Update this record at each handoff.
   `npm test` 131/131, `npx tsc --noEmit`, `npm run build`; additional lost-create /
   lost-rename response and rollback checks passed. Runtime/rollout evidence is
   still outstanding. Package A committed as `c61d1a2`.
+- 2026-10-22: Discovery implementation now stores shared canonical releases and
+  owner-specific recommendations, removes the publication/download dependency,
+  defers stalled recommendations without deleting payloads, and reserves capped
+  acquisition admissions with lost-receipt reconciliation. Added provider
+  caching, budgets/cooldowns, ListenBrainz/MB identity, editorial/official pages
+  and optional Last.fm adapters. Legacy identity/output exports remain for
+  existing audits. Package C/D runtime verification, provider end-to-end checks,
+  relevance/representative-track integration, and pool replenishment after
+  exposure are still outstanding; do not treat passing unit tests as completion.
+- 2026-10-22: Supplemental baseline
+  `baseline/production-current-selections.json` captures frozen/disabled mixes
+  outside the seven-day report window (including Discovery's saved 24 tracks
+  and all three chat results). Fixed snapshot hash:
+  `d6089f9094132ff934521aad385dda168da2f75c7897b10b3d62dc366d5ba228`.
+  Preserve both original and supplemental snapshots. Full regression suite after
+  C/D passed; next work is source integration verification and package E.

@@ -1,7 +1,7 @@
 import { lookup } from "node:dns/promises";
 
 export type WebResult={title:string;url:string;snippet:string};
-export type OpenedPage={url:string;title:string;description:string;images:string[];text:string};
+export type OpenedPage={url:string;title:string;description:string;images:string[];text:string;links?:Array<{url:string;title:string}>};
 
 function privateAddress(address:string):boolean{
   return address==="::1"||address.startsWith("fe80:")||address.startsWith("fc")||address.startsWith("fd")||/^10\.|^127\.|^169\.254\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\./.test(address);
@@ -56,5 +56,12 @@ export async function openWebPage(value:string):Promise<OpenedPage>{
   const title=plain(head.match(/<title\b[^>]*>[\s\S]*?<\/title>/i)?.[0]??"").slice(0,240);
   const metas=[...head.matchAll(/<meta\b[^>]*>/gi)].map((match)=>match[0]),images:string[]=[];let description="";
   for(const meta of metas){const key=(attr(meta,"property")??attr(meta,"name")??"").toLowerCase(),content=attr(meta,"content");if(!content)continue;if(!description&&["description","og:description","twitter:description"].includes(key))description=plain(content).slice(0,600);if(["og:image","og:image:secure_url","twitter:image"].includes(key))try{const image=canonicalUrl(new URL(content,url));if(!images.includes(image))images.push(image)}catch{}}
-  return{url:canonicalUrl(url),title,description,images:images.slice(0,8),text:plain(text).slice(0,8_000)};
+  const links:Array<{url:string;title:string}>=[];
+  for(const match of text.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)){
+    const href=attr(match[0],'href'),label=plain(match[0]).slice(0,180);if(!href||label.length<4)continue;
+    try{const target=new URL(href,url);if(!['https:','http:'].includes(target.protocol))continue;const resolved=canonicalUrl(target);if(!links.some(link=>link.url===resolved))links.push({url:resolved,title:label})}catch{}
+    if(links.length>=160)break;
+  }
+  const body=text.match(/<(?:article|main)\b[^>]*>([\s\S]*?)<\/(?:article|main)>/i)?.[1]??text;
+  return{url:canonicalUrl(url),title,description,images:images.slice(0,8),text:plain(body).slice(0,8_000),links};
 }

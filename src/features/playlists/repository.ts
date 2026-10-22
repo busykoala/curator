@@ -211,7 +211,7 @@ export function dashboardData(ownerUserId: number) {
       .all(ownerUserId),
     acquisitions: db()
       .prepare(
-        "SELECT d.* FROM discovery_candidates d WHERE EXISTS (SELECT 1 FROM smart_playlists p WHERE p.owner_user_id=? AND lower(p.name)=lower(d.lane)) ORDER BY d.updated_at DESC LIMIT 80",
+        "SELECT d.*,r.artist,r.album,r.release_date,r.genres_json,r.evidence_json sources_json,p.name lane FROM playlist_discovery_recommendations d JOIN playlist_discovery_releases r ON r.id=d.release_id JOIN smart_playlists p ON p.id=d.playlist_id AND p.owner_user_id=d.owner_user_id WHERE d.owner_user_id=? ORDER BY d.updated_at DESC LIMIT 80",
       )
       .all(ownerUserId),
   };

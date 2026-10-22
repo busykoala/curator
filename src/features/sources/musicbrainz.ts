@@ -21,6 +21,7 @@ async function limited<T>(load:()=>Promise<T>):Promise<T>{
   try{return await load()}catch(error){const status=Number((error as{status?:number}).status??0);if(status===429||status===503){cooldownUntil=Date.now()+5*60_000;stateSet('musicbrainz_cooldown_until',String(cooldownUntil))}throw error}
 }
 const headers={"User-Agent":"MusicCurator/2.0 (self-hosted; contact=local-admin)",Accept:"application/json"};
+export {limited as withMusicBrainzRequestLimit};
 async function details(candidate:MbCandidate,entityKey:string):Promise<MbCandidate>{const value=await cachedJson("musicbrainz",`release-group-details:${candidate.id}`,entityKey,90,()=>limited(()=>fetchJson<MbCandidate>(`https://musicbrainz.org/ws/2/release-group/${candidate.id}?inc=genres+tags+artist-credits&fmt=json`,{headers},1))).catch(()=>candidate);return{...candidate,...value,score:candidate.score??value.score}}
 const searchTtlDays=1/24;
 export function catalogueSearchQuery(term:string):string{
