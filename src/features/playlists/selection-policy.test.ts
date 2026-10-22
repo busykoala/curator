@@ -72,6 +72,24 @@ test('strict instrumental piano requirements reject missing, contradictory and s
   const valid=assessCandidate(track(1,{vocalProfile:['instrumental'],instrumentation:['piano']}),def,intent,snapshot,now);
   assert.equal(valid.eligible,true);assert.ok(valid.uncertainty.includes('vocalProfile is model inference'));
 });
+test('Discovery preserves its familiar-style share before relaxing album variety',()=>{
+  const def=definition('discovery');def.config.targetTracks=12;
+  const intent=configuredIntent(def,'lane-capacity');intent.soft.styles=['melodic_techno'];
+  const familiar=Array.from({length:20},(_,i)=>({...track(i+1,{genre:['electronic'],style:['melodic_techno']}),artist:'Familiar '+Math.floor(i/5),album:'Only album'}));
+  const adjacent=Array.from({length:20},(_,i)=>track(i+101,{genre:['electronic'],style:['dub_techno']}));
+  const result=selectPlaylist({definition:def,intent,pool:[...familiar,...adjacent],previous:[],snapshot,now});
+  assert.equal(result.items.length,12);assert.equal(result.items.filter(track=>track.adjacent).length,4);
+  assert.equal(result.evaluation.diversityLimits?.album,2);
+  assert.ok(!result.evaluation.relaxations.some(reason=>reason.includes('share expanded')));
+});
+test('Discovery searches the whole adjacent lane and relaxes variety only enough for its share',()=>{
+  const def=definition('discovery'),intent=configuredIntent(def,'adjacent-lane');intent.soft.styles=['melodic_techno'];
+  const familiar=Array.from({length:20},(_,i)=>track(i+1,{genre:['electronic'],style:['melodic_techno']}));
+  const adjacent=Array.from({length:8},(_,i)=>({...track(i+101,{genre:['electronic'],style:['dub_techno']}),artist:'Adjacent artist',album:'Adjacent album'}));
+  const result=selectPlaylist({definition:def,intent,pool:[...familiar,...adjacent],previous:[],snapshot,now});
+  assert.equal(result.items.length,10);assert.equal(result.items.filter(track=>track.adjacent).length,3);
+  assert.ok(!result.evaluation.relaxations.some(reason=>reason.includes('share reduced')));
+});
 test('rediscovery needs exact-song enjoyment and a known old date when played',()=>{
   const def=definition('rediscovery'),intent=configuredIntent(def,'1'),song=track(1);
   assert.equal(assessCandidate(song,def,intent,snapshot,now).eligible,false);

@@ -156,27 +156,22 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
   }
   const replacements=target-chosen.length;
   const adjacentTarget=definition.category==='discovery'?Math.round(replacements*.3):0;
-  function fill(candidates:EvidencedCandidate[],adjacentLimit=Infinity){
+  function fill(candidates:EvidencedCandidate[],adjacentLimit=Infinity,selectionLimit=target){
+    if(chosen.length>=selectionLimit)return;
     for(const track of candidates.sort((a,b)=>b.score-a.score||tie(seed,a.fileId)-tie(seed,b.fileId))){
       if(track.adjacent&&chosen.filter(t=>t.adjacent&&!t.retained).length>=adjacentLimit)continue;
-      add(track);if(chosen.length>=target)break;
+      add(track);if(chosen.length>=selectionLimit)break;
     }
   }
-  // Reserve adjacent exploration slots when validated candidates exist.
-  if(adjacentTarget)fill(eligibleNew.filter(t=>t.adjacent).slice(0,adjacentTarget),adjacentTarget);
-  fill(eligibleNew,adjacentTarget);
-  if(chosen.length<target&&eligibleNew.some(t=>t.adjacent)&&definition.category==='discovery'){
-    fill(eligibleNew);relaxations.push('Adjacent-style share expanded because familiar-style candidates were insufficient');
-  }
-  if(chosen.length<target){
-    const remaining=eligibleNew.filter(track=>!keys.has(selectionRecordingKey(track)));
-    const needed=Math.min(target-chosen.length,remaining.length),grouped=new Map<string,Map<string,number>>();
+  function relaxVariety(candidates:EvidencedCandidate[],selectionLimit=target){
+    const remaining=candidates.filter(track=>!keys.has(selectionRecordingKey(track)));
+    const needed=Math.min(selectionLimit-chosen.length,remaining.length);if(needed<=0)return;
+    const grouped=new Map<string,Map<string,number>>();
     for(const track of remaining){const artist=norm(track.artist),album=artist+'|'+norm(track.album),group=grouped.get(artist)??new Map<string,number>();group.set(album,(group.get(album)??0)+1);grouped.set(artist,group)}
     let bestCost=Infinity,best={artist:artistLimit,album:albumLimit};
     // Album groups are nested inside artists, so remaining capacity can be
-    // calculated exactly. Relax the preferences only as far as necessary,
-    // instead of removing both limits when a narrow style has few artists.
-    for(let a=artistLimit;needed&&a<=target;a++){
+    // calculated exactly. Relax the preferences only as far as necessary.
+    for(let a=artistLimit;a<=target;a++){
       const artistCost=(a-artistLimit)/artistLimit;if(artistCost>=bestCost)break;
       for(let b=albumLimit;b<=target;b++){
         const cost=artistCost+(b-albumLimit)/albumLimit;if(cost>=bestCost)break;
@@ -186,8 +181,22 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
       }
     }
     artistLimit=best.artist;albumLimit=best.album;
-    const before=chosen.length;fill(eligibleNew);
+    const before=chosen.length;fill(candidates,Infinity,selectionLimit);
     if(chosen.length>before)relaxations.push('Artist/album variety preferences relaxed to satisfy the musical requirements and requested size');
+  }
+  // Reserve the intended adjacent share from the full eligible lane. Diversity
+  // is a preference: relax it before claiming a musical lane has too few songs.
+  if(adjacentTarget){
+    const adjacent=eligibleNew.filter(track=>track.adjacent);
+    const reserve=chosen.length+Math.max(0,adjacentTarget-chosen.filter(track=>track.adjacent&&!track.retained).length);
+    fill(adjacent,adjacentTarget,reserve);relaxVariety(adjacent,reserve);
+  }
+  fill(eligibleNew,definition.category==='discovery'?adjacentTarget:Infinity);
+  if(chosen.length<target&&definition.category==='discovery')relaxVariety(eligibleNew.filter(track=>!track.adjacent));
+  if(chosen.length<target){
+    fill(eligibleNew);relaxVariety(eligibleNew);
+    if(definition.category==='discovery'&&chosen.filter(track=>track.adjacent&&!track.retained).length>adjacentTarget)
+      relaxations.push('Adjacent-style share expanded because familiar-style candidates were insufficient');
   }
   // Prefer keeping more suitable current tracks to violating exclusions or
   // recycling a recording removed during the last 14 days.

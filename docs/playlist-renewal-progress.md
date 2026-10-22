@@ -499,3 +499,23 @@ changes in the infrastructure repository. Update this record at each handoff.
   actual success; configuration revision changes still fence obsolete failures.
   Validation v16: 280/280 tests, TypeScript and production/worker build passed.
   The required acquisition audits passed at v14; acquisition code is unchanged.
+- Full private index completed: 16,344 vectors, zero backlog. Applied the
+  identity-bound “Song of the Century” source review in the private copy: guitar
+  eligibility changes true→false with zero tag/profile writes; exactly one
+  vector rebuilt in 691 ms. Reports remain under `metadata-audit-v2/` and
+  `evaluation/embedding-v{4,5}-*.json`. Exported 16,344 matching vectors to a
+  separate vector-only artifact; no owner/history/settings data is included.
+- CI for `98ba4ee` passed, and its public image source revision was verified.
+  Prepared, but did not deploy, both infrastructure image pins. An encrypted
+  pre-migration production backup was restored privately and passed authenticated
+  decryption and SQLite quick_check (schema 12, 16 playlists, 16,344 files).
+- The full real-library replay exposed Discovery drift: a 12-song example used
+  six familiar and six adjacent tracks because album variety was relaxed after
+  expanding adjacency. Preserved the interrupted report as
+  `evaluation/full-replay-v1-interrupted-discovery-balance.json`. Selection now
+  searches the entire adjacent lane and minimally relaxes variety before
+  expanding its intended share. Two narrow-pool regression tests pass. Compiler
+  v9 also explicitly preserves qualified exclusions such as festival EDM.
+  Validation v17: 282/282 tests, TypeScript and production/worker build passed.
+  Re-running the fixed rubric, then the complete repeated live replay. No
+  production migration, pipeline enablement or new-pipeline nightly evidence yet.
