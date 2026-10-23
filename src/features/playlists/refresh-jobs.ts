@@ -86,7 +86,11 @@ export function requestPlaylistRefresh(playlistId:number,ownerId:number,requestI
     const remember=(jobId:string)=>{db().prepare('INSERT INTO playlist_refresh_requests(request_id,playlist_id,owner_user_id,job_id) VALUES(?,?,?,?)').run(requestId,playlistId,ownerId,jobId);return jobId};
     const duplicate=db().prepare('SELECT id,playlist_id,owner_user_id FROM playlist_refresh_jobs WHERE id=?').get(requestId) as {id:string;playlist_id:number;owner_user_id:number}|undefined;
     if(duplicate){if(duplicate.playlist_id!==playlistId||duplicate.owner_user_id!==ownerId)throw Error('Refresh request ID is already in use');return remember(duplicate.id)}
-    const active=db().prepare("SELECT id,status,revision,run_id,phase FROM playlist_refresh_jobs WHERE playlist_id=? AND owner_user_id=? AND status IN ('queued','running','retry','auth_wait','failed') AND kind<>'shadow' ORDER BY created_at DESC LIMIT 1").get(playlistId,ownerId) as {id:string;status:string;revision:number;run_id:number|null;phase:string}|undefined;
+    // A fresh user request must target the current settings. Leave an older
+    // running publication leased until it can verify/roll back, but never join
+    // it or let it hide a queued request for the new revision.
+    db().prepare("UPDATE playlist_refresh_jobs SET status='superseded',updated_at=? WHERE playlist_id=? AND owner_user_id=? AND revision<>? AND status IN ('queued','retry','auth_wait','failed')").run(Date.now(),playlistId,ownerId,playlist.revision);
+    const active=db().prepare("SELECT id,status,revision,run_id,phase FROM playlist_refresh_jobs WHERE playlist_id=? AND owner_user_id=? AND revision=? AND status IN ('queued','running','retry','auth_wait','failed') AND kind<>'shadow' ORDER BY created_at DESC LIMIT 1").get(playlistId,ownerId,playlist.revision) as {id:string;status:string;revision:number;run_id:number|null;phase:string}|undefined;
     if(active?.status==='queued'||active?.status==='running')return remember(active.id);
     if(retry&&active&&active.revision===playlist.revision){
       if(active.status==='auth_wait'&&playlist.ownerTokenStatus!=='active')throw Error('Sign in to Navidrome again before retrying');

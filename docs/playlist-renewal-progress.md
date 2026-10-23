@@ -653,3 +653,13 @@ changes in the infrastructure repository. Update this record at each handoff.
   real chat correction/nightly trio in v6 passes ordering, retention and saved
   intent checks; its initial and correction simulations also pass fourteen nights.
   The later full corrected-code gate and production rollout remain outstanding.
+- Final job review found that a manual refresh after a configuration edit could
+  join an obsolete queued/running job. Requests now deduplicate within the current
+  revision, supersede outdated queued/retry/auth/failed work, and leave any
+  running publication leased until verification/rollback. Two regression cases
+  cover queued/running overlap, repeated requests with tied timestamps and lease
+  preservation. This does not change model selection; full validation is next.
+- v32 full validation passes: 308/308 tests, standalone TypeScript after the
+  complete production/worker build. No additional schema migration. The v6 model
+  matrix is now on its final multilingual chat flow; all named-song correction
+  and nightly repeats passed, including all three fourteen-night simulations.
