@@ -894,3 +894,27 @@ The original goal is preserved without rewriting its historical requirements.
   evidence and hard constraints were not weakened to hide them. Persistent
   backups, prior selections, private reports and operator tools remain available
   for rollback and later scheduled observations.
+
+## Discovery retry follow-up
+
+- The remaining production pool shortfall exposed an application issue alongside
+  the external outage: a partial/failed research cycle always waited another
+  two hours plus jitter, even when provider cooldowns were much shorter. Growing
+  underfilled pools and source-deferred cycles now retry in 15–17 minutes; every
+  provider still enforces its original cooldown and all existing caps. Truly
+  empty successful searches retain the ordinary cadence. Exhausting the global
+  daily request budget instead defers to the next UTC budget day. Persisted
+  outcomes distinguish source deferral, budget deferral and no new matches,
+  retaining the underlying provider errors and retry dates.
+- Four new regression tests pass, including partial results, unchanged provider
+  cooldowns, expired/stale errors, successful empty sources and daily rollover.
+  Full suite: 332/332; production and four-worker build pass. Standalone
+  TypeScript and exact-commit CI/container checks precede deployment.
+  The musical selector, intent compiler, retrieval and chat code are unchanged;
+  their previously completed live replay/rubric/simulation evidence is retained.
+- A bounded two-request ListenBrainz metadata probe succeeded using the real
+  discovery request budget. Its release-group metadata omits secondary types:
+  a compilation and a remix collection both appear simply as “Album”. This
+  cannot safely replace canonical compilation/edition checks during outages.
+  No recommendation was admitted from this probe, no credentials were required,
+  and no identity or musical-fit requirement was weakened.

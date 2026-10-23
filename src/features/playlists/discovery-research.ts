@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {stateGet,stateSet} from '@/features/db/client';
+import {db,stateGet,stateSet} from '@/features/db/client';
 import {listPlaylists} from './repository';
 import {discoveryRecommendations,discoveryPoolTarget,storeDiscoveryRecommendation,verifiedDiscoveryRecommendation,currentDiscoveryPoolSize,type DiscoveryRelease} from './discovery-repository';
 import {editorialCandidates,lastFmCandidates,listenBrainzCandidates,listenBrainzTagCandidates} from './discovery-providers';
@@ -22,6 +22,7 @@ function usableEvidence(release:DiscoveryRelease){
   return identity&&recommendation&&(!Number.isFinite(date)||date<=Date.now());
 }
 export async function researchDiscoveryPools(adapters=providers,now=new Date()){
+  const began=Date.now();
   const playlists=listPlaylists().filter(p=>p.enabled&&(playlistRefreshMode()!=='canary'||refreshManaged(p.id))&&(p.category==='discovery'||p.category==='depth'&&p.config.externalDiscovery)&&discoveryPoolNeedsResearch(p,now.getTime()));
   if(!playlists.length)return{researched:0,queued:0};
   const cursor=Number(stateGet('playlist_research_cursor','0'))%playlists.length,playlist=playlists[cursor];
@@ -56,10 +57,27 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
     }catch(error){outcomes.push({provider:provider.name,candidates:0,error:String(error).slice(0,250)})}
   }
   const jitter=parseInt(createHash('sha256').update(`${playlist.id}:${now.toISOString().slice(0,10)}:${cycle}`).digest('hex').slice(0,6),16)%(30*60_000);
-  stateSet(`playlist_research_next:${playlist.id}`,String(now.getTime()+2*3600_000+jitter));
+  const finished=now.getTime()+Math.max(0,Date.now()-began),underfilled=currentDiscoveryPoolSize(playlist)<discoveryPoolTarget;
+  // A partial provider result can hide an identity-service deferral. Preserve
+  // the actual dependency errors separately from a successful empty response.
+  // Individual adapters still enforce their own cooldowns on every request;
+  // an unavailable source must not delay trying the other sources for two hours.
+  const deferredSources=(db().prepare(`SELECT e.key,e.value error,c.value retry_at FROM state e JOIN state c
+    ON c.key='playlist_source_cooldown:'||substr(e.key,length('playlist_source_error:')+1)
+    WHERE e.key LIKE 'playlist_source_error:%' AND e.value<>'' AND CAST(c.value AS INTEGER)>?`).all(finished) as Array<{key:string;error:string;retry_at:string}>)
+    .map(row=>({provider:row.key.slice('playlist_source_error:'.length),error:row.error,retryAt:new Date(Number(row.retry_at)).toISOString()}));
+  const utcDay=new Date(finished).setUTCHours(0,0,0,0);
+  const requests=(db().prepare('SELECT count(*) n FROM playlist_source_requests WHERE created_at>=?').get(utcDay) as {n:number}).n;
+  const budgetDeferred=underfilled&&requests>=100;
+  const sourceDeferred=underfilled&&(deferredSources.length>0||outcomes.some(outcome=>outcome.error));
+  const nextResearch=budgetDeferred?utcDay+86400_000+jitter%120_000:
+    underfilled&&(sourceDeferred||researched>0)?finished+15*60_000+jitter%120_000:now.getTime()+2*3600_000+jitter;
+  stateSet(`playlist_research_next:${playlist.id}`,String(nextResearch));
   stateSet(`playlist_research_cycles:${playlist.id}`,String(cycle+1));
   stateSet('playlist_research_cursor',String((cursor+1)%playlists.length));
-  stateSet(`playlist_research_outcome:${playlist.id}`,JSON.stringify({at:now.toISOString(),recent,outcomes}));
+  stateSet(`playlist_research_outcome:${playlist.id}`,JSON.stringify({at:now.toISOString(),recent,outcomes,
+    availability:budgetDeferred?'budget_deferred':sourceDeferred?'source_deferred':researched?'available':'no_new_matches',
+    deferredSources,nextResearchAt:new Date(nextResearch).toISOString()}));
   return{researched,queued:0};
 }
 let maintenanceRunning=false;
