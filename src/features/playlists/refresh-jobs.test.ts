@@ -93,6 +93,7 @@ for(const status of ['queued','running'] as const)test(`a new manual request aft
   updatePlaylist(p.id,{intent:'Latest requested settings '+status});
   const freshId=requestPlaylistRefresh(p.id,1,'new-settings-'+status);
   assert.notEqual(freshId,oldId);
+  database.prepare('UPDATE playlist_refresh_jobs SET created_at=? WHERE id IN (?,?)').run(Date.now(),oldId,freshId);
   assert.equal(requestPlaylistRefresh(p.id,1,'join-new-settings-'+status),freshId,'Repeated requests join the current revision even when its timestamp ties the old job');
   const old=database.prepare('SELECT status,lease_token FROM playlist_refresh_jobs WHERE id=?').get(oldId) as {status:string;lease_token:string|null};
   assert.equal(old.status,running?'running':'superseded');
