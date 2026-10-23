@@ -24,15 +24,23 @@ test('sufficiency counts verified duplicate copies as one recording',()=>{
   assert.equal(independentEligibleCount('depth-rock',[one,copy]),1);
 });
 test('the independent broad-electronic reference recognises explicit substyles across primary tags',()=>{
-  for(const[genre,style]of [['hip_hop','trip_hop'],['ambient','downtempo'],['pop','synthpop']]){
+  for(const[genre,style]of [['hip_hop','trip_hop'],['ambient','downtempo'],['pop','synthpop'],['pop','trance'],['pop','electropop']]){
     assert.deepEqual(scenarioViolations('discovery-unicode',[track(1,{genre:[genre],style:[style],recordingTypes:['studio_recording']})]),[]);
   }
-  for(const profile of [{genre:['ambient']},{genre:['rock'],instrumentation:['electric_guitar']},{genre:['rnb_soul_funk'],style:['new_jack_swing']}])
+  for(const profile of [{genre:['ambient']},{genre:['rock'],instrumentation:['electric_guitar']},{genre:['rock'],style:['garage_rock']},{genre:['rock'],style:['industrial_rock']},{genre:['rnb_soul_funk'],style:['new_jack_swing']}])
     assert.ok(scenarioViolations('discovery-unicode',[track(1,profile)]).includes('Expected jazz or electronic direction'));
 });
 test('the independent Jazz reference accepts explicit Swing/Bebop styles but not compound names or groove',()=>{
   for(const style of ['swing','bebop','hard_bop','post_bop'])assert.deepEqual(scenarioViolations('mood-jazz',[track(1,{genre:['electronic'],style:[style]})]),[]);
   for(const profile of [{genre:['electronic'],style:['electro_swing']},{genre:['rnb_soul_funk'],style:['new_jack_swing']},{genre:['pop'],groove:['swing']}])assert.ok(scenarioViolations('mood-jazz',[track(1,profile)]).includes('Expected jazz direction or an agreed Discovery neighbour'));
+});
+test('independent album recency follows native compilation identity across artists and rejects undated plays',()=>{
+  const now=Date.parse('2026-10-23T03:00:00Z'),candidate=track(1,{genre:['electronic']});
+  Object.assign(candidate.listener!,{albumId:'compilation',albumArtist:'Various Artists',hasPlayed:true,playCount:4,lastPlayed:'2026-08-01T00:00:00Z'});
+  const heard={...candidate.listener!,id:'another-song',artist:'Another Artist',lastPlayed:'2026-10-22T00:00:00Z'},snapshot={songs:[heard],complete:true,stale:false,capturedAt:'',error:'',available:true};
+  assert.ok(scenarioViolations('rediscovery-genre',[candidate],{now,snapshot}).includes('Album was played recently or has undated plays'));
+  assert.deepEqual(scenarioViolations('rediscovery-genre',[candidate],{now,snapshot:{...snapshot,songs:[{...heard,albumId:'different-native-album'}]}}),[]);
+  assert.ok(scenarioViolations('rediscovery-genre',[candidate],{now,snapshot:{...snapshot,songs:[{...heard,lastPlayed:null}]}}).includes('Album was played recently or has undated plays'));
 });
 test('German correction retains only compatible instrumental position locks and permits quiet live music',()=>{
   const quietLive=track(1,{recordingTypes:['live_recording'],energy:'low',vocalProfile:['instrumental']}),sung=track(2,{vocalProfile:['clean_sung']});

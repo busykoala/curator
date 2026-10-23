@@ -13,7 +13,7 @@ import type {PlaylistDefinition} from './types';
 import {playlistAttemptRecorder} from './inference-metrics';
 import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion,groundFavouritesScope} from './intent-preferences';
 
-const compilerVersion=13;
+const compilerVersion=14;
 export type ChatIntentContext=ReturnType<typeof chatState>;
 const compiledSchema=playlistIntentSchema.omit({version:true,sourceRevision:true,pinnedRecordings:true,excludedFileIds:true,excludedRecordings:true}).extend({
   pinFileIds:z.array(z.number().int().positive()).max(100),conflicts:z.array(z.string().max(240)).max(10),

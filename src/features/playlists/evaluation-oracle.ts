@@ -16,7 +16,7 @@ export function scenarioViolations(id:string,items:EvidencedCandidate[],options:
     // Independent reference family, intentionally not the application's genre
     // mapper. A hip-hop/pop/ambient primary tag can coexist with an explicitly
     // electronic style; ambient or amplified instruments alone do not prove it.
-    const electronic=has('electronic')||['trip hop','downtempo','synthpop','synth pop','electronica','techno','house','idm','breakbeat','drum and bass','dubstep','electro'].some(has);
+    const electronic=has('electronic')||['trip hop','downtempo','synthpop','synth pop','electropop','electronica','techno','trance','house','idm','breakbeat','drum and bass','dubstep','electro'].some(has);
     // Exact style names are independent Jazz-family evidence. Compound
     // electronic/R&B swing styles and a swung groove alone are insufficient.
     const jazzStyle=has('jazz')||genres.some(value=>['swing','bebop','hard bop','post bop','post bebop'].includes(value));
@@ -56,7 +56,12 @@ export function scenarioViolations(id:string,items:EvidencedCandidate[],options:
       if(!song||!song.hasPlayed&&!song.playCount&&!song.favourite)violations.add('Rediscovery without observed enjoyment');
       if(song?.hasPlayed&&(!song.lastPlayed||now-Date.parse(song.lastPlayed)<30*86400_000))violations.add('Required 30-day listening gap');
       if(id==='rediscovery-small'&&!song?.favourite)violations.add('Required exact-song favourite');
-      if(id==='rediscovery-genre'&&options.snapshot?.songs.some(song=>normal(song.artist)===normal(track.listener?.artist??track.artist)&&normal(song.album)===normal(track.album)&&song.lastPlayed&&now-Date.parse(song.lastPlayed)<30*86400_000))violations.add('Album played recently');
+      if(id==='rediscovery-genre'&&options.snapshot?.songs.some(heard=>{
+        const current=track.listener;
+        const sameAlbum=heard.albumId||current?.albumId?Boolean(heard.albumId&&current?.albumId&&heard.albumId===current.albumId):normal(heard.albumArtist||heard.artist)===normal(current?.albumArtist||current?.artist||track.artist)&&normal(heard.album)===normal(track.album);
+        const observed=heard.hasPlayed||heard.playCount>0||Boolean(heard.lastPlayed),at=Date.parse(heard.lastPlayed??'');
+        return sameAlbum&&observed&&(!Number.isFinite(at)||now-at<30*86400_000);
+      }))violations.add('Album was played recently or has undated plays');
     }
   }
   if(id==='rediscovery-small'&&new Set(items.map(track=>normal(track.artist))).size>1)violations.add('Only one artist requested');

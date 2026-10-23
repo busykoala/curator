@@ -663,3 +663,38 @@ changes in the infrastructure repository. Update this record at each handoff.
   complete production/worker build. No additional schema migration. The v6 model
   matrix is now on its final multilingual chat flow; all named-song correction
   and nightly repeats passed, including all three fourteen-night simulations.
+- The complete original v6 gate is preserved locally as
+  `evaluation/full-replay-v6-complete-before-climax-swing-favourite-fixes.json`:
+  96 runs, 84/93 valid where independently sufficient (90.32%), three direction/
+  exclusion violations, six false favourite-only shortages, zero errors and zero
+  publications. All twelve correction and twelve nightly-chat stages passed.
+  The original complete simulation is also preserved: 32 cases/448 nights,
+  21 flags from the documented Jazz eligibility/reference issues.
+- The corrected compiler passes the unchanged fixed rubric again: 38/40 (95%),
+  baseline 21/40 (52.5%). A controller-only replay of the exact failed compiled
+  outputs fills all twelve songs for the focus, jazz and forgotten-jazz examples.
+  Electronic direction still has a targeted reference/eligibility flag under
+  investigation; this replay is feasibility evidence, not the final live gate.
+- Album recency review found artist/name grouping misses cross-artist
+  compilation plays. A native read-only sample exposes AlbumId and AlbumArtist
+  on all 500 songs. Listening identity version 3 now preserves them and refreshes
+  older caches; owner-specific recency follows native album identity, falling
+  back to album artist/name only when unavailable. Undated plays remain uncertain.
+  Added owner/compilation, distinct-album and undated-play coverage. This uses the
+  existing snapshot version column: database schema remains 27.
+- Auditing the entire eligible Electronic pool separated two real parsing errors
+  from two reference gaps. Generic `garage`/`industrial` roots admitted garage
+  rock and industrial rock (Tommy James/Puscifer); explicit rock compound terms
+  now keep their Rock parent before Electronic fallback. The independent
+  reference now recognises recorded trance/electropop (Kate Ryan/Madonna), while
+  still rejecting those Rock cases. No fixed 40-case gold labels changed.
+  Compiler v14 invalidates earlier interpretations after this alias correction.
+- Native album/history integration and owner-isolation coverage passes; v34 full
+  regression/build validation passed 316 tests and TypeScript. The final alias
+  regression is also passing. Full final validation/replay remains pending;
+  production is still the original image, schema 12 and new-pipeline flag off.
+- v35 full validation passes: 317/317 tests, production/four-worker build and
+  standalone TypeScript. The final full model replay will use listening identity
+  v3 and compiler v14. The actual 23 October 04:30 Zurich cycle began while
+  production was still unchanged; do not count its legacy publications toward
+  the required new-pipeline observations.

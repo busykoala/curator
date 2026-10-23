@@ -19,6 +19,7 @@ import {resolveIntentTrackRequests} from './intent-track-requests';
 import {ownerRecordingExposure,rememberExposureFallback,exposureIdentityKeys} from './exposure-history';
 import {fallbackRecordingKey} from './track-evidence';
 import {discoveryDirection} from './discovery-directions';
+import {albumListeningHistory,listenerAlbumIdentity} from './album-listening-history';
 
 type CatalogRow={id:number;path:string;artist_name:string;album_name:string;tags_json:string;profile_json:string;jellyfin_song_id:string|null;identity_hash:string|null};
 const list=(value:unknown)=>Array.isArray(value)?value.map(String):value==null?[]:[String(value)];
@@ -57,12 +58,10 @@ export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:L
   ensurePlaylistExposureHistory(definition.ownerUserId);
   const songsById=new Map(snapshot.songs.map(song=>[song.id,song])),songsByTitle=new Map<string,ListenerSong[]>();
   const artistPlays=new Map<string,number>();
-  const albumPlays=new Map<string,string>();
+  const albumPlays=albumListeningHistory(snapshot.songs);
   for(const song of snapshot.songs){const key=norm(song.title);songsByTitle.set(key,[...(songsByTitle.get(key)??[]),song])}
   for(const song of snapshot.songs){
     artistPlays.set(norm(song.artist),(artistPlays.get(norm(song.artist))??0)+song.playCount+(song.favourite?1:0));
-    const key=norm(song.artist)+'|'+norm(song.album),played=albumPlays.get(key);
-    if(song.lastPlayed&&(!played||Date.parse(song.lastPlayed)>Date.parse(played)))albumPlays.set(key,song.lastPlayed);
   }
   const rows=db().prepare(`SELECT f.id,f.path,f.artist_name,f.album_name,f.tags_json,p.profile_json,m.jellyfin_song_id,m.identity_hash
     FROM files f JOIN track_profiles p ON p.file_id=f.id LEFT JOIN navidrome_track_map m ON m.file_id=f.id
@@ -96,7 +95,7 @@ export function loadEvidencedCandidates(definition:PlaylistDefinition,snapshot:L
       score:0,reason:'',origin:boost?'discovery':'catalog',discoveryBoost:boost?.boost??0,
       // The research adapter explicitly records adjacent mode; a genre mismatch
       // or a model's guess is never sufficient adjacent-style evidence.
-      adjacent:recommendation?.origin.endsWith('-adjacent'),albumLastPlayed:albumPlays.get(norm(song.artist)+'|'+norm(song.album))??null,
+      adjacent:recommendation?.origin.endsWith('-adjacent'),albumLastPlayed:albumPlays.get(listenerAlbumIdentity(song))?.lastPlayed??null,albumHistoryUncertain:albumPlays.get(listenerAlbumIdentity(song))?.undatedPlays??false,
     });
   }
   const nativeGroups=new Map<string,EvidencedCandidate[]>();for(const track of pool)nativeGroups.set(track.songId,[...(nativeGroups.get(track.songId)??[]),track]);

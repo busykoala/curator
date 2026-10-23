@@ -9,7 +9,7 @@ import type {PlaylistIntent,SemanticRequirement} from './intent-schema';
 import {energyTarget,energyValue} from './sequence';
 import type {PlaylistCandidate,PlaylistDefinition} from './types';
 
-export type EvidencedCandidate=PlaylistCandidate&{evidence:TrackEvidenceView;recordingGroupKey?:string;songId:string;listener:ListenerSong|null;exposureCount:number;removedAt:number|null;artistPlayCount?:number;albumLastPlayed?:string|null;discoveryBoost?:number;adjacent?:boolean;adjacencyReason?:string};
+export type EvidencedCandidate=PlaylistCandidate&{evidence:TrackEvidenceView;recordingGroupKey?:string;songId:string;listener:ListenerSong|null;exposureCount:number;removedAt:number|null;artistPlayCount?:number;albumLastPlayed?:string|null;albumHistoryUncertain?:boolean;discoveryBoost?:number;adjacent?:boolean;adjacencyReason?:string};
 export type CandidateAssessment={eligible:boolean;score:number;reasons:string[];violations:string[];uncertainty:string[]};
 export type PlaylistEvaluation={eligible:number;selected:number;requested:number;changed:number;retained:number;artistDiversity:number;albumDiversity:number;unheard:number|null;uncertainty:string[];relaxations:string[];shortage:number;violations:string[];diversityLimits?:{artist:number;album:number};adjacentAdditions?:number;familiarAdditions?:number;adjacentTarget?:number};
 const values=(v:unknown):string[]=>Array.isArray(v)?v.map(String):v==null?[]:[String(v)];
@@ -74,6 +74,7 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
   if(hard.excludeRecentlyPlayedAlbums){
     const albumPlay=Date.parse(track.albumLastPlayed??'');
     if(!snapshot.complete||snapshot.stale)violations.push('A current complete history is needed to exclude recently played albums');
+    else if(track.albumHistoryUncertain)violations.push('An album has observed plays without a trustworthy last-played date');
     else if(Number.isFinite(albumPlay)&&now-albumPlay<definition.config.noveltyDays*days)violations.push('Album played too recently');
   }
   if(definition.category==='rediscovery'){

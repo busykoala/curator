@@ -2,9 +2,9 @@ import {randomUUID} from 'node:crypto';
 import {db} from '@/features/db/client';
 import {jellyfinCall} from '@/features/auth/navidrome';
 
-export type ListenerSong={id:string;title:string;artist:string;artists?:string[];album:string;path?:string;trackNumber?:number;discNumber?:number;playCount:number;hasPlayed:boolean;lastPlayed:string|null;favourite:boolean;rating:number|null;providerIds:Record<string,string>};
+export type ListenerSong={id:string;title:string;artist:string;artists?:string[];album:string;albumId?:string|null;albumArtist?:string;path?:string;trackNumber?:number;discNumber?:number;playCount:number;hasPlayed:boolean;lastPlayed:string|null;favourite:boolean;rating:number|null;providerIds:Record<string,string>};
 export type ListenerSnapshot={songs:ListenerSong[];complete:boolean;stale:boolean;capturedAt:string|null;error:string;available:boolean};
-type NativeSong={Id:string;Name?:string;Artists?:string[];Album?:string;Path?:string;IndexNumber?:number;ParentIndexNumber?:number;ProviderIds?:Record<string,string>;UserData?:{PlayCount?:number;Played?:boolean;LastPlayedDate?:string;IsFavorite?:boolean;Rating?:number}};
+type NativeSong={Id:string;Name?:string;Artists?:string[];Album?:string;AlbumId?:string;AlbumArtist?:string;Path?:string;IndexNumber?:number;ParentIndexNumber?:number;ProviderIds?:Record<string,string>;UserData?:{PlayCount?:number;Played?:boolean;LastPlayedDate?:string;IsFavorite?:boolean;Rating?:number}};
 type Page={Items?:NativeSong[];TotalRecordCount?:number};
 type SnapshotRow={songs_json:string;complete:number;identity_version:number;captured_at:number;last_attempt_at:number;next_retry_at:number;error:string;lease_token:string|null;lease_until:number};
 const hour=3600_000;
@@ -12,7 +12,7 @@ export async function listenerMusicSnapshot(ownerId:number,options:{force?:boole
   const now=options.now??Date.now(),read=()=>db().prepare('SELECT * FROM listener_music_snapshots WHERE owner_user_id=?').get(ownerId) as SnapshotRow|undefined;
   const view=(row:SnapshotRow|undefined,stale:boolean,error=''):ListenerSnapshot=>({songs:JSON.parse(row?.songs_json??'[]'),complete:Boolean(row?.complete),stale,capturedAt:row?.captured_at?new Date(row.captured_at).toISOString():null,error:error||row?.error||'',available:Boolean(row?.complete)});
   const previous=read();
-  if(!options.force&&previous?.complete&&previous.identity_version===2&&previous.captured_at>now-hour&&!previous.error)return view(previous,false);
+  if(!options.force&&previous?.complete&&previous.identity_version===3&&previous.captured_at>now-hour&&!previous.error)return view(previous,false);
   if(previous&&previous.next_retry_at>now)return view(previous,true);
   const token=randomUUID();
   const acquired=db().transaction(()=>{
@@ -34,11 +34,11 @@ export async function listenerMusicSnapshot(ownerId:number,options:{force?:boole
       for(const song of items){
         if(!song.Id||seen.has(song.Id))throw Error('Listening snapshot pagination repeated a song');
         seen.add(song.Id);const data=song.UserData??{};
-        songs.push({id:song.Id,title:song.Name??'',artist:song.Artists?.[0]??'',artists:song.Artists??[],album:song.Album??'',path:song.Path,trackNumber:song.IndexNumber,discNumber:song.ParentIndexNumber,playCount:Math.max(0,Number(data.PlayCount??0)||0),hasPlayed:Boolean(data.Played||data.PlayCount||data.LastPlayedDate),lastPlayed:data.LastPlayedDate??null,favourite:Boolean(data.IsFavorite),rating:Number.isFinite(data.Rating)?Number(data.Rating):null,providerIds:song.ProviderIds??{}});
+        songs.push({id:song.Id,title:song.Name??'',artist:song.Artists?.[0]??'',artists:song.Artists??[],album:song.Album??'',albumId:song.AlbumId??null,albumArtist:song.AlbumArtist??'',path:song.Path,trackNumber:song.IndexNumber,discNumber:song.ParentIndexNumber,playCount:Math.max(0,Number(data.PlayCount??0)||0),hasPlayed:Boolean(data.Played||data.PlayCount||data.LastPlayedDate),lastPlayed:data.LastPlayedDate??null,favourite:Boolean(data.IsFavorite),rating:Number.isFinite(data.Rating)?Number(data.Rating):null,providerIds:song.ProviderIds??{}});
       }
     }
     if(songs.length!==total)throw Error('Listening snapshot does not reconcile with the native song count');
-    const changed=db().prepare("UPDATE listener_music_snapshots SET songs_json=?,complete=1,identity_version=2,captured_at=?,next_retry_at=0,error='',lease_token=NULL,lease_until=0 WHERE owner_user_id=? AND lease_token=? AND lease_until>?").run(JSON.stringify(songs),now,ownerId,token,options.now??Date.now()).changes;
+    const changed=db().prepare("UPDATE listener_music_snapshots SET songs_json=?,complete=1,identity_version=3,captured_at=?,next_retry_at=0,error='',lease_token=NULL,lease_until=0 WHERE owner_user_id=? AND lease_token=? AND lease_until>?").run(JSON.stringify(songs),now,ownerId,token,options.now??Date.now()).changes;
     if(!changed)throw Error('Listening snapshot lease expired');
     return view(read(),false);
   }catch(error){

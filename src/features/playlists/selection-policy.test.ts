@@ -27,6 +27,7 @@ test('an album-level listening exclusion also rejects an unplayed track on a rec
   const song=track(1);song.listener!.favourite=true;song.albumLastPlayed=new Date(now-day).toISOString();
   assert.equal(assessCandidate(song,def,intent,snapshot,now).eligible,false);
   song.albumLastPlayed=new Date(now-90*day).toISOString();assert.equal(assessCandidate(song,def,intent,snapshot,now).eligible,true);
+  song.albumHistoryUncertain=true;assert.equal(assessCandidate(song,def,intent,snapshot,now).eligible,false);song.albumHistoryUncertain=false;
   assert.equal(assessCandidate(song,def,intent,{complete:true,stale:true},now).eligible,false);
 });
 test('an explicit vocal override is not silently defeated by lower-priority external credits',()=>{
@@ -58,6 +59,15 @@ test('electro swing alone cannot establish jazz while explicit jazz evidence sti
   const def=definition('mood'),intent=configuredIntent(def,'revision');intent.hard.requirements=[{field:'genre',values:['jazz'],match:'any'}];
   assert.equal(assessCandidate(track(1,{genre:['electronic'],style:['electro_swing','chamber_pop']}),def,intent,snapshot,now).eligible,false);
   assert.equal(assessCandidate(track(2,{genre:['jazz'],style:['electro_swing','nu_jazz']}),def,intent,snapshot,now).eligible,true);
+});
+test('garage rock and industrial rock do not acquire Electronic eligibility through a compound word',()=>{
+  const def=definition('rediscovery'),intent=configuredIntent(def,'genre-roots');intent.hard.requirements=[{field:'genre',values:['electronic'],match:'any'}];
+  for(const style of ['garage_rock','industrial_rock']){
+    assert.equal(canonicalSemanticValue('genre',style),'rock');const item=track(1,{genre:['rock'],style:[style]});item.listener!.favourite=true;
+    assert.equal(assessCandidate(item,def,intent,snapshot,now).eligible,false);
+    intent.hard.requirements=[{field:'genre',values:['rock'],match:'any'}];assert.equal(assessCandidate(item,def,intent,snapshot,now).eligible,true);
+    intent.hard.requirements=[{field:'genre',values:['electronic'],match:'any'}];
+  }
 });
 test('a scene or artist association cannot substitute for track genre/style evidence',()=>{
   const def=definition('chat'),intent=configuredIntent(def,'direction');intent.soft.styles=['trip_hop'];

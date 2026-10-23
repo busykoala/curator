@@ -40,12 +40,13 @@ test('snapshots and failures remain scoped to their owner',async()=>{
 });
 test('identity upgrades refresh a recent cache and preserve collaborative credits, path and edition positions',async()=>{
   await listenerMusicSnapshot(1,{load:async()=>({Items:[{Id:'old',Name:'Old'}],TotalRecordCount:1})});
-  database.prepare('UPDATE listener_music_snapshots SET identity_version=1 WHERE owner_user_id=1').run();
+  database.prepare('UPDATE listener_music_snapshots SET identity_version=2 WHERE owner_user_id=1').run();
   const snapshot=await listenerMusicSnapshot(1,{load:async path=>{
     assert.ok(new URLSearchParams(path.split('?')[1]).get('Fields')?.includes('Path'));
-    return{Items:[{Id:'new',Name:'Collaboration',Artists:['Stan Getz','Charlie Byrd'],Album:'Jazz Samba',Path:'/music/Jazz/01.flac',IndexNumber:1,ParentIndexNumber:2}],TotalRecordCount:1};
+    return{Items:[{Id:'new',Name:'Collaboration',Artists:['Stan Getz','Charlie Byrd'],Album:'Jazz Samba',AlbumId:'native-album',AlbumArtist:'Stan Getz & Charlie Byrd',Path:'/music/Jazz/01.flac',IndexNumber:1,ParentIndexNumber:2}],TotalRecordCount:1};
   }});
   assert.deepEqual(snapshot.songs[0].artists,['Stan Getz','Charlie Byrd']);assert.equal(snapshot.songs[0].path,'/music/Jazz/01.flac');
   assert.equal(snapshot.songs[0].trackNumber,1);assert.equal(snapshot.songs[0].discNumber,2);assert.equal(snapshot.songs[0].id,'new');
+  assert.equal(snapshot.songs[0].albumId,'native-album');assert.equal(snapshot.songs[0].albumArtist,'Stan Getz & Charlie Byrd');
 });
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});
