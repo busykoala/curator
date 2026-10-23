@@ -24,6 +24,10 @@ Private production snapshots, fixed evaluation inputs and reports belong under
 10. [x] Rollout — Feature-flagged deployment, thirteen unpublished comparisons,
     Discovery canary, wider enablement, and triggered native verification under
     the user amendment below. Actual overnight cycles were not observed.
+11. [ ] Production Discovery pool — Verify ten current, evidenced candidates
+    with source and acquisition budgets intact. Latest live count: five;
+    MusicBrainz still returns HTTP 503. Implementation delivery above does not
+    close this operational requirement or mean the full goal is complete.
 
 Checked packages describe delivered implementation and its recorded tests/live
 checks. The production research pool is currently below its steady-state target
@@ -930,3 +934,30 @@ The original goal is preserved without rewriting its historical requirements.
   receipts, rather than considering only still-active cooldowns. No identity,
   relevance, acquisition, inference or publication policy changes. This final
   safeguard requires a new exact-build deployment; revision 92 remains healthy.
+- Final build `475be54` passes 333/333 tests, standalone TypeScript, production
+  and four-worker build, and exact-commit CI/container publication. It is now
+  deployed as Helm revision **93**, image index
+  `97a86fc671be01478a74b4ffc088e4f0466dfec00ba5a8f3daa0311ac98ff896`;
+  server pin `e641d17` is pushed. Both scoped manifest comparisons change only
+  Curator's application and backup images. Unrelated server inventory and
+  inference edits were preserved and excluded from the commits.
+- Revision 93 is Ready with zero restarts. All four workers, health/readiness
+  and chart integration tests pass. All thirteen prior native publications
+  remain correct, with zero count/constraint/ordering violations or duplicate
+  publication identities. No redundant playlist rotation was requested.
+- The final real research cycle admitted one additional verified recommendation
+  to the research pool, growing **4→5**, with no publication or acquisition.
+  Another bounded diagnostic cycle preserved the actual failed request receipt
+  and scheduled research for 20:46:28 UTC. This is a due time; the maintenance
+  worker checks every fifteen minutes. Source usage is **67/100** requests,
+  **5/20** editorial fetches, **0/5** general searches; album admission remains
+  one, within all caps. MusicBrainz's captured 503 body says its web server is
+  currently busy; an isolated canonical request also returned 200, confirming
+  intermittent availability rather than a consistently empty catalogue.
+- Evidence is private under `rollout/*-v41.*`,
+  `discovery/research-response-observation.json` and the updated
+  `final-assessment.json`. `selection-source-scope-v41.json` proves that all
+  other application source, including musical selection/intent/retrieval/chat,
+  is identical to the evaluated build. The remaining full-pool gate stays open;
+  neither an inferred identity nor a compilation of uncertain type was used to
+  fill it. No three-night observation is claimed under the user's amendment.
