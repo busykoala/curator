@@ -90,3 +90,34 @@ export function groundFavouritesScope(intent:PlaylistIntent,userDirections:strin
   }
   const changed=intent.hard.favouritesOnly!==explicit;intent.hard.favouritesOnly=explicit;return changed;
 }
+
+// Piano is an instrument; piano_solo additionally forbids an ensemble. Do not
+// let a generated style token introduce that unrequested factual restriction.
+// Configured/saved rules and an actual solo direction remain strict.
+export function groundPianoPresence(intent:PlaylistIntent,userDirections:string[],preserved:SemanticRequirement[]){
+  const directions=userDirections.map(text),protectedRules=new Set(preserved.map(rule=>JSON.stringify(rule)));
+  if(!directions.some(direction=>/\b(?:piano|klavier)\b/u.test(direction)))return false;
+  if(directions.some(direction=>/\b(?:solo[ -]+(?:piano|klavier)|(?:piano|klavier)[ -]+solo|unaccompanied\s+piano|piano\s+alone|unbegleitet\w*\s+klavier)\b/u.test(direction)))return false;
+  let changed=false;
+  intent.hard.requirements=intent.hard.requirements.flatMap(rule=>{
+    if(rule.field!=='style'||rule.match==='none'||protectedRules.has(JSON.stringify(rule))||!rule.values.includes('piano_solo')||rule.match==='any'&&rule.values.length>1)return[rule];
+    changed=true;const values=rule.values.filter(value=>value!=='piano_solo');return values.length?[{...rule,values}]:[];
+  });
+  if(changed){
+    if(!intent.hard.requirements.some(rule=>rule.field==='instrumentation'&&rule.match!=='none'&&rule.values.includes('piano')&&(rule.match==='all'||rule.values.length===1)))intent.hard.requirements.push({field:'instrumentation',values:['piano'],match:'all'});
+    intent.soft.styles=intent.soft.styles.filter(value=>value!=='piano_solo');
+  }
+  return changed;
+}
+
+// A selection's mere presence is not an instruction to pin it. This guard
+// rejects newly invented retention when no real user ever requested it;
+// existing saved anchors remain protected independently.
+export function groundRetentionRequest(intent:PlaylistIntent,userDirections:string[],preserved:Pick<PlaylistIntent,'pinnedRecordings'|'positionLocks'>){
+  if(userDirections.some(direction=>/\b(?:keep|retain|preserve|pin|lock|leave|behalt\w*|beibehalt\w*|festhalt\w*|fixier\w*|conserv\w*|gard\w*)\b/iu.test(direction)))return false;
+  const pins=new Set(preserved.pinnedRecordings.map(pin=>pin.fileId)),positions=new Set(preserved.positionLocks.map(lock=>lock.fileId+':'+lock.position));
+  const changed=intent.pinnedRecordings.some(pin=>!pins.has(pin.fileId))||intent.positionLocks.some(lock=>!positions.has(lock.fileId+':'+lock.position));
+  intent.pinnedRecordings=intent.pinnedRecordings.filter(pin=>pins.has(pin.fileId));
+  intent.positionLocks=intent.positionLocks.filter(lock=>positions.has(lock.fileId+':'+lock.position));
+  return changed;
+}

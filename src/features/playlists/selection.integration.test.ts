@@ -95,6 +95,17 @@ test('a colloquial forgotten-favourites direction cannot hide previously enjoyed
   track.listener={...track.listener!,playCount:8,hasPlayed:true,favourite:false,lastPlayed:new Date(Date.now()-60*86400_000).toISOString()};
   assert.equal(compiled.intent.hard.favouritesOnly,false);assert.equal(assessCandidate(track,p,compiled.intent,snapshot).eligible,true);
 });
+test('a piano-jazz correction admits an ensemble while enforcing piano, vocals and electronic exclusions',async()=>{
+  const p=createPlaylist({name:'Piano ensemble correction',category:'chat',ownerUserId:user.id,config:{targetTracks:1}}),snapshot=await(await import('./listening-snapshot')).listenerMusicSnapshot(user.id),track=loadEvidencedCandidates(p,snapshot)[0];
+  const chat={...chatState(p.id),messages:[{role:'user' as const,content:'Make every song instrumental piano jazz. No singing, spoken word or electronic music.'}]};
+  const client={async structured<T>(){const value=configuredIntent(p,'ignored');value.hard.vocal='instrumental';value.hard.requirements=[{field:'genre',values:['jazz'],match:'all'},{field:'style',values:['piano_solo'],match:'all'},{field:'genre',values:['electronic'],match:'none'}];return{data:{...value,pinFileIds:[track.fileId],positionLocks:[{fileId:track.fileId,position:0}],conflicts:[]} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}}}};
+  const compiled=await compilePlaylistIntent(p,[track],{client,chat,interactive:true});assert.equal(compiled.detail.groundedPianoPresence,true);assert.equal(compiled.detail.groundedRetention,true);assert.deepEqual(compiled.intent.pinnedRecordings,[]);assert.deepEqual(compiled.intent.positionLocks,[]);
+  track.evidence.fields.genre={value:['jazz'],source:'model_inference',scope:'recording',confidence:'low',references:[]};track.evidence.fields.style={value:['bebop'],source:'model_inference',scope:'recording',confidence:'low',references:[]};track.evidence.fields.instrumentation={value:['piano','double_bass','drums'],source:'model_inference',scope:'recording',confidence:'low',references:[]};
+  assert.equal(assessCandidate(track,p,compiled.intent,snapshot).eligible,true);
+  track.evidence.fields.instrumentation.value=['guitar','drums'];assert.equal(assessCandidate(track,p,compiled.intent,snapshot).eligible,false);
+  track.evidence.fields.instrumentation.value=['piano'];track.evidence.fields.vocalProfile.value=['spoken'];assert.equal(assessCandidate(track,p,compiled.intent,snapshot).eligible,false);
+  track.evidence.fields.vocalProfile.value=['instrumental'];track.evidence.fields.genre.value=['jazz','electronic'];assert.equal(assessCandidate(track,p,compiled.intent,snapshot).eligible,false);
+});
 test('a shortage preview cannot replace the previous mix',async()=>{
   database.prepare("UPDATE smart_playlists SET config_json=json_set(config_json,'$.targetTracks',10) WHERE id=?").run(foreign.id);
   const preview=await generatePlaylist(foreign.id,true);assert.equal(preview.items.length,3);

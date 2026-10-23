@@ -722,3 +722,17 @@ changes in the infrastructure repository. Update this record at each handoff.
   submissions, regeneration before any native write, preservation of uncertain
   and verified checkpoints, and preview-save auth failures. The content replay
   and its frozen inputs remain unchanged and are passing so far.
+
+- The v10 hard chat correction exposed another actual false shortage in all
+  three repetitions: “instrumental piano jazz” became `style=piano_solo`,
+  admitting only two recordings despite 100 independently eligible examples.
+  The model also invented retention anchors without a real keep request.
+  Compiler v15 maps that unsupported solo restriction to mandatory piano
+  instrumentation while preserving configured/saved rules and explicit solo
+  directions; new anchors need retention language in real user directions.
+  Ensemble/absent-piano/vocal/electronic integration coverage and explicit
+  solo/saved-rule regressions pass. Full validation: 325/325 tests and the
+  production/four-worker build; standalone TypeScript and a fresh complete
+  content replay follow. The unchanged v10 replay continues as failed evidence.
+  The verified f7820dc image and server ffc9858 pin are therefore superseded
+  candidates, not authorized deployment results. Production remains unchanged.

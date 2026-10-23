@@ -7,7 +7,7 @@ import {CuratorAiClient,aiModel} from '../src/features/ai/client';
 import {InferenceYieldError} from '../src/features/ai/scheduler';
 import {createPlaylist} from '../src/features/playlists/repository';
 import {generateIntentSelection,loadEvidencedCandidates} from '../src/features/playlists/selection-repository';
-import {listenerMusicSnapshot} from '../src/features/playlists/listening-snapshot';
+import {listenerMusicSnapshot,type ListenerSnapshot} from '../src/features/playlists/listening-snapshot';
 import {playlistIntentCases} from '../src/features/playlists/evaluation-cases';
 import {defaultConfig,type PlaylistDefinition} from '../src/features/playlists/types';
 import {scenarioViolations,independentEligibleCount} from '../src/features/playlists/evaluation-oracle';
@@ -43,7 +43,15 @@ async function main(){
   // These are copy-only controls. No worker process runs against this file.
   stateSet('playlist_refresh_mode','enabled');stateSet('paused','false');
   database.exec("DELETE FROM playlist_chat_jobs WHERE status IN ('queued','running');DELETE FROM playlist_inference_queue;DELETE FROM playlist_inference_slot");
-  const snapshot=await listenerMusicSnapshot(owner.id);
+  const listenerReplay=process.env.PLAYLIST_EVAL_LISTENER_REPLAY;
+  let snapshot:ListenerSnapshot;
+  if(listenerReplay){
+    const prior=JSON.parse(readFileSync(listenerReplay,'utf8'));
+    const stored=database.prepare('SELECT songs_json,complete,identity_version FROM listener_music_snapshots WHERE owner_user_id=?').get(owner.id) as {songs_json:string;complete:number;identity_version:number}|undefined;
+    if(prior.fixtureHash!==baseline.fixtureHash||prior.listener.ownerId!==owner.id||!prior.listener.complete||!stored?.complete||stored.identity_version!==3||createHash('sha256').update(stored.songs_json).digest('hex')!==prior.listener.hash)throw Error('Frozen listening replay does not match the original owner, fixture and exact native snapshot');
+    snapshot={songs:JSON.parse(stored.songs_json),complete:true,stale:false,capturedAt:prior.listener.capturedAt,error:'',available:true};
+    if(snapshot.songs.length!==prior.listener.songs)throw Error('Frozen listening replay count differs');
+  }else snapshot=await listenerMusicSnapshot(owner.id);
   if(!snapshot.complete||snapshot.stale)throw Error('A complete valid listener snapshot is required for this evaluation');
   const source=new Database('/app/data/curator.sqlite',{readonly:true,fileMustExist:true});
   const client=new CuratorAiClient({apiKey:config.CURATOR_AI_API_KEY,baseURL:config.CURATOR_AI_BASE_URL,model:aiModel,
@@ -59,7 +67,7 @@ async function main(){
   if(!scenarios.length)throw Error('No evaluation scenarios selected');
   const repeats=Math.min(3,Math.max(1,Number(process.env.PLAYLIST_EVAL_REPEATS??3))),output=process.env.PLAYLIST_EVAL_OUTPUT??'/tmp/curator-renewal-eval-code/results';mkdirSync(output,{recursive:true});
   const report:{at:string;scope:string;fixtureHash:string;listener:Record<string,unknown>;runs:Array<Record<string,unknown>>;summary?:Record<string,unknown>}={at:new Date().toISOString(),scope:'Read-only production inputs; temporary database copy only; no publication/acquisition. Initial, real chat correction and saved-intent nightly stages.',fixtureHash:baseline.fixtureHash,
-    listener:{ownerId:owner.id,complete:snapshot.complete,capturedAt:snapshot.capturedAt,songs:snapshot.songs.length,hash:createHash('sha256').update(JSON.stringify(snapshot.songs)).digest('hex')},runs:[]};
+    listener:{ownerId:owner.id,complete:snapshot.complete,capturedAt:snapshot.capturedAt,songs:snapshot.songs.length,hash:createHash('sha256').update(JSON.stringify(snapshot.songs)).digest('hex'),...(listenerReplay?{replayedFrom:listenerReplay,evidenceScope:'Frozen previously complete observed history; not a current production freshness claim'}:{})},runs:[]};
   const referenceDefinition=createPlaylist({name:'EVAL reference pool '+Date.now(),category:'depth',enabled:false,ownerUserId:owner.id,config:{...defaultConfig('depth'),targetTracks:12}});
   const referencePool=loadEvidencedCandidates(referenceDefinition,snapshot);
   const persistChat=(playlistId:number,message:string,result:ChatResult)=>{

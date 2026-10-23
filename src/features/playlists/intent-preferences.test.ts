@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {configuredIntent,canonicalIntent} from './intent-schema';import {defaultConfig,type PlaylistDefinition} from './types';
-import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion,groundFavouritesScope} from './intent-preferences';
+import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion,groundFavouritesScope,groundPianoPresence,groundRetentionRequest} from './intent-preferences';
 const base=()=>configuredIntent({config:defaultConfig('mood'),intent:''} as PlaylistDefinition,'revision');
 test('ordinary mood/context preferences cannot become mandatory all-term filters',()=>{
   const intent=base();intent.hard.requirements=[{field:'genre',values:['trip_hop'],match:'all'},{field:'mood',values:['dark','atmospheric'],match:'all'},{field:'listeningContexts',values:['late_night'],match:'all'},{field:'mood',values:['aggressive'],match:'none'}];
@@ -94,4 +94,27 @@ test('favourite scope preserves saved hard choices and respects explicit later b
   groundFavouritesScope(intent,['Only my favourites.','Not only favourites; include played tracks too.'],base().hard);assert.equal(intent.hard.favouritesOnly,false);
   groundFavouritesScope(intent,['Only my favourites.','Include unstarred tracks too.'],base().hard);assert.equal(intent.hard.favouritesOnly,false);
   groundFavouritesScope(intent,['Only my favourites.','Make the mood warmer.'],base().hard);assert.equal(intent.hard.favouritesOnly,true);
+});
+test('piano presence does not invent an unaccompanied performance requirement',()=>{
+  const intent=base();intent.hard.vocal='instrumental';intent.hard.requirements=[{field:'genre',values:['jazz'],match:'all'},{field:'style',values:['piano_solo'],match:'all'},{field:'genre',values:['electronic'],match:'none'}];intent.soft.styles=['jazz','piano_solo'];
+  assert.equal(groundPianoPresence(intent,['Make every song instrumental piano jazz. No electronic music.'],[]),true);
+  assert.deepEqual(intent.hard.requirements,[{field:'genre',values:['jazz'],match:'all'},{field:'genre',values:['electronic'],match:'none'},{field:'instrumentation',values:['piano'],match:'all'}]);
+  assert.equal(intent.hard.vocal,'instrumental');assert.deepEqual(intent.soft.styles,['jazz']);
+  assert.equal(groundPianoPresence(intent,['Instrumental piano jazz.'],[]),false);
+});
+test('explicit solo, saved rules, exclusions and mixed alternatives remain intact',()=>{
+  for(const direction of ['Solo piano jazz.','Unaccompanied piano.','Piano alone.','Nur Klavier solo.']){
+    const intent=base();intent.hard.requirements=[{field:'style',values:['piano_solo'],match:'all'}];assert.equal(groundPianoPresence(intent,[direction],[]),false);assert.equal(intent.hard.requirements[0].values[0],'piano_solo');
+  }
+  for(const rule of [{field:'style',values:['piano_solo'],match:'none'},{field:'style',values:['piano_solo','guitar_rock'],match:'any'}] as const){
+    const intent=base();intent.hard.requirements=[{...rule,values:[...rule.values]}];assert.equal(groundPianoPresence(intent,['Piano jazz.'],[]),false);
+  }
+  const intent=base();intent.hard.requirements=[{field:'style',values:['piano_solo'],match:'all'}];assert.equal(groundPianoPresence(intent,['Piano jazz.'],intent.hard.requirements),false);
+});
+test('a correction without a real retention request cannot create new pins or positions',()=>{
+  const intent=base(),saved={pinnedRecordings:[{fileId:1,recordingKey:'one'}],positionLocks:[{fileId:1,position:0}]};
+  intent.pinnedRecordings=[...saved.pinnedRecordings,{fileId:2,recordingKey:'two'}];intent.positionLocks=[...saved.positionLocks,{fileId:2,position:1}];
+  assert.equal(groundRetentionRequest(intent,['Relaxed jazz.','Make every song instrumental piano jazz.'],saved),true);
+  assert.deepEqual(intent.pinnedRecordings,saved.pinnedRecordings);assert.deepEqual(intent.positionLocks,saved.positionLocks);
+  for(const direction of ['Keep the first two.','Bitte die ersten beiden behalten.'])assert.equal(groundRetentionRequest(intent,[direction],saved),false);
 });
