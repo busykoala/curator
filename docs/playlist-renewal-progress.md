@@ -576,3 +576,18 @@ changes in the infrastructure repository. Update this record at each handoff.
   are running. v21: 289/289 tests, TypeScript and production/worker build passed.
   Production is unchanged; prepared infrastructure pins must follow this next
   evaluated build rather than the earlier cc6da9c image.
+- The corrected original jazz sequence passes all fourteen nights with the
+  independent expectation unchanged (`evaluation/simulation-jazz-corrected.json`).
+  Full replay v5 is passing so far; the final simulation watches the same fixed
+  replay and now has 42 completed nights without violations. Final model/rubric
+  gates and real production nights remain outstanding.
+- A UI check found listening freshness was only exposed in the run detail. Added
+  owner-scoped saved-history status/date to playlist responses and a concise
+  conditional note shared by ordinary/chat views. Fresh publication clears the
+  stale label; another owner's state cannot leak. This does not change selection
+  inputs or logic. v22: 290/290 tests, TypeScript and production/worker build pass;
+  the isolated browser audit also passes with a new mobile stale-history capture.
+- Added a rollout runbook. Deployment remains pending. The isolated runtime
+  operator refuses mutations without explicit apply, the expected previous mode
+  and schema 27; its status mode verified actual production is still schema 12,
+  flag off, unpaused, with the original 13 enabled playlists.

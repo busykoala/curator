@@ -48,4 +48,11 @@ test('a new queued night keeps the previous failure visible until a successful r
   assert.equal(getPlaylist(p.id)!.refreshStatus,'queued');assert.equal(getPlaylist(p.id)!.refreshError,'Native service unavailable');
   const job=claimRefreshJob()!;finishRefreshJob(job,{published:true});assert.equal(getPlaylist(p.id)!.refreshError,'');
 });
+test('saved listening-history freshness is owner-scoped and clears after a current publication',()=>{
+  const insert=database.prepare("INSERT INTO playlist_runs(playlist_id,owner_user_id,config_hash,status,preview,detail_json,finished_at) VALUES(?,?,'fixture','complete',0,?,CURRENT_TIMESTAMP)");
+  const stale=JSON.stringify({listener:{complete:true,stale:true,capturedAt:'2026-10-20T12:00:00.000Z'}});
+  insert.run(other.id,2,stale);assert.equal(getPlaylist(p.id)!.listeningHistoryStatus,null);
+  insert.run(p.id,1,stale);assert.equal(getPlaylist(p.id)!.listeningHistoryStatus,'stale');assert.equal(getPlaylist(p.id)!.listeningHistoryCapturedAt,'2026-10-20T12:00:00.000Z');
+  insert.run(p.id,1,JSON.stringify({listener:{complete:true,stale:false,capturedAt:'2026-10-23T12:00:00.000Z'}}));assert.equal(getPlaylist(p.id)!.listeningHistoryStatus,'current');
+});
 test.after(()=>{database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});

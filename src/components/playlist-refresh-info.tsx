@@ -21,6 +21,8 @@ export function PlaylistRefreshInfo({playlist,changed}:{playlist:PlaylistDefinit
       {playlist.nextRefresh?` · Next ${when(playlist.nextRefresh)}`:!playlist.enabled?' · Nightly refresh off':''}
     </p>
     {Boolean(playlist.pendingDiscoveries)&&<p className="muted small">Waiting for {playlist.pendingDiscoveries} researched {playlist.pendingDiscoveries===1?'album':'albums'}. Your available music can still refresh.</p>}
+    {playlist.listeningHistoryStatus==='stale'&&<p className="muted small">Using saved listening history{playlist.listeningHistoryCapturedAt?` from ${when(playlist.listeningHistoryCapturedAt)}`:''}. Recent plays and favourites may be missing.</p>}
+    {playlist.listeningHistoryStatus==='unavailable'&&<p className="muted small">Listening history is unavailable. Unheard music cannot be confirmed.</p>}
     {retry&&<button className="text-button" disabled={busy} onClick={()=>void refresh()}>{busy?'Queuing…':'Retry refresh now'}</button>}
     {playlist.refreshStatus==='auth_required'&&playlist.refreshAuthService!=='inference'&&<Link className="text-link" href="/login">Sign in again</Link>}
     {error&&<p role="alert">{error}</p>}

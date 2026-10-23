@@ -50,8 +50,11 @@ async function main(){
     await page.goto(base+'/playlists/'+chat.id);await page.getByRole('link',{name:'Refresh settings'}).click();await page.getByText('Fine-tune the mix',{exact:false}).click();
     assert.equal(await page.getByRole('combobox',{name:'Mood filters'}).count(),0);await page.getByRole('slider',{name:'Refresh variation'}).waitFor();await page.screenshot({path:output+'/mobile-chat-settings.png',fullPage:true});
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile settings must not overflow');
+    database.prepare("UPDATE playlist_runs SET detail_json=json_set(detail_json,'$.listener',json(?)) WHERE id=?").run(JSON.stringify({complete:true,stale:true,capturedAt:'2026-10-20T12:00:00.000Z'}),run.id);
+    await page.goto(base+'/playlists/'+mood.id);await page.getByText(/Using saved listening history from/).waitFor();await page.getByText(/Recent plays and favourites may be missing/).waitFor();
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Stale-history note must not overflow');await page.screenshot({path:output+'/mobile-stale-history.png',fullPage:true});
     await page.setViewportSize({width:1440,height:1000});await page.goto(base+'/playlists');await page.getByRole('heading',{name:'Playlists',exact:true}).waitFor();assert.equal(await page.getByText(foreign.name).count(),0);await page.screenshot({path:output+'/desktop-list.png',fullPage:true});
-    assert.deepEqual(errors,[]);writeFileSync(output+'/report.json',JSON.stringify({at:new Date().toISOString(),scope:'Local isolated UI fixtures; no workers or production writes',checks:{mobileDetail:true,evidenceExpanded:true,backgroundRefreshQueued:true,ownerIsolation:true,discoveryDismissal:true,chatSettings:true,noOverflow:true,noPageErrors:true}},null,2));
+    assert.deepEqual(errors,[]);writeFileSync(output+'/report.json',JSON.stringify({at:new Date().toISOString(),scope:'Local isolated UI fixtures; no workers or production writes',checks:{mobileDetail:true,evidenceExpanded:true,backgroundRefreshQueued:true,ownerIsolation:true,discoveryDismissal:true,chatSettings:true,staleHistoryLabel:true,noOverflow:true,noPageErrors:true}},null,2));
     console.log('Playlist renewal UI audit passed: '+output+'/report.json');
   }finally{
     await browser?.close();server.kill('SIGTERM');await Promise.race([new Promise(resolve=>server.once('exit',resolve)),delay(3000)]);log.close();database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true});
