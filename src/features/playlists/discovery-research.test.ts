@@ -74,6 +74,17 @@ test('a growing but underfilled healthy pool replenishes promptly instead of wai
   assert.ok(next>=before+15*60_000&&next<=Date.now()+17*60_000);
   assert.equal(JSON.parse(stateGet(`playlist_research_outcome:${p.id}`)).availability,'available');
 });
+test('an outage early in a longer cycle remains visible after its cooldown expires',async()=>{
+  const before=Date.now();await researchDiscoveryPools([{name:'partial',load:async()=>{
+    database.prepare("INSERT INTO playlist_source_requests(provider,kind,created_at,status,detail) VALUES('musicbrainz','identity',?,'failed','503 during this cycle')").run(Date.now());
+    stateSet('playlist_source_error:musicbrainz','503 during this cycle');stateSet('playlist_source_cooldown:musicbrainz',String(Date.now()-1));
+    return[];
+  }}]);
+  const outcome=JSON.parse(stateGet(`playlist_research_outcome:${p.id}`));
+  assert.equal(outcome.availability,'source_deferred');assert.deepEqual(outcome.deferredSources,[]);
+  assert.equal(outcome.requestFailures[0].provider,'musicbrainz');
+  assert.ok(Number(stateGet(`playlist_research_next:${p.id}`))>=before+15*60_000&&Number(stateGet(`playlist_research_next:${p.id}`))<=Date.now()+17*60_000);
+});
 test('an exhausted global request budget defers underfilled research to the next UTC budget day',async()=>{
   database.exec("DELETE FROM playlist_source_requests");
   const now=Date.now(),day=new Date(now).setUTCHours(0,0,0,0);

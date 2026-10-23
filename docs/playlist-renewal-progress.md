@@ -918,3 +918,15 @@ The original goal is preserved without rewriting its historical requirements.
   cannot safely replace canonical compilation/edition checks during outages.
   No recommendation was admitted from this probe, no credentials were required,
   and no identity or musical-fit requirement was weakened.
+- Build `9435d1c` deployed successfully as Helm revision 92; exact-commit CI and
+  container publication pass. Authenticated fresh schema-27 backup verifies
+  before deployment, and the manifest comparison permits only the Curator and
+  backup images. All thirteen native playlists, four workers and chart tests
+  pass afterward. A real research request reports `source_deferred`, retains
+  the MusicBrainz 503/Retry-After and becomes due again in 15.35 minutes.
+- Added a final edge regression: an outage early in a longer research cycle
+  must remain visible even if its short cooldown expires before the cycle ends.
+  The controller also records the current cycle's bounded failed-request
+  receipts, rather than considering only still-active cooldowns. No identity,
+  relevance, acquisition, inference or publication policy changes. This final
+  safeguard requires a new exact-build deployment; revision 92 remains healthy.

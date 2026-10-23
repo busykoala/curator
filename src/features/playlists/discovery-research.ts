@@ -67,9 +67,10 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
     WHERE e.key LIKE 'playlist_source_error:%' AND e.value<>'' AND CAST(c.value AS INTEGER)>?`).all(finished) as Array<{key:string;error:string;retry_at:string}>)
     .map(row=>({provider:row.key.slice('playlist_source_error:'.length),error:row.error,retryAt:new Date(Number(row.retry_at)).toISOString()}));
   const utcDay=new Date(finished).setUTCHours(0,0,0,0);
+  const requestFailures=db().prepare("SELECT provider,detail,created_at FROM playlist_source_requests WHERE status='failed' AND created_at>=? ORDER BY id DESC LIMIT 20").all(began) as Array<{provider:string;detail:string;created_at:number}>;
   const requests=(db().prepare('SELECT count(*) n FROM playlist_source_requests WHERE created_at>=?').get(utcDay) as {n:number}).n;
   const budgetDeferred=underfilled&&requests>=100;
-  const sourceDeferred=underfilled&&(deferredSources.length>0||outcomes.some(outcome=>outcome.error));
+  const sourceDeferred=underfilled&&(deferredSources.length>0||requestFailures.length>0||outcomes.some(outcome=>outcome.error));
   const nextResearch=budgetDeferred?utcDay+86400_000+jitter%120_000:
     underfilled&&(sourceDeferred||researched>0)?finished+15*60_000+jitter%120_000:now.getTime()+2*3600_000+jitter;
   stateSet(`playlist_research_next:${playlist.id}`,String(nextResearch));
@@ -77,7 +78,7 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
   stateSet('playlist_research_cursor',String((cursor+1)%playlists.length));
   stateSet(`playlist_research_outcome:${playlist.id}`,JSON.stringify({at:now.toISOString(),recent,outcomes,
     availability:budgetDeferred?'budget_deferred':sourceDeferred?'source_deferred':researched?'available':'no_new_matches',
-    deferredSources,nextResearchAt:new Date(nextResearch).toISOString()}));
+    deferredSources,requestFailures,nextResearchAt:new Date(nextResearch).toISOString()}));
   return{researched,queued:0};
 }
 let maintenanceRunning=false;
