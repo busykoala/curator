@@ -23,6 +23,13 @@ test('sufficiency counts verified duplicate copies as one recording',()=>{
   const one=track(1,{genre:['rock']}),copy={...track(2,{genre:['rock']}),recordingGroupKey:one.evidence.recordingKey};
   assert.equal(independentEligibleCount('depth-rock',[one,copy]),1);
 });
+test('the independent broad-electronic reference recognises explicit substyles across primary tags',()=>{
+  for(const[genre,style]of [['hip_hop','trip_hop'],['ambient','downtempo'],['pop','synthpop']]){
+    assert.deepEqual(scenarioViolations('discovery-unicode',[track(1,{genre:[genre],style:[style],recordingTypes:['studio_recording']})]),[]);
+  }
+  for(const profile of [{genre:['ambient']},{genre:['rock'],instrumentation:['electric_guitar']},{genre:['rnb_soul_funk'],style:['new_jack_swing']}])
+    assert.ok(scenarioViolations('discovery-unicode',[track(1,profile)]).includes('Expected jazz or electronic direction'));
+});
 test('German correction retains only compatible instrumental position locks and permits quiet live music',()=>{
   const quietLive=track(1,{recordingTypes:['live_recording'],energy:'low',vocalProfile:['instrumental']}),sung=track(2,{vocalProfile:['clean_sung']});
   assert.deepEqual(scenarioViolations('chat-german',[quietLive]),[]);

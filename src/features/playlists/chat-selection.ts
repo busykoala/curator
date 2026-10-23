@@ -22,6 +22,6 @@ export async function suggestIntentChatPlaylist(definition:PlaylistDefinition,st
   const unavailable=generated.detail.trackRequests.unavailable;
   if(unavailable.length)reply+=` Could not match under the saved requirements: ${unavailable.slice(0,3).map(name=>name.slice(0,140)).join('; ')}${unavailable.length>3?`; and ${unavailable.length-3} more`:''}.`;
   const result:ChatResult={name:definition.name,reply,guidance:generated.intent.summary,items:generated.items.map(item=>({...item,retained:Boolean(item.retained)})),
-    detail:{tracks:generated.items.length,pending:generated.evaluation.shortage,durationMs:generated.detail.latencyMs,usage,tools:[],intent:generated.intent}};
+    detail:{tracks:generated.items.length,pending:generated.evaluation.shortage,durationMs:generated.detail.latencyMs,usage,tools:[],intent:generated.intent,selection:generated.detail}};
   return{result,generated};
 }

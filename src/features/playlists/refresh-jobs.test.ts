@@ -67,6 +67,13 @@ test('an inference authentication failure waits for model credentials, not an un
   const previous=config.CURATOR_AI_API_KEY;config.CURATOR_AI_API_KEY=previous+'-renewed';
   try{assert.equal(claimRefreshJob(now+2000)?.id,job.id)}finally{config.CURATOR_AI_API_KEY=previous}
 });
+test('a native credential renewal in the same second wakes its owner’s authentication wait',()=>{
+  scheduleRefreshJobs(at);const now=at.getTime(),job=claimRefreshJob(now)!;
+  finishRefreshJob(job,{},'Playlist owner must sign in to Navidrome again',now);
+  assert.equal(claimRefreshJob(now+100),null);
+  database.prepare("UPDATE curator_users SET token_status='active',last_seen_at=?,token_ciphertext='renewed-token-fixture',token_iv='renewed-iv',token_tag='renewed-tag' WHERE id=1").run(at.toISOString().slice(0,19).replace('T',' '));
+  assert.equal(claimRefreshJob(now+200)?.id,job.id);
+});
 test('manual mutations and refresh share one lease; config edits fence the proposal',()=>{
   const manual=acquireChatLease(p.id);scheduleRefreshJobs(at);
   assert.equal(claimRefreshJob(),null);releaseChatLease(p.id,manual);

@@ -130,6 +130,11 @@ test('managed chat uses bounded retrieval and lets real corrections supersede ea
   const nightly=await generateIntentSelection(chat,{client,snapshot,provider});
   assert.deepEqual(nightly.intent.hard.artists,['Artist 2']);assert.equal(nightly.intent.hard.vocal,'instrumental');assert.equal(nightly.items[0].artist,'Artist 2');
   assert.equal(compileCalls,3);assert.equal(chatState(chat.id).messages.length,4);assert.equal(chatState(chat.id).messages[2].content,'Only Artist 2 instead');
+  const lease=acquireChatLease(chat.id);
+  try{storeRefreshedChatSelection(chat.id,lease,nightly.items,nightly.intent,nightly.detail)}finally{releaseChatLease(chat.id,lease)}
+  await generateIntentSelection(chat,{client,snapshot,provider});
+  assert.equal(compileCalls,3,'A nightly selection revision cannot invalidate unchanged conversation intent');
+  assert.ok(chatState(chat.id).result?.detail.selection,'The full nightly selection receipt is retained');
 });
 test('named-song interpretation requires a real user quote and may resolve an identity after compilation',async()=>{
   const chat=createPlaylist({name:'Named-song proof',category:'chat',ownerUserId:user.id,config:{targetTracks:2}});

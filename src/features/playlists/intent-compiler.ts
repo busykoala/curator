@@ -20,10 +20,10 @@ const compiledSchema=playlistIntentSchema.omit({version:true,sourceRevision:true
   mandatoryPreferences:z.array(z.object({field:z.enum(['mood','listeningContexts']),quote:z.string().min(1).max(300)})).max(10).default([]),
   replaceUnpinned:z.boolean().default(false),
 });
-export async function compilePlaylistIntent(definition:PlaylistDefinition,current:EvidencedCandidate[],options:{client?:Pick<CuratorAiClient,'structured'>;signal?:AbortSignal;force?:boolean;chat?:ChatIntentContext;interactive?:boolean;vocabulary?:Record<string,string[]>}={}):Promise<{intent:PlaylistIntent;detail:Record<string,unknown>}>{
+export async function compilePlaylistIntent(definition:PlaylistDefinition,current:EvidencedCandidate[],options:{client?:Pick<CuratorAiClient,'structured'>;signal?:AbortSignal;force?:boolean;chat?:ChatIntentContext;interactive?:boolean;priority?:'interactive'|'background';vocabulary?:Record<string,string[]>}={}):Promise<{intent:PlaylistIntent;detail:Record<string,unknown>}>{
   const chat=definition.category==='chat'?options.chat??chatState(definition.id):null;
   const revision=playlistRevisionHash(definition);
-  const sourceHash=createHash('sha256').update(JSON.stringify({compilerVersion,revision,chatRevision:chat?.revision,conversation:chat?.messages.filter(message=>message.role==='user'),interactive:Boolean(options.interactive),model:aiModel})).digest('hex');
+  const sourceHash=createHash('sha256').update(JSON.stringify({compilerVersion,revision,conversation:chat?.messages.filter(message=>message.role==='user'),interactive:Boolean(options.interactive),model:aiModel})).digest('hex');
   const cached=db().prepare('SELECT intent_json,detail_json FROM playlist_intents WHERE playlist_id=? AND source_hash=?').get(definition.id,sourceHash) as {intent_json:string;detail_json:string}|undefined;
   if(cached&&!options.force)return{intent:canonicalIntent(JSON.parse(cached.intent_json)),detail:{...JSON.parse(cached.detail_json),cached:true}};
   const base=configuredIntent(definition,revision),started=Date.now();
@@ -66,7 +66,7 @@ ${canonicalPrompt}`,
         conversation:chat?.messages.filter(message=>message.role==='user').slice(-16),
         current:current.map(track=>({fileId:track.fileId,title:track.title,artist:track.artist,vocalProfile:track.evidence.fields.vocalProfile?.value})),
       }),
-      schemaName:'playlist_intent',schema:z.toJSONSchema(compiledSchema),maxOutputTokens:3500,signal:options.signal??AbortSignal.timeout(90_000),priority:options.interactive?'interactive':'background',onAttempt:playlistAttemptRecorder(definition,'intent'),
+      schemaName:'playlist_intent',schema:z.toJSONSchema(compiledSchema),maxOutputTokens:3500,signal:options.signal??AbortSignal.timeout(90_000),priority:options.priority??(options.interactive?'interactive':'background'),onAttempt:playlistAttemptRecorder(definition,'intent'),
     });
     recordAiUsage('playlist_intent',aiModel,output);
     const compiled=compiledSchema.parse(output.data);

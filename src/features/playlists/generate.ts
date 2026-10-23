@@ -17,9 +17,12 @@ import { getPlaylist, markRun, setNavidromeId } from "./repository";
 import { sequenceJourney } from "./sequence";
 import {playlistRevisionHash} from './refresh-policy';
 import {playlistRefreshMode,refreshManaged} from './refresh-jobs';
-import {generateIntentSelection,recordPlaylistExposure,loadEvidencedCandidates,previewEvaluation} from './selection-repository';
+import {generateIntentSelection,recordPlaylistExposure,loadEvidencedCandidates,previewEvaluation,previousSelectionIds} from './selection-repository';
 import {listenerMusicSnapshot} from './listening-snapshot';
-import {playlistIntentSchema,type PlaylistIntent} from './intent-schema';
+import {canonicalIntent,configuredIntent,playlistIntentSchema,type PlaylistIntent} from './intent-schema';
+import {compilePlaylistIntent} from './intent-compiler';
+import {assessCandidate} from './selection-policy';
+import {selectionRecordingKey} from './recording-groups';
 import {assertIntentPublication} from './selection-validation';
 import {storeRefreshedChatSelection} from './chat-state';
 import type { PlaylistCandidate, PlaylistDefinition } from "./types";
@@ -296,15 +299,42 @@ async function generatePlaylistRun(
           "Some selected songs are unavailable or excluded. Ask the chat to replace them first.",
         );
     }
+    let chatPublicationReceipt:Record<string,unknown>|undefined,upgradedChatIntent:PlaylistIntent|undefined;
+    if(definition.category==='chat'&&!selection){
+      const saved=chatState(id),savedIntent=saved.result?.detail.intent;
+      if(savedIntent||refreshManaged(id)){
+        const snapshot=await listenerMusicSnapshot(definition.ownerUserId);
+        if(!snapshot.available||/must sign in|\b401\b/i.test(snapshot.error))throw Error(snapshot.error||'A valid listening snapshot is not available yet');
+        const pool=loadEvidencedCandidates(definition,snapshot),byId=new Map(pool.map(track=>[track.fileId,track]));
+        const interpreted=savedIntent??(await compilePlaylistIntent(definition,items.flatMap(item=>byId.has(item.fileId)?[byId.get(item.fileId)!]:[]),{chat:saved,priority:'interactive'})).intent;
+        if(!savedIntent)upgradedChatIntent=interpreted;
+        const configured=canonicalIntent(configuredIntent(definition,configHash));
+        const intent=canonicalIntent({...interpreted,sourceRevision:configHash,hard:{...interpreted.hard,
+          requirements:[...configured.hard.requirements,...interpreted.hard.requirements],exclusions:[...new Set([...configured.hard.exclusions,...interpreted.hard.exclusions])]}});
+        // Validate the exact saved ordering; publishing is never another song
+        // selection. A short preview remains honest and cannot be published.
+        assertIntentPublication(preview?{...definition,config:{...definition.config,targetTracks:items.length}}:definition,intent,items,pool,snapshot);
+        const previous=new Set(previousSelectionIds(id).flatMap(fileId=>byId.has(fileId)?[selectionRecordingKey(byId.get(fileId)!)]:[]));
+        items=items.map(item=>({...item,retained:previous.has(selectionRecordingKey(byId.get(item.fileId)!))}));
+        const current=items.map(item=>byId.get(item.fileId)!),assessments=current.map(track=>assessCandidate(track,definition,intent,snapshot));
+        const original=saved.result?.detail.selection??{},generationEvaluation=original.evaluation as Record<string,unknown>|undefined;
+        const valid=(fileId:number)=>{const track=byId.get(fileId);return Boolean(track&&assessCandidate(track,definition,intent,snapshot).eligible)};
+        chatPublicationReceipt={...original,selectionVersion:1,chatRevision:saved.revision,resolvedIntent:intent,generationEvaluation,
+          protectedSelection:{pins:intent.pinnedRecordings.filter(pin=>valid(pin.fileId)),positions:intent.positionLocks.filter(lock=>valid(lock.fileId))},
+          evaluation:{...generationEvaluation,eligible:generationEvaluation?.eligible??current.length,eligibilityScope:generationEvaluation?'generation-pool':'validated-selection',
+            selected:items.length,requested:definition.config.targetTracks,changed:items.filter(item=>!item.retained).length,retained:items.filter(item=>item.retained).length,
+            artistDiversity:new Set(current.map(track=>norm(track.artist))).size,albumDiversity:new Set(current.map(track=>norm(track.artist)+'|'+norm(track.album))).size,
+            unheard:snapshot.complete&&!snapshot.stale?current.filter(track=>track.listener&&!track.listener.hasPlayed&&!track.listener.playCount&&!track.listener.favourite).length:null,
+            uncertainty:[...new Set(assessments.flatMap(assessment=>assessment.uncertainty))],relaxations:generationEvaluation?.relaxations??[],
+            shortage:Math.max(0,definition.config.targetTracks-items.length),violations:items.length>definition.config.targetTracks?['Saved selection exceeds the requested song count']:[]},
+          listener:{complete:snapshot.complete,stale:snapshot.stale,capturedAt:snapshot.capturedAt,error:snapshot.error}};
+        if(upgradedChatIntent)upgradedChatIntent=intent;
+      }
+    }
     let navidromeId = definition.navidromePlaylistId;
     let songIds = new Map<number, string>(selection?.items.map(item=>[item.fileId,item.songId]));
     if (!preview) {
       if(selection?.evaluation.violations.length)throw Error(selection.evaluation.violations.join('; '));
-      const savedIntent=definition.category==='chat'&&!selection?chatState(id).result?.detail.intent:undefined;
-      if(savedIntent){
-        const snapshot=await listenerMusicSnapshot(definition.ownerUserId),pool=loadEvidencedCandidates(definition,snapshot);
-        assertIntentPublication(definition,playlistIntentSchema.parse(savedIntent),items,pool,snapshot);
-      }
       const ignored = new Set<number>();
       for (
         let attempt = 0;
@@ -344,7 +374,7 @@ async function generatePlaylistRun(
       "INSERT INTO playlist_items(run_id,playlist_id,file_id,navidrome_song_id,position,score,origin,reason,retained) VALUES (?,?,?,?,?,?,?,?,?)",
     );
     const detail = {
-      ...(selection?.detail??{}),
+      ...(selection?.detail??chatPublicationReceipt??{}),
       tracks: items.length,
       retained: items.filter((item) => item.retained).length,
       pending: Math.max(0, definition.config.targetTracks - items.length),
@@ -366,7 +396,8 @@ async function generatePlaylistRun(
       );if(!preview){
         recordPlaylistExposure(definition,run.id,items);
         setNavidromeId(id,navidromeId!);markRun(id);
-        if(selection&&definition.category==='chat')storeRefreshedChatSelection(id,lease,items,selection.intent);
+        if(selection&&definition.category==='chat')storeRefreshedChatSelection(id,lease,items,selection.intent,selection.detail);
+        else if(upgradedChatIntent)storeRefreshedChatSelection(id,lease,items,upgradedChatIntent,chatPublicationReceipt);
       }
       db()
       .prepare(
@@ -558,7 +589,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
         ),
       );
       recordPlaylistExposure(definition,run.id,items);
-      if(JSON.parse(preview.detail_json).selectionVersion===1&&definition.category==='chat')storeRefreshedChatSelection(id,lease,items,previewIntent);
+      if(JSON.parse(preview.detail_json).selectionVersion===1&&definition.category==='chat')storeRefreshedChatSelection(id,lease,items,previewIntent,JSON.parse(preview.detail_json));
       setNavidromeId(id, synced.playlistId);
       markRun(id);
     }).immediate();

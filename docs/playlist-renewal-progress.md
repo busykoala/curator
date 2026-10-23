@@ -591,3 +591,23 @@ changes in the infrastructure repository. Update this record at each handoff.
   operator refuses mutations without explicit apply, the expected previous mode
   and schema 27; its status mode verified actual production is still schema 12,
   flag off, unpaused, with the original 13 enabled playlists.
+- Completed the final fixed 40-case live-model comparison: 38/40 (95%) versus
+  21/40 (52.5%) for the exact deployed selector, a 42.5-point improvement.
+  The two remaining failures retain honest uncertainty rather than weakening
+  factual requirements. Report: `evaluation/rubric-final-v5.json`.
+- Chat drafts and direct publication now retain complete selection receipts,
+  revalidate the current configuration, and measure changes against the actual
+  published mix. Legacy conversations are upgraded from their real saved turns;
+  short previews cannot silently publish. Nightly selection-only revisions reuse
+  compiled intent. Native authentication waits detect same-second credential
+  renewal using a sealed-credential fingerprint. Added seven regressions.
+- Preserved the v5 partial replay/simulation before correcting an independent
+  reference-check gap: explicit trip-hop, downtempo and synth-pop evidence can
+  support a broad Electronic direction, including mixed primary genres. Ambient
+  alone, amplified instruments and New Jack Swing remain insufficient. No
+  production selection rule or fixed musical-fit gold case changed for this fix.
+- Validation v26: 297/297 tests, TypeScript and full production/worker build
+  passed. Editorial extraction now records failed-call usage and latency too.
+  The complete final live replay is running from `final-v6` with a fresh, complete
+  owner snapshot; its matching fourteen-night simulation must finish before
+  deployment. No real new-pipeline production night has been observed yet.

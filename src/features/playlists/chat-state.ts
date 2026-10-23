@@ -4,7 +4,7 @@ import type { PlaylistCandidate } from "./types";
 import type { ChatMessage, suggestChatPlaylist } from "./chat-agent";
 import type {PlaylistIntent} from './intent-schema';
 type Suggestion=Awaited<ReturnType<typeof suggestChatPlaylist>>;
-export type ChatResult=Omit<Suggestion,"detail">&{detail:Omit<Suggestion["detail"],"requirements">&{requirements?:Suggestion["detail"]["requirements"];intent?:PlaylistIntent}};
+export type ChatResult=Omit<Suggestion,"detail">&{detail:Omit<Suggestion["detail"],"requirements">&{requirements?:Suggestion["detail"]["requirements"];intent?:PlaylistIntent;selection?:Record<string,unknown>}};
 type Row={revision:number;conversation_json:string;result_json:string};
 export function chatState(id:number){
   const row=db().prepare("SELECT revision,conversation_json,result_json FROM playlist_chat_state WHERE playlist_id=?").get(id) as Row|undefined;
@@ -37,7 +37,7 @@ export function currentChatItems(id:number):PlaylistCandidate[]{
 }
 // A nightly publication updates the visible selection, without inventing a
 // conversational turn or rewriting the listener's saved corrections.
-export function storeRefreshedChatSelection(id:number,lease:string,items:PlaylistCandidate[],intent?:PlaylistIntent){
+export function storeRefreshedChatSelection(id:number,lease:string,items:PlaylistCandidate[],intent?:PlaylistIntent,selection?:Record<string,unknown>){
   const state=chatState(id);if(!state.result)throw Error('The saved conversation intent is unavailable');
-  storeChatResult(id,lease,state.messages,{...state.result,items:items.map(item=>({...item,retained:Boolean(item.retained)})),detail:{...state.result.detail,tracks:items.length,pending:0,...(intent?{intent}: {})}});
+  storeChatResult(id,lease,state.messages,{...state.result,items:items.map(item=>({...item,retained:Boolean(item.retained)})),detail:{...state.result.detail,tracks:items.length,pending:0,...(intent?{intent}: {}),...(selection?{selection}:{})}});
 }
