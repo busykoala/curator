@@ -97,3 +97,10 @@ Wait between checks; never advance stored dates or replay simulated nights as
 production evidence. If dependencies fail, record availability/restoration times
 and confirm catch-up within 30 minutes. Do not clear errors or weaken constraints
 to make the report green. The goal stays active until all completion gates pass.
+
+The current rollout operator is also preserved at
+`/app/data/playlist-renewal-private/rollout-admin-current.mjs`. It schedules due
+work before requesting the canary refresh, so the request joins an already-due
+nightly job; if today was already published, it creates one deliberate manual
+refresh. This avoids a redundant manual/nightly pair. Use this current operator
+rather than the earlier deployment-archive copy after restoring temporary tools.

@@ -809,3 +809,17 @@ changes in the infrastructure repository. Update this record at each handoff.
   Initial thirty-song examples complete without violations/publication. The
   actual scheduled shadow cycle is 24 October, 04:30 Europe/Zurich. Canary,
   wider enablement and three qualifying production nights remain outstanding.
+
+- Daytime production rehearsal completes for all 13 enabled playlists on the
+  first attempt, with requested sizes (18/24/30), no shortages/violations and
+  zero shadow publications. Discovery generates 24 playable tracks while its
+  legacy acquisition is independently deferred; its nine additions comprise
+  six familiar-style and three adjacent-style recordings. Rediscovery replaces
+  unsuitable legacy tracks with observed-history selections; future rotation
+  continues under the preserved control. Real examples and job receipts are
+  in `rollout/shadow-examples-v39.json` and `shadow-rehearsal-v39.json`.
+- The canary operator now schedules due work before its idempotent request so
+  it coalesces with a due nightly job, avoiding a manual/nightly pair. This is
+  operator-only ordering; deployed application/content bundles are unchanged.
+  The actual 24 October shadow night, Discovery pool/research/acquisition
+  runtime checks, wider enablement and three healthy nights remain outstanding.
