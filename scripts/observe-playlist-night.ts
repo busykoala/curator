@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import {createHash,createDecipheriv} from 'node:crypto';
-import {mkdirSync,writeFileSync,chmodSync} from 'node:fs';
+import {mkdirSync,writeFileSync,chmodSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {config} from '../src/config';
 import {scheduledDateInstant} from '../src/features/playlists/refresh-policy';
@@ -12,14 +12,18 @@ type NativeItem={Id:string;Name?:string};
 const time=(value:string|null)=>value?Date.parse(value.includes('T')?value:value.replace(' ','T')+'Z'):NaN;
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 async function main(){
-  const date=process.env.PLAYLIST_OBSERVER_DATE,kind=process.env.PLAYLIST_OBSERVER_KIND==='shadow'?'shadow':'nightly';
+  const date=process.env.PLAYLIST_OBSERVER_DATE,kind=process.env.PLAYLIST_OBSERVER_KIND??'nightly';
+  if(!['shadow','nightly','triggered'].includes(kind))throw Error('Unknown observation kind');
+  type Request={playlistId:number;ownerId:number;revision:number;jobId:string;requestedAt:string};
+  const requests:Request[]=kind==='triggered'?JSON.parse(readFileSync(process.env.PLAYLIST_OBSERVER_REQUESTS??'', 'utf8')).requests:[];
+  if(kind==='triggered'&&(!Array.isArray(requests)||!requests.length||new Set(requests.map(r=>r.playlistId)).size!==requests.length||requests.some(r=>!Number.isInteger(r.playlistId)||!Number.isInteger(r.ownerId)||!Number.isInteger(r.revision)||!r.jobId||!Number.isFinite(Date.parse(r.requestedAt)))))throw Error('Supply an explicit valid triggered-job manifest');
   if(!date||!/^20\d\d-\d\d-\d\d$/.test(date))throw Error('Supply the exact Zurich scheduled date');
   const scheduled=scheduledDateInstant(date),deadline=scheduled+90*60_000,now=Date.now();
   const database=new Database(config.DATABASE_PATH,{readonly:true,fileMustExist:true,timeout:5000});
   const state=(key:string,fallback='')=>(database.prepare('SELECT value FROM state WHERE key=?').get(key) as {value:string}|undefined)?.value??fallback;
   const mode=state('playlist_refresh_mode','off'),canaries=state('playlist_refresh_canary_ids','6').split(',').map(Number);
   const definitions=(database.prepare('SELECT id,owner_user_id,name,category,enabled,revision,created_at,config_json FROM smart_playlists WHERE enabled=1 AND owner_user_id IS NOT NULL ORDER BY id').all() as Definition[])
-    .filter(p=>time(p.created_at)<=scheduled&&(kind==='shadow'||mode==='enabled'||mode==='canary'&&canaries.includes(p.id)));
+    .filter(p=>(kind==='triggered'?requests.some(r=>r.playlistId===p.id):time(p.created_at)<=scheduled)&&(kind==='shadow'||mode==='enabled'||mode==='canary'&&canaries.includes(p.id)));
   const tokens=new Map<number,string>(),inventories=new Map<number,Promise<NativeItem[]>>();
   async function native<T>(ownerId:number,path:string):Promise<T>{
     let token=tokens.get(ownerId);
@@ -48,14 +52,21 @@ async function main(){
   }
   const results:Array<Record<string,unknown>>=[];
   try{for(const p of definitions){
-    const job=database.prepare('SELECT id,status,attempts,run_id,updated_at,error,result_json,mode FROM playlist_refresh_jobs WHERE playlist_id=? AND owner_user_id=? AND scheduled_date=? AND kind=?').get(p.id,p.owner_user_id,date,kind) as Job|undefined;
+    const request=requests.find(r=>r.playlistId===p.id);
+    const job=(kind==='triggered'?database.prepare("SELECT id,status,attempts,run_id,updated_at,error,result_json,mode FROM playlist_refresh_jobs WHERE id=? AND playlist_id=? AND owner_user_id=? AND kind<>'shadow'").get(request!.jobId,p.id,p.owner_user_id):database.prepare('SELECT id,status,attempts,run_id,updated_at,error,result_json,mode FROM playlist_refresh_jobs WHERE playlist_id=? AND owner_user_id=? AND scheduled_date=? AND kind=?').get(p.id,p.owner_user_id,date,kind)) as Job|undefined;
     const proposed=job?.run_id?database.prepare('SELECT id,finished_at,detail_json,preview,source_kind,source_preview_id,owner_user_id FROM playlist_runs WHERE id=? AND playlist_id=?').get(job.run_id,p.id) as Run|undefined:undefined;
-    const published=database.prepare("SELECT id,finished_at,detail_json,preview,source_kind,source_preview_id,owner_user_id FROM playlist_runs WHERE playlist_id=? AND owner_user_id=? AND status='complete' AND preview=0 ORDER BY id DESC LIMIT 1").get(p.id,p.owner_user_id) as Run|undefined;
+    const published=(kind==='triggered'?database.prepare("SELECT id,finished_at,detail_json,preview,source_kind,source_preview_id,owner_user_id FROM playlist_runs WHERE playlist_id=? AND owner_user_id=? AND source_preview_id=? AND status='complete' AND preview=0 ORDER BY id DESC LIMIT 1").get(p.id,p.owner_user_id,job?.run_id??null):database.prepare("SELECT id,finished_at,detail_json,preview,source_kind,source_preview_id,owner_user_id FROM playlist_runs WHERE playlist_id=? AND owner_user_id=? AND status='complete' AND preview=0 ORDER BY id DESC LIMIT 1").get(p.id,p.owner_user_id)) as Run|undefined;
     const run=kind==='shadow'?proposed:published,detail=JSON.parse(run?.detail_json??'{}'),configValue=JSON.parse(p.config_json),violations:string[]=[];
     const rows=run?database.prepare('SELECT i.file_id,i.navidrome_song_id,i.position,f.artist_name,f.tags_json FROM playlist_items i JOIN files f ON f.id=i.file_id WHERE i.run_id=? ORDER BY i.position').all(run.id) as Array<{file_id:number;navidrome_song_id:string|null;position:number;artist_name:string;tags_json:string}>:[];
     const expected=rows.map(row=>row.navidrome_song_id),requested=Number(detail.evaluation?.requested??configValue.targetTracks),finished=time(run?.finished_at??null);
     if(!run)violations.push('No completed '+(kind==='shadow'?'comparison':'publication'));
     if(run&&run.owner_user_id!==p.owner_user_id)violations.push('Run ownership mismatch');
+    if(kind==='triggered'){
+      if(request!.ownerId!==p.owner_user_id||request!.revision!==p.revision)violations.push('The requested owner or configuration revision changed');
+      if(job?.status!=='completed'||JSON.parse(job?.result_json??'{}').published!==true)violations.push('The triggered job has not completed publication');
+      if(detail.selectionVersion!==1||!detail.evaluation)violations.push('No new-pipeline publication receipt for this request');
+      if(!Number.isFinite(finished)||finished<Date.parse(request!.requestedAt)||finished>now)violations.push('No completed publication after the explicit request');
+    }
     if(rows.length!==requested)violations.push('Requested song count is not present');
     if(expected.some(id=>!id)||new Set(expected).size!==expected.length)violations.push('Missing or duplicate native song identities');
     if(detail.evaluation?.violations?.length)violations.push(...detail.evaluation.violations);
@@ -72,7 +83,7 @@ async function main(){
       for(const pin of detail.protectedSelection?.pins??intent.pinnedRecordings??[])if(!rows.some(row=>row.file_id===pin.fileId))violations.push('A saved valid pin is absent');
       for(const lock of detail.protectedSelection?.positions??intent.positionLocks??[])if(rows[lock.position]?.file_id!==lock.fileId)violations.push('A saved valid position lock changed');
     }
-    if(!Number.isFinite(finished)||finished<scheduled||finished>deadline)violations.push('No completed result within the 04:30–06:00 Zurich window');
+    if(kind!=='triggered'&&(!Number.isFinite(finished)||finished<scheduled||finished>deadline))violations.push('No completed result within the 04:30–06:00 Zurich window');
     let nativeVerification:Record<string,unknown>={notRequested:kind==='shadow'};
     if(kind==='shadow'){
       if(job?.status!=='completed'||JSON.parse(job?.result_json??'{}').unpublished!==true||run?.source_kind!=='shadow'||!run.preview)violations.push('Comparison is not a completed unpublished shadow proposal');
@@ -102,8 +113,9 @@ async function main(){
   const day=new Date(now).setUTCHours(0,0,0,0),sourceUsage=database.prepare("SELECT count(*) total,coalesce(sum(kind='editorial'),0) editorial,coalesce(sum(kind='search'),0) search FROM playlist_source_requests WHERE created_at>=?").get(day) as {total:number;editorial:number;search:number};
   const admissions=database.prepare("SELECT playlist_id,count(*) n FROM playlist_discovery_admissions WHERE created_at>=? AND status IN ('reserved','admitted') GROUP BY playlist_id").all(new Date(day).toISOString().slice(0,10)) as Array<{playlist_id:number;n:number}>;
   const budgetViolations:string[]=[];if(sourceUsage.total>100||sourceUsage.editorial>20||sourceUsage.search>5)budgetViolations.push('Discovery source budget exceeded');if(admissions.some(row=>row.n>1)||admissions.reduce((n,row)=>n+row.n,0)>3)budgetViolations.push('Discovery admission budget exceeded');
+  if(kind==='triggered'&&results.length!==requests.length)budgetViolations.push('One or more requested playlists are no longer in the enabled observation scope');
   const violations=results.reduce((n,result)=>n+(result.violations as string[]).length,0)+budgetViolations.length;
-  const report={observedAt:new Date(now).toISOString(),scheduledDate:date,kind,mode,scheduledAt:new Date(scheduled).toISOString(),deadline:new Date(deadline).toISOString(),scope:'Read-only production SQLite and owner-authenticated native GET verification. No application startup, migrations, playlist mutation, acquisition or inference. Credentials remain in memory and are never included in the report.',results,sourceUsage,admissions,budgetViolations,summary:{enabledInScope:definitions.length,passed:results.filter(result=>!(result.violations as string[]).length).length,violations,windowHasClosed:now>=deadline,allPassed:definitions.length>0&&violations===0&&mode!=='off'}};
+  const report={observedAt:new Date(now).toISOString(),scheduledDate:date,kind,mode,scheduledAt:kind==='triggered'?null:new Date(scheduled).toISOString(),deadline:kind==='triggered'?null:new Date(deadline).toISOString(),scope:'Read-only production SQLite and owner-authenticated native GET verification. No application startup, migrations, playlist mutation, acquisition or inference. Credentials remain in memory and are never included in the report.'+(kind==='triggered'?' Explicitly triggered production jobs; this report is not evidence of an observed overnight cycle.':''),results,sourceUsage,admissions,budgetViolations,summary:{enabledInScope:definitions.length,passed:results.filter(result=>!(result.violations as string[]).length).length,violations,windowHasClosed:kind==='triggered'?null:now>=deadline,allPassed:definitions.length>0&&violations===0&&mode!=='off'}};
   const output=process.env.PLAYLIST_OBSERVER_OUTPUT??'/tmp/curator-renewal-observations';mkdirSync(output,{recursive:true,mode:0o700});chmodSync(output,0o700);
   const path=join(output,date+'-'+kind+'-'+now+'.json');writeFileSync(path,JSON.stringify(report,null,2),{mode:0o600});console.log(JSON.stringify({path,...report.summary}));
   }finally{tokens.clear();database.close()}

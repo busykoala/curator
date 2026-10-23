@@ -4,6 +4,18 @@ The [goal](playlist-renewal-goal.md) and [progress record](playlist-renewal-prog
 are authoritative. Passing local tests is not completion: the unpublished nightly
 comparison, Discovery canary, and three healthy production nights are separate gates.
 
+On 23 October the user replaced the observation waiting period with deliberately
+triggered production verification (“you can trigger the job and then finish”).
+Use `scripts/trigger-playlist-refresh.ts` with an explicit stable batch name and
+apply guard after the canary passes. Its durable request IDs make reruns
+idempotent, and it preserves disabled playlists. Verify the exact request
+manifest with `PLAYLIST_OBSERVER_KIND=triggered` and
+`PLAYLIST_OBSERVER_REQUESTS=/absolute/path/to/manifest.json`. That mode checks
+real publication, native order, constraints, owners and budgets without claiming
+04:30–06:00 execution. The original nightly observer and DST/window checks stay
+available for later scheduled observations. This amendment changes the waiting
+period only; all other safety and quality gates remain required.
+
 ## Inputs and rollback
 
 - Keep `delivery/playlist-renewal/` private and ignored by Git. It contains the

@@ -8,17 +8,17 @@ Private production snapshots, fixed evaluation inputs and reports belong under
 
 1. [x] A — Read-only audit, immutable baseline, fixed 120-track metadata audit,
    six-type intent fixtures and 40-case musical-fit rubric.
-2. [ ] B — Durable independent refresh worker, catch-up, retries, shared mutation
+2. [x] B — Durable independent refresh worker, catch-up, retries, shared mutation
    leases, revision fencing and recoverable verified publication.
 3. [ ] C — Owner/playlist-bound discovery, non-blocking publication, fair pools,
    acquisition caps, stalled recommendation deferral and representative songs.
 4. [ ] D — Independent cached/rate-limited discovery adapters and evidence.
-5. [ ] E — Field evidence, canonical identities, metadata audit/targeted repairs,
+5. [x] E — Field evidence, canonical identities, metadata audit/targeted repairs,
    complete owner-specific listening snapshots with stale-data fallback.
-6. [ ] F — Intent-aware six-type selection, exposure, rotation and safe shortages.
-7. [ ] G — Local semantic retrieval/reranking, bounded tools, validation/repair,
+6. [x] F — Intent-aware six-type selection, exposure, rotation and safe shortages.
+7. [x] G — Local semantic retrieval/reranking, bounded tools, validation/repair,
    interactive priority and correction-preserving nightly chat refresh.
-8. [ ] Interfaces/UI — Owner-scoped status, retry/dismiss and selection evidence.
+8. [x] Interfaces/UI — Owner-scoped status, retry/dismiss and selection evidence.
 9. [x] Verification — Full tests/build/migrations; 24 scenarios × 3 live replays;
    14-night simulation; 40-case rubric (≥80%, +15 percentage points).
 10. [ ] Rollout — Feature-flagged deployment, one unpublished nightly comparison,
@@ -28,6 +28,18 @@ Do not mark an item complete without a command/report or runtime evidence. An
 unverified criterion is outstanding, including subjective quality gates. Preserve
 existing enablement, saved selections, acquisition protections and unrelated
 changes in the infrastructure repository. Update this record at each handoff.
+
+## Execution amendment — 23 October 2026
+
+The user explicitly requested: “you can trigger the job and then finish.” This
+replaces the waiting period for an actual shadow night and three observed nights
+with immediate, deliberately triggered production verification. It does not
+relax ownership, identity, musical constraints, publication checks or budgets.
+The earlier daytime shadow comparison covers all thirteen enabled playlists;
+the real Discovery canary and the remaining enabled playlists must now publish
+through the durable production worker and pass native verification. Scheduled
+overnight cycles remain unobserved and must not be reported as completed nights.
+The original goal is preserved without rewriting its historical requirements.
 
 ## Work log
 
@@ -823,3 +835,21 @@ changes in the infrastructure repository. Update this record at each handoff.
   operator-only ordering; deployed application/content bundles are unchanged.
   The actual 24 October shadow night, Discovery pool/research/acquisition
   runtime checks, wider enablement and three healthy nights remain outstanding.
+
+- User-directed immediate rollout: the Discovery canary published 24 tracks at
+  15:20 UTC on its first attempt. Its nine replacements comprise six familiar
+  and three adjacent recordings. Native song ordering matches, and exactly one
+  live native identity is associated with the definition. The old acquisition
+  remains deferred independently. Switched `canary`→`enabled`, then requested
+  one durable production refresh for each remaining enabled playlist.
+- At 15:32 UTC all thirteen enabled playlists passed exact native ordering,
+  requested counts, owner/revision, pins/positions, selection constraints and
+  duplicate-publication checks. Every job succeeded on its first attempt.
+  Repeating the stable batch request reused all existing job identities. The
+  three disabled chat definitions remain disabled; their saved-intent behaviour
+  is covered by the passing live correction/nightly replay stages.
+  Evidence: `rollout/triggered-canary-v39.json` and
+  `rollout/triggered-all-playlists-v39.json`. These are real triggered production
+  publications, not observed overnight cycles. Health/readiness are 200 and
+  all four workers have fresh heartbeats. A second live four-account HTTP
+  isolation audit passes after enablement; all temporary sessions were removed.
