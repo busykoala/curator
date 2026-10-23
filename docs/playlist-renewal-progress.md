@@ -746,3 +746,17 @@ changes in the infrastructure repository. Update this record at each handoff.
   regression covers both initial and repair contexts while retaining final
   identity/constraint enforcement. Full suite: 326/326; production/four-worker
   build passes. TypeScript and the corrected complete v11 gate are next.
+
+- The original v10 German simulation exposed a relative-reference defect:
+  its original second song (James Taylor) was vocal and correctly replaced.
+  Both the oracle and a fresh nightly model interpretation then treated its
+  instrumental replacement as a newly requested second lock. The original
+  request only protected Emancipator at position zero. Compiler v16 reuses
+  saved intent without inference when the configuration revision is unchanged;
+  even a configuration recompile cannot create new historical relative anchors.
+  The independent live/simulation oracle now keeps references to the original
+  pre-correction selection for all later nights. A moved original lock still
+  fails, while replacing an unrequested second song is allowed. This changes
+  no musical-fit gold labels and preserves the untouched failed v10 artifacts.
+  Added direct and integration regressions; 328/328 tests and the complete
+  application/worker build pass. Final TypeScript and the full v11 replay follow.

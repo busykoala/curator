@@ -9,7 +9,14 @@ const field=(track:EvidencedCandidate,key:string)=>{
   return(Array.isArray(evidence.value)?evidence.value:evidence.value==null?[]:[evidence.value]).map(value=>normal(String(value)));
 };
 const matches=(values:string[],term:string)=>values.some(value=>(' '+value+' ').includes(' '+term+' '));
-export function scenarioViolations(id:string,items:EvidencedCandidate[],options:{stage?:'initial'|'correction'|'nightly';previous?:EvidencedCandidate[];snapshot?:ListenerSnapshot;now?:number;available?:EvidencedCandidate[];checkOrdering?:boolean}={}){
+const instrumentalEvidence=(track:EvidencedCandidate)=>{
+  const vocal=field(track,'vocalProfile');return vocal.length>0&&vocal.every(value=>value==='instrumental'||value==='no vocals')&&(track.evidence.fields.vocalProfile?.source==='user_override'||track.evidence.fields.vocalPresence?.value!==true);
+};
+export function scenarioRetentionLocks(id:string,original:EvidencedCandidate[]){
+  if(!['chat-keep-order','chat-german'].includes(id))return[];
+  return original.slice(0,2).flatMap((track,position)=>id==='chat-german'&&!instrumentalEvidence(track)?[]:[{position,recordingKey:track.evidence.recordingKey}]);
+}
+export function scenarioViolations(id:string,items:EvidencedCandidate[],options:{stage?:'initial'|'correction'|'nightly';previous?:EvidencedCandidate[];retentionReference?:ReturnType<typeof scenarioRetentionLocks>;snapshot?:ListenerSnapshot;now?:number;available?:EvidencedCandidate[];checkOrdering?:boolean}={}){
   const violations=new Set<string>(),corrected=options.stage==='correction'||options.stage==='nightly',now=options.now??Date.now();
   for(const track of items){
     const genres=[...field(track,'genre'),...field(track,'style')],has=(term:string)=>matches(genres,term);
@@ -20,7 +27,7 @@ export function scenarioViolations(id:string,items:EvidencedCandidate[],options:
     // Exact style names are independent Jazz-family evidence. Compound
     // electronic/R&B swing styles and a swung groove alone are insufficient.
     const jazzStyle=has('jazz')||genres.some(value=>['swing','bebop','hard bop','post bop','post bebop'].includes(value));
-    const vocal=field(track,'vocalProfile'),instrumental=vocal.length>0&&vocal.every(value=>value==='instrumental'||value==='no vocals')&&(track.evidence.fields.vocalProfile?.source==='user_override'||track.evidence.fields.vocalPresence?.value!==true);
+    const instrumental=instrumentalEvidence(track);
     const live=field(track,'recordingTypes').some(value=>matches([value],'live'))||/(?:\(|\[|[-–—]\s*)live(?:\s|[,):\]–—-]|$)/i.test(track.title);
     const jazz=['discovery-jazz','depth-piano','mood-jazz','journey-descent','rediscovery-favourites','chat-hard-correction'].includes(id);
     if(jazz&&!jazzStyle&&!(id==='discovery-jazz'&&['neo soul','nu jazz','jazz funk','afrobeat'].some(has)))violations.add('Expected jazz direction or an agreed Discovery neighbour');
@@ -68,9 +75,8 @@ export function scenarioViolations(id:string,items:EvidencedCandidate[],options:
   if(options.checkOrdering!==false&&corrected&&id==='chat-artist-decade'&&options.available?.some(track=>normal(track.artist)==='green day'&&normal(track.title)==='basket case'&&track.evidence.originalYear&&track.evidence.originalYear>=1990&&track.evidence.originalYear<=1999)){
     if(normal(items[0]?.artist??'')!=='green day'||normal(items[0]?.title??'')!=='basket case')violations.add('Requested Basket Case opener was available but not first');
   }
-  if(options.checkOrdering!==false&&corrected&&['chat-keep-order','chat-german'].includes(id))for(const[index,prior]of(options.previous??[]).slice(0,2).entries()){
-    if(id==='chat-german'&&(!field(prior,'vocalProfile').length||field(prior,'vocalProfile').some(value=>value!=='instrumental')))continue;
-    if(items[index]?.evidence.recordingKey!==prior.evidence.recordingKey)violations.add('Requested first-two position lock lost');
+  if(options.checkOrdering!==false&&corrected)for(const lock of options.retentionReference??scenarioRetentionLocks(id,options.previous??[])){
+    if(items[lock.position]?.evidence.recordingKey!==lock.recordingKey)violations.add('Requested first-two position lock lost');
   }
   return[...violations];
 }

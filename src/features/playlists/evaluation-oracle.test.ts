@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildTrackEvidence} from './track-evidence';
-import {scenarioViolations,independentEligibleCount} from './evaluation-oracle';
+import {scenarioViolations,independentEligibleCount,scenarioRetentionLocks} from './evaluation-oracle';
 import type {EvidencedCandidate} from './selection-policy';
 function track(id:number,profile:Record<string,unknown>,artist='Artist'):EvidencedCandidate{
   const title='Song '+id,album='Album',evidence=buildTrackEvidence({artist,title,profile,tags:{}});
@@ -47,6 +47,13 @@ test('German correction retains only compatible instrumental position locks and 
   assert.deepEqual(scenarioViolations('chat-german',[quietLive]),[]);
   assert.deepEqual(scenarioViolations('chat-german',[quietLive],{stage:'correction',previous:[quietLive,sung]}),[]);
   assert.ok(scenarioViolations('chat-german',[{...quietLive,fileId:3,evidence:{...quietLive.evidence,recordingKey:'other'}}],{stage:'correction',previous:[quietLive]}).includes('Requested first-two position lock lost'));
+});
+test('conditional retention is bound to the original request, not replacements on later nights',()=>{
+  const one=track(1,{vocalProfile:['instrumental']}),sung=track(2,{vocalProfile:['clean_sung']}),replacement=track(3,{vocalProfile:['instrumental']}),later=track(4,{vocalProfile:['instrumental']});
+  const retentionReference=scenarioRetentionLocks('chat-german',[one,sung]);assert.deepEqual(retentionReference,[{position:0,recordingKey:one.evidence.recordingKey}]);
+  assert.deepEqual(scenarioViolations('chat-german',[one,later],{stage:'nightly',previous:[one,replacement],retentionReference}),[]);
+  assert.ok(scenarioViolations('chat-german',[later,replacement],{stage:'nightly',previous:[one,replacement],retentionReference}).includes('Requested first-two position lock lost'));
+  assert.equal(scenarioRetentionLocks('chat-keep-order',[one,replacement]).length,2);
 });
 test('a named available opener is checked independently without corrupting the eligible-pool denominator',()=>{
   const basket=track(1,{genre:['rock'],style:['punk_rock']},'Green Day'),other=track(2,{genre:['rock'],style:['punk_rock']},'Green Day');basket.title='Basket Case';basket.evidence.originalYear=1994;other.evidence.originalYear=1994;

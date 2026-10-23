@@ -17,6 +17,7 @@ import {suggestIntentChatPlaylist} from './chat-selection';
 import {unrestrictedRequirements} from './chat-agent';
 import {aiClient} from '@/features/ai/client';
 import {assessCandidate} from './selection-policy';
+import {playlistRevisionHash} from './refresh-policy';
 
 const directory=mkdtempSync(join(tmpdir(),'curator-selection-integration-'));config.DATABASE_PATH=join(directory,'db.sqlite');
 const database=db(),user=provisionUser({token:'listener-one',navidromeUserId:'one',username:'one',displayName:'One'}),other=provisionUser({token:'listener-two',navidromeUserId:'two',username:'two',displayName:'Two'});
@@ -157,12 +158,23 @@ test('managed chat uses bounded retrieval and lets real corrections supersede ea
   requestedArtist='';
   const nightly=await generateIntentSelection(chat,{client,snapshot,provider});
   assert.deepEqual(nightly.intent.hard.artists,['Artist 2']);assert.equal(nightly.intent.hard.vocal,'instrumental');assert.equal(nightly.items[0].artist,'Artist 2');
-  assert.equal(compileCalls,3);assert.equal(chatState(chat.id).messages.length,4);assert.equal(chatState(chat.id).messages[2].content,'Only Artist 2 instead');
+  assert.equal(compileCalls,2);assert.equal(chatState(chat.id).messages.length,4);assert.equal(chatState(chat.id).messages[2].content,'Only Artist 2 instead');
   const lease=acquireChatLease(chat.id);
   try{storeRefreshedChatSelection(chat.id,lease,nightly.items,nightly.intent,nightly.detail)}finally{releaseChatLease(chat.id,lease)}
   await generateIntentSelection(chat,{client,snapshot,provider});
-  assert.equal(compileCalls,3,'A nightly selection revision cannot invalidate unchanged conversation intent');
+  assert.equal(compileCalls,2,'A nightly selection revision cannot invalidate unchanged conversation intent');
   assert.ok(chatState(chat.id).result?.detail.selection,'The full nightly selection receipt is retained');
+});
+test('nightly chat reuses saved intent and never rebinds old relative locks after a configuration change',async()=>{
+  let p=createPlaylist({name:'Conditional original locks',category:'chat',ownerUserId:user.id,config:{targetTracks:2}});
+  const snapshot=await(await import('./listening-snapshot')).listenerMusicSnapshot(user.id),current=loadEvidencedCandidates(p,snapshot).slice(0,2);
+  const saved=configuredIntent(p,playlistRevisionHash(p));saved.summary='Saved instrumental direction';saved.hard.vocal='instrumental';saved.pinnedRecordings=[{fileId:current[0].fileId,recordingKey:current[0].evidence.recordingKey}];saved.positionLocks=[{fileId:current[0].fileId,position:0}];
+  const context={revision:1,messages:[{role:'user' as const,content:'Keep the first two if instrumental.'}],result:{name:p.name,reply:'Saved',guidance:saved.summary,items:[],detail:{tracks:2,pending:0,durationMs:1,usage:{input_tokens:1,output_tokens:1,total_tokens:2},tools:[],intent:saved}}};
+  let calls=0;
+  const client={async structured<T>(){calls++;const value=configuredIntent(p,'ignored');return{data:{...value,pinFileIds:current.map(track=>track.fileId),positionLocks:current.map((track,position)=>({fileId:track.fileId,position})),conflicts:[]} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}}}};
+  const first=await compilePlaylistIntent(p,current,{client,chat:context});assert.equal(calls,0);assert.equal(first.detail.reusedSavedIntent,true);assert.equal(first.intent.summary,saved.summary);assert.deepEqual(first.intent.positionLocks,saved.positionLocks);
+  database.prepare("UPDATE smart_playlists SET config_json=json_set(config_json,'$.targetTracks',3),revision=revision+1 WHERE id=?").run(p.id);p=getPlaylist(p.id)!;
+  const changed=await compilePlaylistIntent(p,current,{client,chat:context});assert.equal(calls,1);assert.deepEqual(changed.intent.positionLocks,saved.positionLocks);assert.deepEqual(changed.intent.pinnedRecordings,saved.pinnedRecordings);assert.equal(changed.intent.hard.vocal,'instrumental');
 });
 test('named-song interpretation requires a real user quote and may resolve an identity after compilation',async()=>{
   const chat=createPlaylist({name:'Named-song proof',category:'chat',ownerUserId:user.id,config:{targetTracks:2}});

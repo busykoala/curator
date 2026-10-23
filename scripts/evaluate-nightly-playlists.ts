@@ -10,7 +10,7 @@ import {generateIntentSelection,loadEvidencedCandidates} from '../src/features/p
 import {listenerMusicSnapshot,type ListenerSnapshot} from '../src/features/playlists/listening-snapshot';
 import {playlistIntentCases} from '../src/features/playlists/evaluation-cases';
 import {defaultConfig,type PlaylistDefinition} from '../src/features/playlists/types';
-import {scenarioViolations,independentEligibleCount} from '../src/features/playlists/evaluation-oracle';
+import {scenarioViolations,independentEligibleCount,scenarioRetentionLocks} from '../src/features/playlists/evaluation-oracle';
 import {suggestIntentChatPlaylist} from '../src/features/playlists/chat-selection';
 import {chatState,acquireChatLease,storeChatResult,releaseChatLease,type ChatResult} from '../src/features/playlists/chat-state';
 import type {EvidencedCandidate} from '../src/features/playlists/selection-policy';
@@ -74,8 +74,8 @@ async function main(){
     const state=chatState(playlistId),lease=acquireChatLease(playlistId);
     try{storeChatResult(playlistId,lease,[...state.messages,{role:'user',content:message},{role:'assistant',content:result.reply}],result)}finally{releaseChatLease(playlistId,lease)}
   };
-  const evaluate=async(scenario:typeof scenarios[number],repeat:number,stage:'initial'|'correction'|'nightly',playlist:PlaylistDefinition,previous:EvidencedCandidate[]=[])=>{
-    const started=Date.now(),oracleOptions={stage,previous,snapshot,now:Date.parse(report.at),available:referencePool};
+  const evaluate=async(scenario:typeof scenarios[number],repeat:number,stage:'initial'|'correction'|'nightly',playlist:PlaylistDefinition,previous:EvidencedCandidate[]=[],original=previous)=>{
+    const started=Date.now(),oracleOptions={stage,previous,retentionReference:scenarioRetentionLocks(scenario.id,original),snapshot,now:Date.parse(report.at),available:referencePool};
     const independentlyEligible=independentEligibleCount(scenario.id,referencePool,oracleOptions);
     try{
       let generated:Awaited<ReturnType<typeof generateIntentSelection>>;
@@ -108,7 +108,7 @@ async function main(){
       const initial=await evaluate(scenario,repeat,'initial',playlist);
       if(initial&&scenario.correction){
         const corrected=await evaluate(scenario,repeat,'correction',playlist,initial);
-        if(corrected)await evaluate(scenario,repeat,'nightly',playlist,corrected);
+        if(corrected)await evaluate(scenario,repeat,'nightly',playlist,corrected,initial);
       }
     }
     const sufficient=report.runs.filter(run=>run.sufficient),valid=sufficient.filter(run=>run.valid);

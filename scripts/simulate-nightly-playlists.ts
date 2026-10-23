@@ -8,7 +8,7 @@ import {loadEvidencedCandidates} from '../src/features/playlists/selection-repos
 import {selectPlaylist,assessCandidate,type EvidencedCandidate} from '../src/features/playlists/selection-policy';
 import {selectionRecordingKey} from '../src/features/playlists/recording-groups';
 import {discoveryDirection} from '../src/features/playlists/discovery-directions';
-import {scenarioViolations} from '../src/features/playlists/evaluation-oracle';
+import {scenarioViolations,scenarioRetentionLocks} from '../src/features/playlists/evaluation-oracle';
 import type {PlaylistIntent} from '../src/features/playlists/intent-schema';
 import type {ListenerSnapshot} from '../src/features/playlists/listening-snapshot';
 
@@ -35,6 +35,9 @@ async function main(){
     const intent=run.intent as PlaylistIntent,base=loadEvidencedCandidates(definition,snapshot);
     if(definition.category==='discovery')for(const track of base)Object.assign(track,discoveryDirection(track,intent));
     const byId=new Map(base.map(track=>[track.fileId,track]));
+    const original=inputReplay.runs.find((candidate:typeof run)=>candidate.scenario===run.scenario&&candidate.repeat===run.repeat&&candidate.stage==='initial');
+    if(!original)throw Error('The original selection for a replay stage is missing');
+    const retentionReference=scenarioRetentionLocks(run.scenario,original.items.map((item:{fileId:number})=>byId.get(item.fileId)).filter(Boolean));
     let previous:EvidencedCandidate[]=run.items.map((item:{fileId:number})=>byId.get(item.fileId)).filter(Boolean);
     const removed=new Map<string,number>(),exposures=new Map<string,number[]>(),nights:Array<Record<string,unknown>>=[];
     for(let night=1;night<=14;night++){
@@ -52,7 +55,7 @@ async function main(){
         const keys=new Set(result.items.map(selectionRecordingKey)),changed=result.items.filter(track=>!priorKeys.has(selectionRecordingKey(track))).length;
         for(const track of result.items)if(!priorKeys.has(selectionRecordingKey(track))&&removed.has(selectionRecordingKey(track))&&now-removed.get(selectionRecordingKey(track))!<14*day)violations.push('Removed recording re-entered its fourteen-day cooldown');
         if(eligibleKeys.size>=definition.config.targetTracks&&replacements.size>=pinLimited&&previous.length===definition.config.targetTracks&&Math.abs(changed-pinLimited)>1)violations.push('Configured feasible rotation exceeded one-song tolerance');
-        violations.push(...scenarioViolations(run.scenario,result.items,{stage:run.stage,previous,snapshot,now,available:pool}));
+        violations.push(...scenarioViolations(run.scenario,result.items,{stage:run.stage,previous,retentionReference,snapshot,now,available:pool}));
         if(!violations.length){published=true;for(const track of previous)if(!keys.has(selectionRecordingKey(track)))removed.set(selectionRecordingKey(track),now);for(const track of result.items)exposures.set(selectionRecordingKey(track),[...(exposures.get(selectionRecordingKey(track))??[]),now]);previous=result.items}
       }
       const proposed=result.items.map(track=>({fileId:track.fileId,artist:track.artist,title:track.title,album:track.album,recordingKey:selectionRecordingKey(track),adjacent:Boolean(track.adjacent),adjacencyReason:track.adjacencyReason,genre:track.evidence.fields.genre,style:track.evidence.fields.style,reason:track.reason}));
