@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {configuredIntent,canonicalIntent} from './intent-schema';import {defaultConfig,type PlaylistDefinition} from './types';
-import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion} from './intent-preferences';
+import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion,groundFavouritesScope} from './intent-preferences';
 const base=()=>configuredIntent({config:defaultConfig('mood'),intent:''} as PlaylistDefinition,'revision');
 test('ordinary mood/context preferences cannot become mandatory all-term filters',()=>{
   const intent=base();intent.hard.requirements=[{field:'genre',values:['trip_hop'],match:'all'},{field:'mood',values:['dark','atmospheric'],match:'all'},{field:'listeningContexts',values:['late_night'],match:'all'},{field:'mood',values:['aggressive'],match:'none'}];
@@ -78,4 +78,20 @@ test('later explicit permission prevents an earlier climax instruction from bein
   const intent=base();assert.equal(groundClimaxExclusion(intent,['No dramatic climaxes.','Dramatic climaxes are fine now.']),false);assert.deepEqual(intent.hard.requirements,[]);
   assert.equal(groundClimaxExclusion(intent,['No dramatic climaxes.','Allow dramatic climaxes.']),false);
   assert.equal(groundClimaxExclusion(intent,['Allow dramatic climaxes.','No dramatic climaxes.']),true);
+});
+test('forgotten favourites use observed enjoyment unless a native-star filter is explicitly requested',()=>{
+  for(const direction of ['My forgotten jazz favourites, not jazz I have never played or favourited.','Old electronic favourites for an evening at home.','Prefer my starred tracks.']){
+    const intent=base();intent.hard.favouritesOnly=true;
+    assert.equal(groundFavouritesScope(intent,[direction],base().hard),true);assert.equal(intent.hard.favouritesOnly,false);
+  }
+  for(const direction of ['Only my long-unplayed favourites by one artist.','Nur meine Favoriten.','My starred songs.','My favourited music.','Songs that I have favourited.','Tracks I’ve starred.','Favourites only.']){
+    const intent=base();groundFavouritesScope(intent,[direction],base().hard);assert.equal(intent.hard.favouritesOnly,true,direction);
+  }
+});
+test('favourite scope preserves saved hard choices and respects explicit later broadening',()=>{
+  const intent=base();intent.hard.favouritesOnly=true;const preserved={...base().hard,favouritesOnly:true};
+  groundFavouritesScope(intent,['My forgotten favourites.'],preserved);assert.equal(intent.hard.favouritesOnly,true);
+  groundFavouritesScope(intent,['Only my favourites.','Not only favourites; include played tracks too.'],base().hard);assert.equal(intent.hard.favouritesOnly,false);
+  groundFavouritesScope(intent,['Only my favourites.','Include unstarred tracks too.'],base().hard);assert.equal(intent.hard.favouritesOnly,false);
+  groundFavouritesScope(intent,['Only my favourites.','Make the mood warmer.'],base().hard);assert.equal(intent.hard.favouritesOnly,true);
 });

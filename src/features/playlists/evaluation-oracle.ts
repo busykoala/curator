@@ -17,15 +17,18 @@ export function scenarioViolations(id:string,items:EvidencedCandidate[],options:
     // mapper. A hip-hop/pop/ambient primary tag can coexist with an explicitly
     // electronic style; ambient or amplified instruments alone do not prove it.
     const electronic=has('electronic')||['trip hop','downtempo','synthpop','synth pop','electronica','techno','house','idm','breakbeat','drum and bass','dubstep','electro'].some(has);
+    // Exact style names are independent Jazz-family evidence. Compound
+    // electronic/R&B swing styles and a swung groove alone are insufficient.
+    const jazzStyle=has('jazz')||genres.some(value=>['swing','bebop','hard bop','post bop','post bebop'].includes(value));
     const vocal=field(track,'vocalProfile'),instrumental=vocal.length>0&&vocal.every(value=>value==='instrumental'||value==='no vocals')&&(track.evidence.fields.vocalProfile?.source==='user_override'||track.evidence.fields.vocalPresence?.value!==true);
     const live=field(track,'recordingTypes').some(value=>matches([value],'live'))||/(?:\(|\[|[-–—]\s*)live(?:\s|[,):\]–—-]|$)/i.test(track.title);
     const jazz=['discovery-jazz','depth-piano','mood-jazz','journey-descent','rediscovery-favourites','chat-hard-correction'].includes(id);
-    if(jazz&&!has('jazz')&&!(id==='discovery-jazz'&&['neo soul','nu jazz','jazz funk','afrobeat'].some(has)))violations.add('Expected jazz direction or an agreed Discovery neighbour');
+    if(jazz&&!jazzStyle&&!(id==='discovery-jazz'&&['neo soul','nu jazz','jazz funk','afrobeat'].some(has)))violations.add('Expected jazz direction or an agreed Discovery neighbour');
     if(['depth-rock','depth-versions','journey-ascent','journey-steady','chat-artist-decade'].includes(id)&&!has('rock')&&!(id==='chat-artist-decade'&&has('punk')))violations.add('Expected rock/punk direction');
     if(id==='discovery-techno'&&!['melodic techno','ambient techno','minimal techno','dub techno','deep house','progressive house','ambient','microhouse'].some(has))violations.add('Expected requested techno centre or an agreed neighbouring style');
     if(['depth-downtempo'].includes(id)&&!has('downtempo'))violations.add('Electronic alone is not downtempo');
     if(['mood-late-night','chat-keep-order'].includes(id)&&!has('trip hop'))violations.add('Expected trip-hop direction');
-    if(id==='discovery-unicode'&&!has('jazz')&&!electronic)violations.add('Expected jazz or electronic direction');
+    if(id==='discovery-unicode'&&!jazzStyle&&!electronic)violations.add('Expected jazz or electronic direction');
     if(id==='discovery-unicode'&&live)violations.add('Excluded live version');
     if(id==='depth-versions'&&!live)violations.add('Required live performance');
     if(['journey-wave','rediscovery-genre'].includes(id)&&!electronic)violations.add('Expected electronic direction');

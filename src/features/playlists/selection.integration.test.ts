@@ -88,6 +88,13 @@ test('a model omission cannot admit a build/drop recording under the real no-cli
   assert.equal(compiled.detail.groundedClimaxExclusion,true);
   assert.ok(assessCandidate(track,p,compiled.intent,snapshot).violations.includes('structuralCharacter: none build_drop'));
 });
+test('a colloquial forgotten-favourites direction cannot hide previously enjoyed unstarred songs',async()=>{
+  const p=createPlaylist({name:'Observed forgotten favourites',category:'rediscovery',ownerUserId:user.id,intent:'My forgotten jazz favourites, not jazz I have never played or favourited.',config:{targetTracks:1}});
+  const client={async structured<T>(){const value=configuredIntent(p,'ignored');value.hard.favouritesOnly=true;value.soft.styles=['jazz'];return{data:{...value,pinFileIds:[],positionLocks:[],conflicts:[]} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}}}};
+  const compiled=await compilePlaylistIntent(p,[],{client}),snapshot=await(await import('./listening-snapshot')).listenerMusicSnapshot(user.id),track=loadEvidencedCandidates(p,snapshot)[0];
+  track.listener={...track.listener!,playCount:8,hasPlayed:true,favourite:false,lastPlayed:new Date(Date.now()-60*86400_000).toISOString()};
+  assert.equal(compiled.intent.hard.favouritesOnly,false);assert.equal(assessCandidate(track,p,compiled.intent,snapshot).eligible,true);
+});
 test('a shortage preview cannot replace the previous mix',async()=>{
   database.prepare("UPDATE smart_playlists SET config_json=json_set(config_json,'$.targetTracks',10) WHERE id=?").run(foreign.id);
   const preview=await generatePlaylist(foreign.id,true);assert.equal(preview.items.length,3);

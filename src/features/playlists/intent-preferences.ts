@@ -73,3 +73,20 @@ export function groundClimaxExclusion(intent:PlaylistIntent,userDirections:strin
   }
   return true;
 }
+
+// “Forgotten favourites” normally means previously enjoyed music. The strict
+// native-star filter needs a real exclusive/explicit-star direction, not the
+// model's interpretation of that colloquial phrase. Saved hard choices survive.
+export function groundFavouritesScope(intent:PlaylistIntent,userDirections:string[],preserved:PlaylistIntent['hard']){
+  if(preserved.favouritesOnly)return false;
+  const clauses=userDirections.flatMap(direction=>text(direction).split(/[.!?;,]+/));
+  let explicit=false;
+  for(const clause of clauses){
+    const broad=/\b(?:not only|nicht nur|pas seulement)\b.*\b(?:favou?rites?|starred|favoriten)\b|\bplayed\s+or\s+favou?rited\b|\b(?:include|allow)\b.*\b(?:played (?:tracks|songs|music)|listening history|unstarred|unfavou?rited)\b/.test(clause);
+    if(broad){explicit=false;continue}
+    const exclusive=/\b(?:only|exclusively|strictly|nur|ausschließlich|ausschliesslich|uniquement)\b(?:\s+[\p{L}-]+){0,8}\s+\b(?:favou?rites?|favou?rited|starred|hearted|favoriten)\b/u.test(clause)||/\b(?:favou?rites?|starred)\s+only\b/.test(clause);
+    const explicitStar=!/\b(?:prefer|prioriti[sz]e|occasionally)\b/.test(clause)&&/\b(?:my (?:explicitly )?(?:starred|hearted|favou?rited) (?:tracks|songs|music|list|playlist|collection)|(?:tracks|songs|music) (?:that )?i(?: have|['’]ve)? (?:explicitly )?(?:favou?rited|starred|hearted))\b/.test(clause);
+    if(exclusive||explicitStar)explicit=true;
+  }
+  const changed=intent.hard.favouritesOnly!==explicit;intent.hard.favouritesOnly=explicit;return changed;
+}

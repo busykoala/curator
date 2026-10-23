@@ -30,6 +30,10 @@ test('the independent broad-electronic reference recognises explicit substyles a
   for(const profile of [{genre:['ambient']},{genre:['rock'],instrumentation:['electric_guitar']},{genre:['rnb_soul_funk'],style:['new_jack_swing']}])
     assert.ok(scenarioViolations('discovery-unicode',[track(1,profile)]).includes('Expected jazz or electronic direction'));
 });
+test('the independent Jazz reference accepts explicit Swing/Bebop styles but not compound names or groove',()=>{
+  for(const style of ['swing','bebop','hard_bop','post_bop'])assert.deepEqual(scenarioViolations('mood-jazz',[track(1,{genre:['electronic'],style:[style]})]),[]);
+  for(const profile of [{genre:['electronic'],style:['electro_swing']},{genre:['rnb_soul_funk'],style:['new_jack_swing']},{genre:['pop'],groove:['swing']}])assert.ok(scenarioViolations('mood-jazz',[track(1,profile)]).includes('Expected jazz direction or an agreed Discovery neighbour'));
+});
 test('German correction retains only compatible instrumental position locks and permits quiet live music',()=>{
   const quietLive=track(1,{recordingTypes:['live_recording'],energy:'low',vocalProfile:['instrumental']}),sung=track(2,{vocalProfile:['clean_sung']});
   assert.deepEqual(scenarioViolations('chat-german',[quietLive]),[]);

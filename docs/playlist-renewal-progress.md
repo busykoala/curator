@@ -633,3 +633,23 @@ changes in the infrastructure repository. Update this record at each handoff.
   worker builds. The current v6 matrix remains on its original bundled code so
   its findings are reproducible; a complete corrected-code replay and simulation
   remain required. No new-pipeline production migration or activation has begun.
+- The descending Journey simulation exposed a separate reference gap: “The
+  Lonely Trumpet” has an explicit plain `swing` style as well as electro swing.
+  Plain Swing and Bebop are Jazz styles in the [Hancock Institute curriculum](https://jazzinamerica.org/Overview/Syllabus).
+  The independent oracle now recognises exact Swing/Bebop/Hard-Bop/Post-Bop
+  styles, while still rejecting electro swing alone, New Jack Swing and a swung
+  groove. This does not undo the actual Josephine eligibility fix. Original v6
+  results remain untouched; the corrected oracle also needs the full replay.
+- All three v6 “forgotten jazz favourites” repeats returned zero despite an
+  independent 31-recording observed-history pool: the model incorrectly set the
+  native-star-only flag. Compiler v13 now grounds that flag in real exclusive or
+  explicit-star requests; ordinary forgotten favourites use previously played
+  OR favourited music. Saved hard choices remain protected, and explicit later
+  broadening is respected. Prompting now distinguishes the two meanings. Added
+  unit/integration coverage for unstarred enjoyed tracks and genuine star-only
+  shortages; the original v6 replay is still running unchanged.
+- v31 validation passes: 306/306 tests, complete production/worker build and a
+  standalone TypeScript check run after generated build files settled. The first
+  real chat correction/nightly trio in v6 passes ordering, retention and saved
+  intent checks; its initial and correction simulations also pass fourteen nights.
+  The later full corrected-code gate and production rollout remain outstanding.

@@ -11,9 +11,9 @@ import {canonicalIntent,configuredIntent,playlistIntentSchema,type PlaylistInten
 import type {EvidencedCandidate} from './selection-policy';
 import type {PlaylistDefinition} from './types';
 import {playlistAttemptRecorder} from './inference-metrics';
-import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion} from './intent-preferences';
+import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion,groundFavouritesScope} from './intent-preferences';
 
-const compilerVersion=12;
+const compilerVersion=13;
 export type ChatIntentContext=ReturnType<typeof chatState>;
 const compiledSchema=playlistIntentSchema.omit({version:true,sourceRevision:true,pinnedRecordings:true,excludedFileIds:true,excludedRecordings:true}).extend({
   pinFileIds:z.array(z.number().int().positive()).max(100),conflicts:z.array(z.string().max(240)).max(10),
@@ -59,6 +59,7 @@ For Discovery, ordinary genre/style directions describe its familiar centre and 
 Preserve qualified exclusions precisely. "No festival EDM" => exclusions [festival_edm], not [edm], [electronic] or [house]. It excludes big-room/mainstage festival styles, while compatible house and techno remain available. "No aggressive rock" does not ban every rock song or every energetic song. Do not broaden a qualified exclusion to its entire genre family.
 Use minimal requirements, not a description of typical matching songs. "Music originally recorded in the 1970s" => minYear 1970, maxYear 1979, requirements [] unless configuration adds a filter; no recordingTypes requirement. "1990s punk energy" => original years 1990–1999 and punk direction; do not require studio recordings, standard_track, clean vocals or particular instruments. "Verified BPM 110–130" => numeric minBpm/maxBpm; do not add a tempoFeel steady condition. Leave unused requirement arrays empty; listing every allowed recording type still wrongly excludes recordings whose type is unknown. Never use the token "none" as a positive metadata value to express an absence; use a justified match=none rule and retain honest uncertainty.
 "No spoken interludes" means vocalProfile none spoken; singing may still be allowed. Do not invent a spoken_interlude recording type or exclude all musical interludes. "No forceful percussion" is not automatically "no crescendo" or "no percussion whatsoever"; preserve exactly the expressed limitation, and do not treat missing evidence as proof of absence.
+Rediscovery's default pool is previously played OR explicitly favourited recordings with the required listening gap. "My forgotten jazz favourites, not jazz I have never played or favourited" keeps that OR; it does not mean only native starred songs. Set favouritesOnly=true only for a real exclusive/explicit-star request such as "only my favourited tracks", "my starred songs", or "songs I have favourited". "Old electronic favourites" does not create a star-only filter or an original-release-year restriction. Preserve a saved explicit favourite-only constraint on nightly refresh.
 Use this canonical semantic vocabulary; preserve specific genre/style names rather than broadening them:
 ${canonicalPrompt}`,
       input:JSON.stringify({category:definition.category,targetTracks:definition.config.targetTracks,configured:base,direction:definition.intent,
@@ -101,7 +102,8 @@ ${canonicalPrompt}`,
     if(definition.category==='discovery')demoted.push(...enforceDiscoveryStylePreferences(intent,directions,preserved));
     const groundedFestivalExclusion=groundFestivalExclusion(intent,directions,base.hard);
     const groundedClimaxExclusion=groundClimaxExclusion(intent,directions);
-    detail={...detail,usage:output.usage,latencyMs:Date.now()-started,demotedPreferences:demoted,groundedFestivalExclusion,groundedClimaxExclusion,replaceUnpinned:compiled.replaceUnpinned};
+    const groundedFavouritesScope=groundFavouritesScope(intent,directions,base.hard);
+    detail={...detail,usage:output.usage,latencyMs:Date.now()-started,demotedPreferences:demoted,groundedFestivalExclusion,groundedClimaxExclusion,groundedFavouritesScope,replaceUnpinned:compiled.replaceUnpinned};
   }
   intent=canonicalIntent(intent);
   db().prepare('INSERT INTO playlist_intents(playlist_id,source_hash,intent_json,detail_json) VALUES(?,?,?,?) ON CONFLICT(playlist_id) DO UPDATE SET source_hash=excluded.source_hash,intent_json=excluded.intent_json,detail_json=excluded.detail_json,updated_at=CURRENT_TIMESTAMP')
