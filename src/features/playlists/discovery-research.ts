@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {db,stateGet,stateSet} from '@/features/db/client';
 import {listPlaylists} from './repository';
 import {discoveryRecommendations,discoveryPoolTarget,storeDiscoveryRecommendation,verifiedDiscoveryRecommendation,currentDiscoveryPoolSize,type DiscoveryRelease} from './discovery-repository';
-import {editorialCandidates,lastFmCandidates,listenBrainzCandidates,listenBrainzTagCandidates} from './discovery-providers';
+import {editorialCandidates,lastFmCandidates,listenBrainzCandidates,listenBrainzTagCandidates,cachedDiscoveryCandidates} from './discovery-providers';
 import {queueDiscoveryRecommendations,refreshDiscoveryLifecycle} from './discovery-lifecycle';
 import type {PlaylistDefinition} from './types';
 import {playlistRefreshMode,refreshManaged} from './refresh-jobs';
@@ -10,7 +10,8 @@ import {compilePlaylistIntent} from './intent-compiler';
 import {discoveryReleaseFit} from './discovery-fit';
 import {discoveryResearchDirection,revalidateDiscoveryDirection} from './discovery-direction-state';
 
-const providers=[{name:'listenbrainz',load:listenBrainzCandidates},{name:'listenbrainz-tags',load:listenBrainzTagCandidates},{name:'editorial',load:editorialCandidates},{name:'lastfm',load:lastFmCandidates}];
+type DiscoveryProvider={name:string;load:(playlist:PlaylistDefinition,recent:boolean)=>Promise<DiscoveryRelease[]>};
+const providers:DiscoveryProvider[]=[{name:'cached-radio',load:cachedDiscoveryCandidates},{name:'listenbrainz',load:listenBrainzCandidates},{name:'listenbrainz-tags',load:listenBrainzTagCandidates},{name:'editorial',load:editorialCandidates},{name:'lastfm',load:lastFmCandidates}];
 export function discoveryPoolNeedsResearch(playlist:PlaylistDefinition,now=Date.now()){
   return Number(stateGet(`playlist_research_revision:${playlist.id}`,'0'))!==(playlist.revision??1)||currentDiscoveryPoolSize(playlist)<discoveryPoolTarget&&Number(stateGet(`playlist_research_next:${playlist.id}`,'0'))<=now;
 }
@@ -21,7 +22,7 @@ function usableEvidence(release:DiscoveryRelease){
   const date=release.releaseDate?Date.parse(release.releaseDate):NaN;
   return identity&&recommendation&&(!Number.isFinite(date)||date<=Date.now());
 }
-export async function researchDiscoveryPools(adapters=providers,now=new Date()){
+export async function researchDiscoveryPools(adapters:DiscoveryProvider[]=providers,now=new Date()){
   const began=Date.now();
   const playlists=listPlaylists().filter(p=>p.enabled&&(playlistRefreshMode()!=='canary'||refreshManaged(p.id))&&(p.category==='discovery'||p.category==='depth'&&p.config.externalDiscovery)&&discoveryPoolNeedsResearch(p,now.getTime()));
   if(!playlists.length)return{researched:0,queued:0};
@@ -50,7 +51,8 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
         if(currentDiscoveryPoolSize(playlist)>=discoveryPoolTarget)break;
         const recommendation=release.evidence.find(e=>e.provider!=='musicbrainz')!;
         const reason=recommendation.claims.seedArtist?`Recommended from ${String(recommendation.claims.seedArtist)} by ${recommendation.provider}`:`Supported by ${recommendation.provider} release evidence`;
-        const origin=fit.lane==='adjacent'?provider.name+'-adjacent':provider.name;
+        const originProvider=provider.name==='cached-radio'?recommendation.provider:provider.name;
+        const origin=fit.lane==='adjacent'?originProvider+'-adjacent':originProvider;
         storeDiscoveryRecommendation(playlist,release,reason+' · '+fit.reason,origin);researched++;accepted++;
       }
       outcomes.push({provider:provider.name,candidates:accepted});

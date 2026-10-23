@@ -4,14 +4,15 @@ import {withMusicBrainzRequestLimit} from '@/features/sources/musicbrainz';
 import {aiClient,aiConfigured,aiModel} from '@/features/ai/client';
 import {recordAiUsage} from '@/features/ai/usage';
 import {norm} from './candidate-score';
-import {discoveryJson,discoveryPage,discoveryWebSearch} from './discovery-sources';
+import {discoveryJson,discoveryPage,discoveryWebSearch,discoveryCacheOnly,withDiscoveryCacheOnly} from './discovery-sources';
 import type {DiscoveryRelease,DiscoveryEvidence} from './discovery-repository';
-import {discoveryPoolTarget,currentDiscoveryPoolSize} from './discovery-repository';
+import {discoveryPoolTarget,currentDiscoveryPoolSize,discoveryRecommendations,verifiedDiscoveryRecommendation} from './discovery-repository';
 import type {PlaylistDefinition} from './types';
 import {musicBrainzGroup,radioRecordings,tagRadioRecordings,recommendedAlbumGroup,recommendedRecording} from './discovery-identities';
 import {playlistTrackEvidence} from './evidence-repository';
 import {evidenceValues} from './selection-policy';
 import {playlistAttemptRecorder} from './inference-metrics';
+import {discoveryReleaseFit} from './discovery-fit';
 
 const uuid=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 type MbCredit={name?:string;artist:{id:string;name:string};joinphrase?:string};
@@ -48,22 +49,27 @@ export function discoverySeedArtists(playlist:PlaylistDefinition){
   }
   return[...best.values()].sort((a,b)=>b.score-a.score||a.id.localeCompare(b.id));
 }
-export async function listenBrainzCandidates(playlist:PlaylistDefinition,recent:boolean){
+function associatedDiscoveryReleases(playlist:PlaylistDefinition){
+  return new Set(discoveryRecommendations(playlist.id,playlist.ownerUserId).filter(row=>
+    row.direction_revision===(playlist.revision??1)&&verifiedDiscoveryRecommendation(row)||['dismissed','presented','deferred'].includes(row.status)).map(row=>row.release_id));
+}
+export async function listenBrainzCandidates(playlist:PlaylistDefinition,recent:boolean,mode?:'easy'|'medium'){
   const seeds=discoverySeedArtists(playlist);if(!seeds.length)return[];
   const day=Math.floor(Date.now()/86400_000),cycle=Number(stateGet(`playlist_research_cycles:${playlist.id}`,'0')),output=new Map<string,DiscoveryRelease>(),seen=new Set<string>();
-  const query=new URLSearchParams({mode:[2,5,8].includes(cycle%10)?'medium':'easy',max_similar_artists:'5',max_recordings_per_artist:'2',pop_begin:'0',pop_end:'85'});
+  const cachedOnly=discoveryCacheOnly(),known=cachedOnly?associatedDiscoveryReleases(playlist):new Set<string>();
+  const query=new URLSearchParams({mode:mode??([2,5,8].includes(cycle%10)?'medium':'easy'),max_similar_artists:'5',max_recordings_per_artist:'2',pop_begin:'0',pop_end:'85'});
   // Sparse radio coverage for one relevant artist must not stop the provider.
   const rotation=seeds.slice(0,12),start=(day+cycle)%rotation.length;
-  for(let offset=0;offset<Math.min(3,rotation.length);offset++){
+  for(let offset=0;offset<(cachedOnly?rotation.length:Math.min(3,rotation.length));offset++){
     const seed=rotation[(start+offset)%rotation.length],endpoint=`https://api.listenbrainz.org/1/lb-radio/artist/${seed.id}?${query}`;
     const result=await discoveryJson<Record<string,Array<{recording_mbid:string;similar_artist_mbid:string;similar_artist_name:string}>>>('listenbrainz',endpoint,7,'api',undefined,raw=>radioRecordings.parse(raw)).catch(()=>null);
     if(!result)continue; // Other bounded seeds may still have usable cached radio results.
     const records=Object.values(result.value).flat().filter(record=>record.similar_artist_mbid!==seed.id&&!seen.has(record.recording_mbid)).slice(0,10);
     for(const item of records){
-      if(seen.size>=12)return[...output.values()];seen.add(item.recording_mbid);
+      if(seen.size>=(cachedOnly?120:12))return[...output.values()];seen.add(item.recording_mbid);
       try{
         const recording=await mb(`recording/${item.recording_mbid}?inc=artist-credits+releases+release-groups`,raw=>recommendedRecording.parse(raw));
-        const groupId=recommendedAlbumGroup(recording.value,item.recording_mbid,item.similar_artist_mbid);if(!groupId)continue;
+        const groupId=recommendedAlbumGroup(recording.value,item.recording_mbid,item.similar_artist_mbid);if(!groupId||known.has(groupId))continue;
         const evidence:DiscoveryEvidence={provider:'listenbrainz',url:endpoint,fetchedAt:result.fetchedAt,scope:'recording',claims:{seedArtistId:seed.id,seedArtist:seed.artist,seedStyleTerms:seed.styles,recordingId:item.recording_mbid,recommendedArtist:item.similar_artist_name,recommendedArtistId:item.similar_artist_mbid,explorationMode:query.get('mode')!}};
         const verified=await verifiedDiscoveryRelease(groupId,[evidence]);
         if(verified&&verified.artistId===item.similar_artist_mbid&&(!recent||verified.releaseDate&&Date.parse(verified.releaseDate)>=Date.now()-120*86400_000))output.set(verified.id,verified);
@@ -74,10 +80,11 @@ export async function listenBrainzCandidates(playlist:PlaylistDefinition,recent:
   return[...output.values()];
 }
 
-export async function listenBrainzTagCandidates(playlist:PlaylistDefinition,recent:boolean){
+export async function listenBrainzTagCandidates(playlist:PlaylistDefinition,recent:boolean,cachedCount?:number){
   const tags=[...new Set((playlist.config.tasteLanes.length?playlist.config.tasteLanes:playlist.config.genres).map(norm))].slice(0,3);if(!tags.length)return[];
   const current=currentDiscoveryPoolSize(playlist);
-  const count=Math.max(6,Math.min(12,(discoveryPoolTarget-current)*2));
+  const cachedOnly=discoveryCacheOnly(),known=cachedOnly?associatedDiscoveryReleases(playlist):new Set<string>();
+  const count=cachedOnly&&cachedCount&&[6,8,10,12].includes(cachedCount)?cachedCount:Math.max(6,Math.min(12,(discoveryPoolTarget-current)*2));
   const query=new URLSearchParams({operator:'OR',pop_begin:'0',pop_end:'85',count:String(count)});for(const tag of tags)query.append('tag',tag);
   const endpoint='https://api.listenbrainz.org/1/lb-radio/tags?'+query;
   // Artist and tag radio share one provider limiter, cooldown and cache budget.
@@ -85,7 +92,7 @@ export async function listenBrainzTagCandidates(playlist:PlaylistDefinition,rece
   for(const item of result.value.slice(0,12)){
     try{
       const recording=await mb(`recording/${item.recording_mbid}?inc=artist-credits+releases+release-groups`,raw=>recommendedRecording.parse(raw));
-      const artistId=recording.value['artist-credit'][0].artist.id,groupId=recommendedAlbumGroup(recording.value,item.recording_mbid,artistId);if(!groupId)continue;
+      const artistId=recording.value['artist-credit'][0].artist.id,groupId=recommendedAlbumGroup(recording.value,item.recording_mbid,artistId);if(!groupId||known.has(groupId))continue;
       const evidence:DiscoveryEvidence={provider:'listenbrainz-tags',url:endpoint,fetchedAt:result.fetchedAt,scope:'recording',claims:{recordingId:item.recording_mbid,requestedTags:tags,tagMatch:'any',recommendedArtistId:artistId}};
       const release=await verifiedDiscoveryRelease(groupId,[evidence]);
       if(release&&release.artistId===artistId&&(!recent||release.releaseDate&&Date.parse(release.releaseDate)>=Date.now()-120*86400_000))output.set(release.id,release);
@@ -93,6 +100,28 @@ export async function listenBrainzTagCandidates(playlist:PlaylistDefinition,rece
     }catch{/* Each remaining bounded candidate can still resolve entirely from cache. */}
   }
   return[...output.values()];
+}
+
+// Broader reads are safe only in this enforced cache-only scope: even optional
+// official pages cannot issue a request. Online seed/recording limits stay intact.
+export async function cachedDiscoveryCandidates(playlist:PlaylistDefinition,recent:boolean){
+  return withDiscoveryCacheOnly(async()=>{
+    const output=new Map<string,DiscoveryRelease>(),known=associatedDiscoveryReleases(playlist);
+    const collect=(releases:DiscoveryRelease[])=>{for(const release of releases){
+      if(output.size>=discoveryPoolTarget)break;
+      if(known.has(release.id)||release.releaseDate&&Date.parse(release.releaseDate)>Date.now()||!discoveryReleaseFit(playlist,release))continue;
+      output.set(release.id,release);
+    }};
+    for(const mode of ['easy','medium'] as const){
+      collect(await listenBrainzCandidates(playlist,recent,mode).catch(()=>[]));
+      if(output.size>=discoveryPoolTarget)return[...output.values()];
+    }
+    for(const count of [6,8,10,12]){
+      collect(await listenBrainzTagCandidates(playlist,recent,count).catch(()=>[]));
+      if(output.size>=discoveryPoolTarget)break;
+    }
+    return[...output.values()];
+  });
 }
 
 const editorialSources=[{provider:'bandcamp',url:'https://daily.bandcamp.com/',paths:/\/(album-of-the-day|best-|lists\/|features\/|scene-report\/)/},

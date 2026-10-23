@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {config} from '@/config';
 import {db,stateGet,stateSet} from '@/features/db/client';
-import {cachedDiscoveryRequest,discoveryJson,reserveDiscoveryRequest} from './discovery-sources';
+import {cachedDiscoveryRequest,discoveryJson,reserveDiscoveryRequest,withDiscoveryCacheOnly} from './discovery-sources';
 
 const directory=mkdtempSync(join(tmpdir(),'curator-discovery-sources-'));config.DATABASE_PATH=join(directory,'test.sqlite');const database=db();
 test.beforeEach(()=>database.exec('DELETE FROM playlist_source_requests;DELETE FROM playlist_source_cache;DELETE FROM state'));
@@ -50,6 +50,16 @@ test('deferred cache misses do not reserve network slots, while fresh cache hits
   const warm=await cachedDiscoveryRequest('limited','warm','identity',30,async()=>{throw Error('Must not load')});
   assert.deepEqual(warm.value,first.value);assert.equal(warm.cached,true);
   assert.equal((database.prepare('SELECT count(*) n FROM playlist_source_requests').get() as {n:number}).n,1);
+});
+test('cache-only scope cannot load a missing response and does not disable later ordinary requests',async()=>{
+  let loaded=0;const load=async()=>({number:++loaded});
+  await cachedDiscoveryRequest('scope','warm','identity',30,load);
+  await withDiscoveryCacheOnly(async()=>{
+    assert.equal((await cachedDiscoveryRequest('scope','warm','identity',30,load)).value.number,1);
+    await assert.rejects(cachedDiscoveryRequest('scope','cold','identity',30,load),/not cached/);
+    assert.equal(loaded,1);assert.equal((database.prepare('SELECT count(*) n FROM playlist_source_requests').get() as {n:number}).n,1);
+  });
+  assert.equal((await cachedDiscoveryRequest('scope','cold','identity',30,load)).value.number,2);
 });
 test('malformed provider data is not cached as success and does not suppress another source',async()=>{
   const original=globalThis.fetch;globalThis.fetch=async()=>Response.json({error:'Wrong schema'});

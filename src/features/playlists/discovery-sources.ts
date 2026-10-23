@@ -1,10 +1,14 @@
 import {createHash} from 'node:crypto';
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {db,stateGet,stateSet} from '@/features/db/client';
 import {openWebPage,webSearch,type OpenedPage} from '@/features/ai/web-tools';
 
 export type DiscoveryRequestKind='api'|'editorial'|'search'|'identity';
 export class DiscoverySourceDeferred extends Error{}
 const limits={total:100,editorial:20,search:5};
+const cacheOnly=new AsyncLocalStorage<boolean>();
+export const discoveryCacheOnly=()=>cacheOnly.getStore()===true;
+export function withDiscoveryCacheOnly<T>(work:()=>Promise<T>){return cacheOnly.run(true,work)}
 function assertDiscoveryRequestAvailable(provider:string,kind:DiscoveryRequestKind,now:number){
   const cooldown=Number(stateGet(`playlist_source_cooldown:${provider}`,'0'));
   if(cooldown>now)throw new DiscoverySourceDeferred(`${provider} is cooling down`);
@@ -40,6 +44,7 @@ export async function cachedDiscoveryRequest<T>(provider:string,key:string,kind:
     try{const raw=JSON.parse(cached.payload_json);return{value:decode?decode(raw):raw,fetchedAt:new Date(cached.fetched_at).toISOString(),cached:true}}
     catch{db().prepare('DELETE FROM playlist_source_cache WHERE cache_key=?').run(cacheKey)}
   }
+  if(discoveryCacheOnly())throw new DiscoverySourceDeferred(`${provider} response is not cached`);
   // Check cache misses before waiting for a network slot. Final reservation
   // rechecks atomically after the wait, so concurrent callers cannot exceed caps.
   assertDiscoveryRequestAvailable(provider,kind,Date.now());

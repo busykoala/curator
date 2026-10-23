@@ -985,3 +985,25 @@ The original goal is preserved without rewriting its historical requirements.
   Private evidence: `discovery/canonical-cache-audit.json` and
   `discovery/canonical-cache-transfer.json`. No evaluation database or synthetic
   playlist was promoted.
+- Added an enforced cache-only research stage before online adapters. It can
+  examine the remaining relevant cached seeds and cached tag batch sizes; its
+  scope rejects every cache miss before any network slot, request reservation
+  or optional page fetch. Wider bounded scans therefore consume zero provider
+  requests. Known/dismissed/presented/deferred recommendations remain preserved,
+  actual provider origins and adjacent-style labels stay intact, and canonical
+  identity, official-album, musical-fit and recent-focus checks are unchanged.
+- Four more regressions prove the cache-only scope restores normal behaviour
+  afterward, reaches later cached seeds/recordings, reads another cached tag
+  batch, and preserves already-associated owner recommendations. Full suite:
+  **344/344**; production/four-worker build and standalone TypeScript pass.
+  Two missing public radio response-cache rows (2,458 bytes) were reused after
+  exact URL-key/schema/age checks; newer production responses won. This copied
+  no owner recommendation rows or listening data and made no provider requests.
+- The guarded real research proof then created **four** new owner-bound,
+  fully validated recommendations through the normal controller, growing the
+  production pool **5→9**. No MusicBrainz requests were needed for these four;
+  normal online follow-up used one ListenBrainz request. Evidence:
+  `discovery/cache-sweep-proof-v43.json` and
+  `discovery/public-radio-cache-transfer.json`. The full ten-candidate gate
+  remains open. The final cache-only build still requires exact-commit CI and
+  deployment; the earlier cache-fallback image is a superseded candidate.
