@@ -10,9 +10,9 @@ Private production snapshots, fixed evaluation inputs and reports belong under
    six-type intent fixtures and 40-case musical-fit rubric.
 2. [x] B — Durable independent refresh worker, catch-up, retries, shared mutation
    leases, revision fencing and recoverable verified publication.
-3. [ ] C — Owner/playlist-bound discovery, non-blocking publication, fair pools,
+3. [x] C — Owner/playlist-bound discovery, non-blocking publication, fair pools,
    acquisition caps, stalled recommendation deferral and representative songs.
-4. [ ] D — Independent cached/rate-limited discovery adapters and evidence.
+4. [x] D — Independent cached/rate-limited discovery adapters and evidence.
 5. [x] E — Field evidence, canonical identities, metadata audit/targeted repairs,
    complete owner-specific listening snapshots with stale-data fallback.
 6. [x] F — Intent-aware six-type selection, exposure, rotation and safe shortages.
@@ -21,8 +21,14 @@ Private production snapshots, fixed evaluation inputs and reports belong under
 8. [x] Interfaces/UI — Owner-scoped status, retry/dismiss and selection evidence.
 9. [x] Verification — Full tests/build/migrations; 24 scenarios × 3 live replays;
    14-night simulation; 40-case rubric (≥80%, +15 percentage points).
-10. [ ] Rollout — Feature-flagged deployment, one unpublished nightly comparison,
-    Discovery canary, wider enablement, three consecutive verified live nights.
+10. [x] Rollout — Feature-flagged deployment, thirteen unpublished comparisons,
+    Discovery canary, wider enablement, and triggered native verification under
+    the user amendment below. Actual overnight cycles were not observed.
+
+Checked packages describe delivered implementation and its recorded tests/live
+checks. The production research pool is currently below its steady-state target
+during an external MusicBrainz outage; see the closeout limitations below. A
+checked implementation package does not assert that this provider has recovered.
 
 Do not mark an item complete without a command/report or runtime evidence. An
 unverified criterion is outstanding, including subjective quality gates. Preserve
@@ -853,3 +859,38 @@ The original goal is preserved without rewriting its historical requirements.
   publications, not observed overnight cycles. Health/readiness are 200 and
   all four workers have fresh heartbeats. A second live four-account HTTP
   isolation audit passes after enablement; all temporary sessions were removed.
+
+## Immediate rollout closeout
+
+- The user's requested triggered run is complete. A final recheck at 20:04 UTC
+  still passes all thirteen publications: 372 songs, 133 changed, requested
+  counts and exact native order, zero selection violations, no duplicate live
+  publication identities and no uncertain publication journal entries.
+  The mode remains `enabled`, health/readiness are 200, and all four workers
+  have fresh heartbeats. The deployed application remains verified build
+  `9342834`; operator/docs commit `5a6684a` also passed CI and container build.
+- The live UI/API audit confirms thirteen ready playlists, three disabled
+  definitions without a next run, and the next enabled refresh at 04:30 Zurich
+  on 24 October. All four accounts pass ownership isolation; temporary sessions
+  were removed. Private reports: `rollout/owner-ui-audit-enabled-v39.json`,
+  `rollout/triggered-all-playlists-v39-final.json`, and `final-assessment.json`.
+- Production research replenished 2→3→4 verified recommendations, including
+  a normal worker refill (Floating Points — Crush). One verified French 79
+  album was admitted and processed by acquisition; the one-per-playlist/day
+  cap held through repeated checks. The old Answer Code Request acquisition
+  remains independently deferred with its existing data preserved.
+- **Known external degradation:** MusicBrainz continues returning HTTP 503.
+  The current verified pool is **4/10**, not ten; it contains Weval — The Weight,
+  Weval — Remember, Floating Points — Crush and French 79 — Teenagers. Shared
+  and provider cooldowns remain intact, with automatic background research.
+  Healthy-source ten-candidate and cached refill proofs passed in the isolated
+  real-data evaluation; those recommendations were never copied to production.
+  This closeout does not claim a full production research pool or a recovered
+  MusicBrainz service. Publication remains independent of both research and
+  acquisition availability.
+- Per the user's explicit trigger-and-finish amendment, no observed overnight
+  cycle or three-night pass is claimed. The original timed observer remains
+  available. The final rubric retains its three documented false shortages;
+  evidence and hard constraints were not weakened to hide them. Persistent
+  backups, prior selections, private reports and operator tools remain available
+  for rollback and later scheduled observations.
