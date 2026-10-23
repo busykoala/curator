@@ -19,9 +19,11 @@ period only; all other safety and quality gates remain required.
 Immediate rollout outcome: all thirteen enabled playlists published and passed
 owner-native verification; all three disabled definitions remain disabled. The
 pipeline is enabled for the next 04:30 Zurich run. At closeout the Discovery pool
-is 4/10 during recurring MusicBrainz 503 responses, with one admitted acquisition
-and verified ongoing replenishment. This is recorded provider degradation,
-not a claim that the healthy ten-candidate production target has been reached.
+is **10/10**, with one admitted acquisition and verified ongoing replenishment.
+The final catalogue follow-up completed the target despite intermittent
+MusicBrainz 503 responses and connection timeouts. Total source usage was 90/100,
+including five editorial fetches and no general searches. Canonical identity,
+musical-fit checks, provider cooldowns and acquisition caps remained enforced.
 The private `delivery/playlist-renewal/final-assessment.json` separates completed
 publication checks from source availability and unobserved overnight cycles.
 

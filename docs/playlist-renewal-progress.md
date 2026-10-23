@@ -24,15 +24,17 @@ Private production snapshots, fixed evaluation inputs and reports belong under
 10. [x] Rollout — Feature-flagged deployment, thirteen unpublished comparisons,
     Discovery canary, wider enablement, and triggered native verification under
     the user amendment below. Actual overnight cycles were not observed.
-11. [ ] Production Discovery pool — Verify ten current, evidenced candidates
-    with source and acquisition budgets intact. Latest live count: five;
-    MusicBrainz still returns HTTP 503. Implementation delivery above does not
-    close this operational requirement or mean the full goal is complete.
+11. [x] Production Discovery pool — Ten current, evidenced candidates verified
+    at 21:45 UTC on 23 October. Source usage: 90/100 requests, 5/20 editorial
+    fetches and 0/5 general searches; one acquisition admission. Evidence:
+    `discovery/pool-evidence-audit-v43-final.json` and
+    `rollout/triggered-all-playlists-details-v43-final.json`.
 
 Checked packages describe delivered implementation and its recorded tests/live
-checks. The production research pool is currently below its steady-state target
-during an external MusicBrainz outage; see the closeout limitations below. A
-checked implementation package does not assert that this provider has recovered.
+checks. The production research pool reached its ten-candidate target despite
+intermittent external MusicBrainz failures. This does not assert uninterrupted
+provider availability. Completion uses the user's triggered-verification amendment;
+no actual overnight observation is claimed.
 
 Do not mark an item complete without a command/report or runtime evidence. An
 unverified criterion is outstanding, including subjective quality gates. Preserve
@@ -1007,3 +1009,59 @@ The original goal is preserved without rewriting its historical requirements.
   `discovery/public-radio-cache-transfer.json`. The full ten-candidate gate
   remains open. The final cache-only build still requires exact-commit CI and
   deployment; the earlier cache-fallback image is a superseded candidate.
+
+## Final cache-first production rollout
+
+- Application `4b4aa1c6498dd0ce63ebeca562064598f80a8012` passed exact-commit
+  CI/container workflows, all **344 regression tests**, standalone TypeScript,
+  and the production/four-worker build. The deployed OCI index is
+  `sha256:eedd2501a64e9d523358ebbdbf9cdeee02f94d5c3449c423f63577e2759296ae`.
+  Infrastructure commit `1345969435c503325640d693ee683238f5c4eee2` updates only
+  the application/backup image pins; unrelated infrastructure edits were retained.
+- The new encrypted production backup authenticated and passed SQLite
+  `quick_check` (schema 27; all 16 playlist definitions). Manifest comparison
+  confirmed only two image fields changed. Atomic Helm upgrade **revision 94**
+  completed; the chart's deployment test succeeded. All four supervised workers
+  are present and health/readiness return 200. Existing music services are ready.
+- Post-restart owner-authenticated native verification passed for **13/13**
+  triggered publications: **372 songs**, **133 changes**, exact ordered identities,
+  no hard-constraint violations, and one associated live playlist apiece. All
+  three disabled definitions remain disabled with no next run. Four-account HTTP
+  checks rejected foreign access; all four temporary audit sessions were removed.
+  These checks verify the earlier triggered selections after a research-only
+  upgrade; they do not claim new overnight cycles or repeated publication.
+- Source comparison against musical evaluation build `9342834` confirms only
+  discovery research/provider/cache code and its tests changed. Selection,
+  intent, chat and retrieval code are unchanged. The 96 live scenario stages,
+  448 simulated playlist nights, and 40-case musical-fit rubric remain evidence
+  for that evaluated selection code, rather than claimed new replays of this image.
+- Private rollout evidence: `rollout/helm-scope-v43.json`,
+  `backup-verified-v43.json`, `helm-upgrade-v43.log`, `helm-test-v43.log`,
+  `health-enabled-v43.json`, `triggered-all-playlists-details-v43.json`,
+  `owner-ui-audit-enabled-v43.json`, and `selection-source-scope-v43.json`.
+  The final research check respects the persisted next-run time, upstream
+  cooldown, request budget and normal recent-release cycle. The ten-candidate
+  gate remains open unless that check establishes a full verified pool.
+
+- **Final result, 23 October at 21:45 UTC:** the normal recent-release retry
+  fetched six valid canonical records before another upstream 503. A zero-network
+  catalogue pass remained at nine; one bounded normal catalogue follow-up,
+  after the provider cooldown, then resolved **Floating Points & San Francisco
+  Ballet Orchestra — Mere Mortals** with recommendation and canonical evidence.
+  The normal research controller accepted it as an adjacent-style candidate,
+  bringing the current production pool to **10/10**. No identities, musical
+  requirements, acquisition caps or source quotas were relaxed. Final source
+  usage is **90/100**, editorial **5/20**, general search **0/5**; the acquisition
+  admission count remains one. Evidence: `discovery/final-due-check-v43.json`,
+  `final-cache-only-v43.json`, `final-catalogue-v43.json`, and
+  `pool-evidence-audit-v43-final.json`.
+- Final native observation again passes **13/13**, with 372 songs, 133 changes,
+  no publication/identity/constraint violations, and a full verified Discovery
+  pool. Health/readiness and all four workers pass. Evidence:
+  `rollout/triggered-all-playlists-details-v43-final.json`,
+  `health-enabled-v43-final.json`, and the private `final-assessment.json`.
+  All goal gates are now complete under the user's timing amendment. Ordinary
+  refresh remains scheduled for **04:30 Europe/Zurich**; source cooldowns and
+  automatic background retries remain enabled. Known quality limitations are
+  retained in the final report rather than hidden: three false shortages in the
+  fixed rubric, and zero claimed actual overnight cycles.
