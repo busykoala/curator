@@ -736,3 +736,13 @@ changes in the infrastructure repository. Update this record at each handoff.
   content replay follow. The unchanged v10 replay continues as failed evidence.
   The verified f7820dc image and server ffc9858 pin are therefore superseded
   candidates, not authorized deployment results. Production remains unchanged.
+
+- One v10 exact-artist correction failed safely after its one repair: the
+  additions model repeated Basket Case (7115), which the controller had already
+  retained and locked first. Its full publication intent exposed that retained
+  ID despite excluding it from the additions batch. The selection prompt and
+  repair now receive only summary/arc/hard/soft musical intent; resolved pins,
+  positions, named requests and excluded IDs remain application-owned. A
+  regression covers both initial and repair contexts while retaining final
+  identity/constraint enforcement. Full suite: 326/326; production/four-worker
+  build passes. TypeScript and the corrected complete v11 gate are next.

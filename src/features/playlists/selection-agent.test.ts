@@ -27,6 +27,18 @@ test('typed read-only tools expose bounded evidence and validate exact inspected
   }));
   assert.equal(result.detail.repair,false);assert.equal(result.items.length,2);assert.ok(result.items[0].reason.includes('(inferred)'));
 });
+test('an additions task never receives already-resolved named-song or retained IDs',async()=>{
+  let calls=0;
+  const request=input(async<T>(options:StructuredRequest)=>{
+    calls++;const data=JSON.parse(options.input);
+    assert.equal(data.intent.pinnedRecordings,undefined);assert.equal(data.intent.positionLocks,undefined);assert.equal(data.intent.trackRequests,undefined);assert.equal(data.intent.excludedFileIds,undefined);
+    assert.ok(!options.input.includes('987654'));
+    assert.equal(data.intent.hard.vocal,'instrumental');
+    return{data:output(calls===1?[999,1]:[1,2]) as T,usage};
+  });
+  request.intent.hard.vocal='instrumental';request.intent.pinnedRecordings=[{fileId:987654,recordingKey:'saved'}];request.intent.positionLocks=[{fileId:987654,position:0}];request.intent.trackRequests=[{title:'Saved Song',artist:'Artist',action:'include',position:0,required:false,quote:'Put Saved Song first'}];request.intent.excludedFileIds=[987654];
+  const result=await choosePlaylistAdditions(request);assert.equal(calls,2);assert.deepEqual(result.items.map(track=>track.fileId),[1,2]);assert.equal(request.intent.pinnedRecordings[0].fileId,987654);
+});
 test('an unseen ID gets one repair with supplied evidence; repeated invalid output fails safely',async()=>{
   let calls=0;
   const request=input(async<T>(options:StructuredRequest)=>{
