@@ -19,7 +19,7 @@ Private production snapshots, fixed evaluation inputs and reports belong under
 7. [ ] G — Local semantic retrieval/reranking, bounded tools, validation/repair,
    interactive priority and correction-preserving nightly chat refresh.
 8. [ ] Interfaces/UI — Owner-scoped status, retry/dismiss and selection evidence.
-9. [ ] Verification — Full tests/build/migrations; 24 scenarios × 3 live replays;
+9. [x] Verification — Full tests/build/migrations; 24 scenarios × 3 live replays;
    14-night simulation; 40-case rubric (≥80%, +15 percentage points).
 10. [ ] Rollout — Feature-flagged deployment, one unpublished nightly comparison,
     Discovery canary, wider enablement, three consecutive verified live nights.
@@ -760,3 +760,52 @@ changes in the infrastructure repository. Update this record at each handoff.
   no musical-fit gold labels and preserves the untouched failed v10 artifacts.
   Added direct and integration regressions; 328/328 tests and the complete
   application/worker build pass. Final TypeScript and the full v11 replay follow.
+
+- Final v11 gates pass for application build
+  `9342834ce15cf206dd61c30738b1d41ef8041278` (compiler v16): 96 live stages,
+  93/93 valid where independently sufficient, three correctly reported
+  undersupplied starred-only cases, zero errors/independent violations and
+  all 12 correction/12 nightly stages. Exact listener hash remains `c8ca173…932d`.
+  Median pipeline latency 50.825 s, p95 95.295 s, maximum 150.055 s.
+- Complete v11 simulation: 32 cases/448 nights, zero violations. Of 16 held
+  nights, 14 are the deliberate starred-only shortage; two Rediscovery nights
+  exhaust all replacements under the removal cooldown and preserve the prior
+  twelve-song mix. No shorter selection is published.
+- Final fixed rubric: 37/40 (92.5%) versus frozen deployed baseline 21/40
+  (52.5%), +40 percentage points. Three misses are empty false shortages:
+  extra acoustic-drum, electric-guitar or steady-tempo requirements. They are
+  retained as limitations; no gold labels or unknown evidence were weakened.
+  Full artifacts are private under `evaluation/*-v11.json` and
+  `evaluation/final-evaluation-gates-v39.json`; all gates assert `allPassed=true`.
+- Final 328-test suite, standalone TypeScript, complete production/four-worker
+  build, exact-commit CI/container publication and all four acquisition audits
+  pass. The verified image index is `97d416dd4f4c1f171530e92c151d7a51b49416bab553d594cc7b4f0bac32c044`,
+  amd64 `8868a8fe6c0a5f6937e74d5a5c2937a2c13f9d4ee32fa46ebbd080924e0b6a58`.
+  A fresh encrypted production backup at 05:21 UTC passed authenticated
+  decryption/SQLite quick_check (schema 12, 16 definitions, 16,344 files).
+  Before/after choice and encrypted-credential hashes are recorded for rollout.
+  Final Helm comparison changes only the Curator application and backup images.
+  Deployment, actual shadow night, canary and three live nights remain pending.
+
+- Production deployment completed 23 October at 05:48 UTC: Helm revision 91,
+  application build `9342834`, server pin `d9b6fee`. The new pod is Ready with
+  zero restarts; all four supervised workers and their fresh heartbeats are
+  verified. Health/readiness return 200, and the chart integration test passes
+  for the music stack. Live schema is 27; hashes prove all sixteen definitions,
+  thirteen enabled/three disabled choices and encrypted credentials unchanged.
+- A live HTTP audit of all four accounts passes: only busykoala sees its sixteen
+  definitions; other accounts see none, foreign detail/chat access is 404,
+  cross-user selection is 403 and unauthenticated access is 401. The four
+  temporary scoped test sessions were deleted. History/recommendations remain
+  owner-scoped. Evidence: `rollout/owner-audit-v39.json`.
+- Applied the identity-bound Green Day source review in production: the known
+  a cappella example no longer satisfies a guitar requirement, with zero raw
+  tag/profile writes. Imported all 16,344 hash/model-matched vectors, zero
+  skips. The private evaluation database was preserved separately, never
+  promoted. All reports/tools and frozen inputs survive pod replacement in
+  the owner-only persistent archive (`artifact-preservation-v39.json`).
+- Activated guarded `shadow` mode after those checks. Its 23 October daytime
+  catch-up is an unpublished rehearsal, not a qualifying nightly comparison.
+  Initial thirty-song examples complete without violations/publication. The
+  actual scheduled shadow cycle is 24 October, 04:30 Europe/Zurich. Canary,
+  wider enablement and three qualifying production nights remain outstanding.
