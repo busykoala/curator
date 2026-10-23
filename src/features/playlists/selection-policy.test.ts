@@ -4,6 +4,7 @@ import {defaultConfig,type PlaylistDefinition} from './types';
 import {buildTrackEvidence} from './track-evidence';
 import {canonicalIntent,configuredIntent} from './intent-schema';
 import {assessCandidate,selectPlaylist,type EvidencedCandidate} from './selection-policy';
+import {canonicalSemanticValue} from '@/features/categorization/vocabulary';
 const now=Date.parse('2026-10-22T03:00:00Z'),day=86400_000,snapshot={complete:true,stale:false};
 function definition(category:PlaylistDefinition['category']='mood'):PlaylistDefinition{return{id:1,revision:1,name:'Mix',category,enabled:true,intent:'',config:{...defaultConfig(category),targetTracks:10,maxTracksPerArtist:2,maxTracksPerAlbum:1},ownerUserId:1,ownerDisplayName:'One',ownerTokenStatus:'active',navidromePlaylistId:'mix',lastRunAt:null,nextRunAt:null,createdAt:'',updatedAt:''}}
 function track(id:number,profile:Record<string,unknown>={genre:['jazz'],mood:['warm'],listeningContexts:['dinner']}):EvidencedCandidate{
@@ -44,6 +45,12 @@ test('broad genres include known substyles without weakening a specific style re
   const def=definition('depth'),intent=configuredIntent(def,'hierarchy');intent.hard.requirements=[{field:'genre',values:['electronic'],match:'any'}];
   const tripHop=track(1,{genre:['Trip-Hop'],style:['downtempo']});assert.equal(assessCandidate(tripHop,def,intent,snapshot,now).eligible,true);
   intent.hard.requirements=[{field:'style',values:['melodic_techno'],match:'any'}];assert.equal(assessCandidate(tripHop,def,intent,snapshot,now).eligible,false);
+});
+test('New Jack Swing remains R&B and cannot satisfy a jazz requirement',()=>{
+  assert.equal(canonicalSemanticValue('genre','New Jack Swing'),'rnb_soul_funk');
+  assert.equal(canonicalSemanticValue('genre','swing'),'jazz');
+  const def=definition('depth'),intent=configuredIntent(def,'genre-root');intent.hard.requirements=[{field:'genre',values:['jazz'],match:'any'}];
+  assert.equal(assessCandidate(track(1,{genre:['rnb_soul_funk'],style:['new_jack_swing']}),def,intent,snapshot,now).eligible,false);
 });
 test('a scene or artist association cannot substitute for track genre/style evidence',()=>{
   const def=definition('chat'),intent=configuredIntent(def,'direction');intent.soft.styles=['trip_hop'];
@@ -90,6 +97,18 @@ test('Discovery searches the whole adjacent lane and relaxes variety only enough
   const result=selectPlaylist({definition:def,intent,pool:[...familiar,...adjacent],previous:[],snapshot,now});
   assert.equal(result.items.length,10);assert.equal(result.items.filter(track=>track.adjacent).length,3);
   assert.ok(!result.evaluation.relaxations.some(reason=>reason.includes('share reduced')));
+});
+test('Discovery does not force poor-context neighbours into its exploration quota when central music fits',()=>{
+  const def=definition('discovery'),intent=configuredIntent(def,'contextual-exploration');intent.soft.styles=['jazz'];intent.soft.moods=['serene'];
+  const familiar=Array.from({length:20},(_,i)=>track(i+1,{genre:['jazz'],mood:['serene']}));
+  const adjacent=Array.from({length:20},(_,i)=>track(i+101,{genre:['rnb_soul_funk'],style:['neo_soul'],mood:['uplifting']}));
+  assert.equal(assessCandidate(adjacent[0],def,intent,snapshot,now).eligible,true,'Mood remains a soft preference');
+  const result=selectPlaylist({definition:def,intent,pool:[...familiar,...adjacent],previous:[],snapshot,now});
+  assert.equal(result.items.length,10);assert.equal(result.items.filter(track=>track.adjacent).length,0);
+  assert.ok(result.evaluation.relaxations.some(reason=>reason.includes('share reduced')));
+  const matching={...adjacent[0],evidence:buildTrackEvidence({artist:adjacent[0].artist,title:adjacent[0].title,tags:{},profile:{genre:['rnb_soul_funk'],style:['neo_soul'],mood:['serene']}})};
+  const withNeighbour=selectPlaylist({definition:def,intent,pool:[...familiar,...adjacent.slice(1),matching],previous:[],snapshot,now});
+  assert.equal(withNeighbour.items.filter(track=>track.adjacent).length,1);
 });
 test('rediscovery needs exact-song enjoyment and a known old date when played',()=>{
   const def=definition('rediscovery'),intent=configuredIntent(def,'1'),song=track(1);

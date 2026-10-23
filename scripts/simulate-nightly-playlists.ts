@@ -1,5 +1,6 @@
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
 import {config} from '../src/config';
 import {db} from '../src/features/db/client';
 import {getPlaylist} from '../src/features/playlists/repository';
@@ -20,7 +21,15 @@ async function main(){
   if(!stored||!stored.complete||createHash('sha256').update(stored.songs_json).digest('hex')!==replay.listener.hash)throw Error('Listener snapshot differs from the live replay; refusing a misleading comparison');
   const snapshot:ListenerSnapshot={songs:JSON.parse(stored.songs_json),capturedAt:stored.captured_at,complete:true,stale:false,error:'',available:true};
   const results:Array<Record<string,unknown>>=[],seen=new Set<string>(),day=86400_000,start=Date.parse(replay.at);
-  for(const run of replay.runs){
+  const output=process.env.PLAYLIST_EVAL_OUTPUT??'/tmp/curator-renewal-eval-code/simulation';mkdirSync(output,{recursive:true});
+  let inputReplay=replay;
+  const persist=()=>{
+    const all=results.flatMap(result=>result.nights as Array<{violations:string[];published:boolean}>);
+    const report={at:new Date().toISOString(),fixtureHash:replay.fixtureHash,listenerHash:replay.listener.hash,replayComplete:Boolean(inputReplay.summary),scope:'Simulation only. Frozen real playable library, real compiled intents and observed listener snapshot. No listening, native publication or acquisition. Only hypothetical exposure/removal evolves; initial seven-day exposure is retained conservatively for seven days.',results,summary:{cases:results.length,simulatedNights:all.length,publishable:all.filter(night=>night.published).length,violations:all.reduce((n,night)=>n+night.violations.length,0),completeInput:Boolean(inputReplay.summary)}};
+    writeFileSync(output+'/report.json',JSON.stringify(report,null,2));return report;
+  };
+  for(;;){
+  for(const run of inputReplay.runs){
     const identity=run.scenario+':'+run.stage;if(seen.has(identity)||run.error||!run.intent)continue;seen.add(identity);
     const definition=getPlaylist(run.playlistId);if(!definition)throw Error('Replay playlist configuration missing');
     const intent=run.intent as PlaylistIntent,base=loadEvidencedCandidates(definition,snapshot);
@@ -46,12 +55,21 @@ async function main(){
         violations.push(...scenarioViolations(run.scenario,result.items,{stage:run.stage,previous,snapshot,now,available:pool}));
         if(!violations.length){published=true;for(const track of previous)if(!keys.has(selectionRecordingKey(track)))removed.set(selectionRecordingKey(track),now);for(const track of result.items)exposures.set(selectionRecordingKey(track),[...(exposures.get(selectionRecordingKey(track))??[]),now]);previous=result.items}
       }
-      nights.push({night,at:new Date(now).toISOString(),published,retainedPrevious:!published,count:previous.length,eligible:eligibleKeys.size,availableReplacements:replacements.size,requestedReplacements:requested,pinLimitedReplacements:pinLimited,evaluation:result.evaluation,violations});
+      const proposed=result.items.map(track=>({fileId:track.fileId,artist:track.artist,title:track.title,album:track.album,recordingKey:selectionRecordingKey(track),adjacent:Boolean(track.adjacent),adjacencyReason:track.adjacencyReason,genre:track.evidence.fields.genre,style:track.evidence.fields.style,reason:track.reason}));
+      nights.push({proposed,night,at:new Date(now).toISOString(),published,retainedPrevious:!published,count:previous.length,eligible:eligibleKeys.size,availableReplacements:replacements.size,requestedReplacements:requested,pinLimitedReplacements:pinLimited,evaluation:result.evaluation,violations});
     }
     results.push({scenario:run.scenario,stage:run.stage,category:definition.category,target:definition.config.targetTracks,nights});
+    persist();console.log(JSON.stringify({scenario:run.scenario,stage:run.stage,nights:nights.length,violations:nights.reduce((n,night)=>n+(night.violations as string[]).length,0)}));
   }
-  const all=results.flatMap(result=>result.nights as Array<{violations:string[];published:boolean}>),output=process.env.PLAYLIST_EVAL_OUTPUT??'/tmp/curator-renewal-eval-code/simulation';mkdirSync(output,{recursive:true});
-  const report={at:new Date().toISOString(),fixtureHash:replay.fixtureHash,listenerHash:replay.listener.hash,scope:'Simulation only. Frozen real playable library, real compiled intents and observed listener snapshot. No listening, native publication or acquisition is performed. Only hypothetical playlist exposure/removal evolves; initial seven-day exposure is retained conservatively for seven days.',results,summary:{cases:results.length,simulatedNights:all.length,publishable:all.filter(night=>night.published).length,violations:all.reduce((n,night)=>n+night.violations.length,0)}};
-  writeFileSync(output+'/report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report.summary));database.close();
+  if(process.env.PLAYLIST_SIMULATION_WATCH!=='true'||inputReplay.summary)break;
+  await delay(10_000);
+  let newest:typeof replay|undefined;
+  for(let attempt=0;attempt<20;attempt++){
+    try{newest=JSON.parse(readFileSync(input,'utf8'));break}catch(error){if(!(error instanceof SyntaxError)||attempt===19)throw error;await delay(100)}
+  }
+  if(!newest||newest.fixtureHash!==replay.fixtureHash||newest.listener.hash!==replay.listener.hash||newest.at!==replay.at)throw Error('Replay inputs changed during simulation; refusing to mix different evaluations');
+  inputReplay=newest;
+  }
+  console.log(JSON.stringify(persist().summary));database.close();
 }
 void main().catch(error=>{console.error(String(error));process.exitCode=1});

@@ -554,3 +554,25 @@ changes in the infrastructure repository. Update this record at each handoff.
   14-night simulation. v20 validation: 287/287 tests, TypeScript and full build
   passed. Production is unchanged and no required real-night observation has
   occurred yet.
+- v4's longer simulation found a real taxonomy bug: TLC “Red Light Special”
+  qualified as jazz because `new_jack_swing` matched the generic `swing` root.
+  New Jack Swing now maps to R&B before the jazz-family fallback, while ordinary
+  swing remains jazz. This is supported by [Teddy Riley's primary interview](https://www.redbullmusicacademy.com/lectures/teddy-riley-lecture/), and a
+  regression rejects that R&B style for a strict jazz requirement. No profiles,
+  tags or embedding descriptions were reclassified.
+- The multilingual calm Discovery case also exposed quota pressure selecting
+  non-calm neighbouring soul/rock. Exploration now reserves its share from
+  neighbours matching the saved mood/context preferences, preserving central
+  music first. Scarcity can still relax these soft preferences explicitly;
+  actual hard requirements remain unchanged. Model candidate retrieval preserves
+  the feasible controller's context preference and records omitted neighbours.
+  The focused live case now passes the unchanged independent oracle
+  (`evaluation/context-unicode-correction.json`).
+- Kept both original failures (`simulation-v2-failed-new-jack-swing.json`,
+  `full-replay-v4-interrupted-adjacent-context.json`). The simulation now stores
+  proposed track IDs/genre/style evidence per night and supports incremental
+  checkpoints while a fixed replay grows; fixture/listener hashes and evaluation
+  start time must stay identical. Full replay v5 and the targeted jazz sequence
+  are running. v21: 289/289 tests, TypeScript and production/worker build passed.
+  Production is unchanged; prepared infrastructure pins must follow this next
+  evaluated build rather than the earlier cc6da9c image.

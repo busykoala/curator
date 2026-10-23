@@ -5,7 +5,7 @@ import {identityName as norm,trackAlbumMatches,trackArtistMatches,trackPositionM
 import {playlistTrackEvidence} from './evidence-repository';
 import {listenerMusicSnapshot,type ListenerSnapshot,type ListenerSong} from './listening-snapshot';
 import {discoveryTrackBoosts} from './discovery-lifecycle';
-import {assessCandidate,type EvidencedCandidate,type PlaylistEvaluation} from './selection-policy';
+import {assessCandidate,matchesDiscoveryPreferences,type EvidencedCandidate,type PlaylistEvaluation} from './selection-policy';
 import {compilePlaylistIntent,type ChatIntentContext} from './intent-compiler';
 import {selectPlaylist} from './selection-policy';
 import type {PlaylistDefinition,PlaylistCandidate} from './types';
@@ -158,15 +158,18 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
   let retrievalDetail:Record<string,unknown>|null=null;
   if(!selected.evaluation.shortage&&!selected.evaluation.violations.length&&proposed.length){
     const fixedKeys=new Set(fixed.map(track=>selectionRecordingKey(track))),canonical=new Map<string,EvidencedCandidate>();
+    const preferAdjacentContext=definition.category==='discovery'&&!proposed.some(track=>track.adjacent&&!matchesDiscoveryPreferences(track,compiled.intent));
+    let omittedAdjacentWithoutContext=0;
     const allowedArtists=compiled.intent.hard.singleArtist?new Set(selected.items.map(track=>norm(track.artist))):null;
     for(const track of available){
       if(allowedArtists&&!allowedArtists.has(norm(track.artist)))continue;
       if(previousKeys.has(selectionRecordingKey(track))||fixedKeys.has(selectionRecordingKey(track))||track.removedAt&&Date.now()-track.removedAt<14*86400_000)continue;
       const assessment=assessCandidate(track,definition,compiled.intent,snapshot);
+      if(assessment.eligible&&preferAdjacentContext&&track.adjacent&&!matchesDiscoveryPreferences(track,compiled.intent)){omittedAdjacentWithoutContext++;continue}
       if(assessment.eligible&&!canonical.has(selectionRecordingKey(track)))canonical.set(selectionRecordingKey(track),{...track,score:assessment.score,reason:assessment.reasons.join(' · ')});
     }
     const retrieved=await retrievePlaylistCandidates(compiled.intent.summary+'\n'+[...compiled.intent.soft.styles,...compiled.intent.soft.moods,...compiled.intent.soft.contexts].join(', '),[...canonical.values()],{provider:options.provider,signal,mandatoryIds:proposed.map(track=>track.fileId)});
-    retrievalDetail=retrieved.detail;
+    retrievalDetail={...retrieved.detail,omittedAdjacentWithoutContext};
     const chosen:EvidencedCandidate[]=[],repairBudget={remaining:1},chunks=Math.ceil(proposed.length/60);
     for(let chunk=0;chunk<chunks;chunk++){
       signal.throwIfAborted();

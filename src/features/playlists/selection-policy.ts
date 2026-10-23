@@ -36,6 +36,15 @@ function ruleSatisfied(track:EvidencedCandidate,rule:SemanticRequirement){
   return rule.match==='none'?available.length>0&&!found.some(Boolean):rule.match==='all'?found.every(Boolean):found.some(Boolean);
 }
 
+// Exploration is a preference, not a reason to spend its quota on music that
+// misses the saved mood/context. These remain soft: scarcity is reported and
+// can fall back without changing any hard requirement.
+export function matchesDiscoveryPreferences(track:EvidencedCandidate,intent:PlaylistIntent){
+  return !intent.soft.moods.length&&!intent.soft.contexts.length||
+    intent.soft.moods.some(term=>matches(term,evidenceValues(track,'mood')))||
+    intent.soft.contexts.some(term=>matches(term,evidenceValues(track,'listeningContexts')));
+}
+
 export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefinition,intent:PlaylistIntent,snapshot:Pick<ListenerSnapshot,'complete'|'stale'>,now=Date.now()):CandidateAssessment{
   const violations:string[]=[],reasons:string[]=[],uncertainty:string[]=[];
   const hard=intent.hard,soft=intent.soft;
@@ -184,24 +193,26 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
     const before=chosen.length;fill(candidates,Infinity,selectionLimit);
     if(chosen.length>before)relaxations.push('Artist/album variety preferences relaxed to satisfy the musical requirements and requested size');
   }
+  const preferredNew=definition.category==='discovery'?eligibleNew.filter(track=>!track.adjacent||matchesDiscoveryPreferences(track,intent)):eligibleNew;
   // Reserve the intended adjacent share from the full eligible lane. Diversity
   // is a preference: relax it before claiming a musical lane has too few songs.
   if(adjacentTarget){
-    const adjacent=eligibleNew.filter(track=>track.adjacent);
+    const adjacent=preferredNew.filter(track=>track.adjacent);
     const reserve=chosen.length+Math.max(0,adjacentTarget-chosen.filter(track=>track.adjacent&&!track.retained).length);
     fill(adjacent,adjacentTarget,reserve);relaxVariety(adjacent,reserve);
   }
-  fill(eligibleNew,definition.category==='discovery'?adjacentTarget:Infinity);
-  if(chosen.length<target&&definition.category==='discovery')relaxVariety(eligibleNew.filter(track=>!track.adjacent));
+  fill(preferredNew,definition.category==='discovery'?adjacentTarget:Infinity);
+  if(chosen.length<target&&definition.category==='discovery')relaxVariety(preferredNew.filter(track=>!track.adjacent));
   if(chosen.length<target){
-    fill(eligibleNew);relaxVariety(eligibleNew);
+    fill(preferredNew);relaxVariety(preferredNew);
+    if(chosen.length<target){const before=chosen.length;fill(eligibleNew);relaxVariety(eligibleNew);if(chosen.length>before)relaxations.push('Adjacent mood/context preference relaxed because better-fitting new recordings were insufficient')}
     if(definition.category==='discovery'&&chosen.filter(track=>track.adjacent&&!track.retained).length>adjacentTarget)
       relaxations.push('Adjacent-style share expanded because familiar-style candidates were insufficient');
   }
   // Prefer keeping more suitable current tracks to violating exclusions or
   // recycling a recording removed during the last 14 days.
   if(chosen.length<target){fill(prior);if(chosen.length>=target)relaxations.push('Rotation reduced because too few suitable replacements were available')}
-  if(definition.category==='discovery'&&chosen.filter(track=>track.adjacent&&!track.retained).length<adjacentTarget)relaxations.push('Adjacent-style share reduced because too few suitable adjacent recordings were available');
+  if(definition.category==='discovery'&&chosen.filter(track=>track.adjacent&&!track.retained).length<adjacentTarget)relaxations.push('Adjacent-style share reduced because too few adjacent recordings matched the saved style, mood and context preferences');
   const ordered:EvidencedCandidate[]=[],remaining=[...chosen],locks=new Map(intent.positionLocks.filter(lock=>byId.has(lock.fileId)&&chosen.some(t=>t.fileId===lock.fileId)).map(lock=>[lock.position,lock.fileId]));
   const curve=intent.energyCurve==='configured'?definition.config.energyCurve:intent.energyCurve,assignedEnergy=new Map<number,number>();
   if(definition.category==='journey'&&curve!=='steady'){
