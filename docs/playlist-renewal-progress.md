@@ -698,3 +698,27 @@ changes in the infrastructure repository. Update this record at each handoff.
   v3 and compiler v14. The actual 23 October 04:30 Zurich cycle began while
   production was still unchanged; do not count its legacy publications toward
   the required new-pipeline observations.
+- The final-v10 content replay uses an exact private v3 listening snapshot
+  (SHA-256 `c8ca173f5eab20bb78495b6bfce8e399f1b4cc5775daacb39cf44cb70ac0932d`).
+  All 16,359 songs have native album ID/album artist; 58 albums have multiple
+  track artists. The read-only audit finds three previously eligible recordings
+  whose albums actually had newer plays (including “Nightrider”). The original
+  v6 input was recovered only after reproducing its exact original SHA-256;
+  both frozen inputs are private and preserved locally with mode 0600.
+- Publication-path review found two retry gaps while content evaluation ran:
+  accepted chat corrections now always fence earlier proposals, including when
+  an old refresh is waiting to retry without a lease. Duplicate submissions do
+  not advance the revision twice. Invalidated/shortage proposals can regenerate
+  on retry only before a native attempt: any uncertain journal or matching native
+  checkpoint keeps its original IDs. The prior proposal remains available for
+  failure/shortage status. Preview-save authentication errors retain auth-wait
+  classification rather than becoming metadata errors. Focused tests pass.
+- Rebundling all three content evaluators after those publication-only changes
+  produces byte-identical SHA-256 hashes to the running final-v10 bundles. The
+  content/model gate therefore continues unchanged; full publication regression
+  validation is next. No production deployment or new-pipeline night yet.
+- Publication validation v36 passes 321/321 tests, TypeScript and the production/
+  worker build. Tests cover retry-time chat correction fencing, idempotent
+  submissions, regeneration before any native write, preservation of uncertain
+  and verified checkpoints, and preview-save auth failures. The content replay
+  and its frozen inputs remain unchanged and are passing so far.

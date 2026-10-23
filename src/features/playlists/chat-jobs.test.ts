@@ -11,7 +11,7 @@ test("durable chat jobs deduplicate retries, fence workers, and resume saved rep
   const directory = mkdtempSync(join(tmpdir(), "curator-chat-jobs-"));
   process.env.CURATOR_DB_PATH = join(directory, "test.sqlite");
   process.env.CURATOR_AI_API_KEY = "test-only";
-  const { db } = await import("../db/client");
+  const { db,stateSet } = await import("../db/client");
   const { aiClient } = await import("../ai/client");
   const { provisionUser } = await import("../auth/navidrome");
   const { createPlaylist,getPlaylist } = await import("./repository");
@@ -87,6 +87,16 @@ test("durable chat jobs deduplicate retries, fence workers, and resume saved rep
     releaseChatLease(background.id,bgLease);
     const claimed=claimChatJob()!;assert.equal(claimed.playlistId,background.id);
     database.prepare("UPDATE playlist_chat_jobs SET status='failed',lease_until=0 WHERE id=?").run(claimed.id);
+    const retrying=createPlaylist({name:'Correction after retry',category:'chat',ownerUserId:user.id,config:{targetTracks:1}}),retryRevision=getPlaylist(retrying.id)!.revision;
+    database.prepare("INSERT INTO playlist_refresh_jobs(id,playlist_id,owner_user_id,scheduled_date,revision,mode,status,created_at,updated_at) VALUES('waiting-refresh',?,?,'2026-10-22',?,'enabled','retry',?,?)")
+      .run(retrying.id,user.id,retryRevision,Date.now(),Date.now());
+    const retryRequest={...request,requestId:randomUUID(),message:'A newer correction after the nightly lease was released'};
+    enqueuePlaylistMessage(retrying.id,retryRequest);assert.equal(getPlaylist(retrying.id)!.revision,retryRevision!+1);
+    enqueuePlaylistMessage(retrying.id,retryRequest);assert.equal(getPlaylist(retrying.id)!.revision,retryRevision!+1,'An idempotent retry must not advance the intent revision twice');
+    stateSet('playlist_refresh_mode','enabled');
+    const {claimRefreshJob}=await import('./refresh-jobs');claimRefreshJob();
+    assert.equal((database.prepare("SELECT status FROM playlist_refresh_jobs WHERE id='waiting-refresh'").get() as {status:string}).status,'superseded');
+    database.prepare("UPDATE playlist_chat_jobs SET status='failed' WHERE id=?").run(retryRequest.requestId);stateSet('playlist_refresh_mode','off');
     // An idle chat worker must keep polling during a scanner write transaction.
     const scanner = new Database(process.env.CURATOR_DB_PATH!);
     try {

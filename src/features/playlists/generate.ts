@@ -24,6 +24,7 @@ import {compilePlaylistIntent} from './intent-compiler';
 import {assessCandidate} from './selection-policy';
 import {selectionRecordingKey} from './recording-groups';
 import {assertIntentPublication} from './selection-validation';
+import {StalePlaylistProposalError} from './proposal-errors';
 import {storeRefreshedChatSelection} from './chat-state';
 import type { PlaylistCandidate, PlaylistDefinition } from "./types";
 
@@ -506,7 +507,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
           preferences.artists.has(norm(row.artist_name)),
       )
     )
-      throw new Error(
+      throw new StalePlaylistProposalError(
         "Some preview songs are unavailable or excluded. Create a new preview.",
       );
     const items = rows.map((row) => ({
@@ -523,7 +524,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
     })) as PlaylistCandidate[];
     const evaluation=previewEvaluation(previewRunId);
     let previewIntent:PlaylistIntent|undefined;
-    if(evaluation?.shortage||evaluation?.violations.length)throw Error(`Kept the previous mix: ${evaluation.shortage?'insufficient matching tracks':evaluation.violations.join('; ')}`);
+    if(evaluation?.shortage||evaluation?.violations.length)throw new StalePlaylistProposalError(`Kept the previous mix: ${evaluation.shortage?'insufficient matching tracks':evaluation.violations.join('; ')}`);
     if(JSON.parse(preview.detail_json).selectionVersion===1){
       const resolved=JSON.parse(preview.detail_json).resolvedIntent;
       const cached=resolved?undefined:db().prepare('SELECT intent_json FROM playlist_intents WHERE playlist_id=?').get(id) as {intent_json:string}|undefined;
@@ -531,12 +532,14 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
       const intent=playlistIntentSchema.parse(resolved??JSON.parse(cached!.intent_json));
       previewIntent=intent;
       if(intent.sourceRevision!==expected)throw Error('The preview intent changed; generate a new preview');
-      const snapshot=await listenerMusicSnapshot(definition.ownerUserId),pool=loadEvidencedCandidates(definition,snapshot),byId=new Map(pool.map(track=>[track.fileId,track]));
+      const snapshot=await listenerMusicSnapshot(definition.ownerUserId);
+      if(!snapshot.available||/must sign in|\b401\b/i.test(snapshot.error))throw Error(snapshot.error||'A valid listening snapshot is not available yet');
+      const pool=loadEvidencedCandidates(definition,snapshot),byId=new Map(pool.map(track=>[track.fileId,track]));
       assertIntentPublication(definition,intent,items,pool,snapshot);
       for(const item of items){
         const track=byId.get(item.fileId)!;
         const proposed=rows.find(row=>row.file_id===item.fileId)?.navidrome_song_id;
-        if(proposed&&proposed!==track.songId)throw Error('A proposed native song identity changed; generate a fresh preview');
+        if(proposed&&proposed!==track.songId)throw new StalePlaylistProposalError('A proposed native song identity changed; generate a fresh preview');
       }
     }
     if (items.length < definition.config.targetTracks)
@@ -547,7 +550,7 @@ export async function savePlaylistPreview(id: number, previewRunId: number, held
       (await unresolvedNavidromeCandidates(items, definition.ownerUserId))
         .length
     )
-      throw new Error(
+      throw new StalePlaylistProposalError(
         "Some preview songs have unresolved Navidrome identity. Your saved playlist has not changed.",
       );
     const synced = await replaceManagedPlaylist(definition, items,assertCurrent,()=>assertPlaylistLease(id,lease));

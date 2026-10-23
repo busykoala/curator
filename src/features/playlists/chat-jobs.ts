@@ -60,8 +60,11 @@ export function enqueuePlaylistMessage(id: number, raw: unknown) {
       // Queue the correction and fence the background proposal immediately.
       // Keep its lease until it can roll back an in-flight publication; the
       // chat worker waits for that lease instead of racing the rollback.
-      db().prepare('UPDATE smart_playlists SET revision=revision+1 WHERE id=?').run(id);
     }
+    // Every accepted correction fences older proposals, including retries whose
+    // mutation lease has already been released. Idempotent resubmissions return
+    // above and must not advance this revision again.
+    db().prepare('UPDATE smart_playlists SET revision=revision+1 WHERE id=?').run(id);
     const now = Date.now();
     db().prepare("INSERT INTO playlist_chat_jobs(id,playlist_id,message,target_tracks,base_revision,sync_required,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)")
       .run(requestId, id, request.message, request.targetTracks, request.revision, definition.navidromePlaylistId ? 1 : 0, now, now);

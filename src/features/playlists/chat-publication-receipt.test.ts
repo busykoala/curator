@@ -33,6 +33,7 @@ function saveDraft(legacy=false){
 test.beforeEach(()=>{
   database.exec('DELETE FROM playlist_runs;DELETE FROM playlist_publications;DELETE FROM playlist_chat_state;DELETE FROM playlist_intents;DELETE FROM listener_music_snapshots');
   updatePlaylist(p.id,{config:{genres:['jazz'],targetTracks:1}});stateSet('playlist_refresh_mode','enabled');published=['native-2'];writes=0;compiles=0;failAuthentication=false;
+  database.prepare("UPDATE curator_users SET token_status='active' WHERE id=?").run(user.id);
   const prior=database.prepare("INSERT INTO playlist_runs(playlist_id,owner_user_id,status,preview,config_hash,finished_at) VALUES(?,?,'complete',0,'old',CURRENT_TIMESTAMP) RETURNING id").get(p.id,user.id) as {id:number};
   database.prepare("INSERT INTO playlist_items(run_id,playlist_id,file_id,navidrome_song_id,position,score,origin,reason) VALUES(?,?,2,'native-2',0,1,'catalog','Prior mix')").run(prior.id,p.id);
   aiClient.structured=async<T>(request:StructuredRequest)=>{compiles++;assert.equal(request.schemaName,'playlist_intent');assert.equal(request.priority,'interactive');const intent=configuredIntent(getPlaylist(p.id)!,'ignored');return{data:{...intent,pinFileIds:[],positionLocks:[],conflicts:[]} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}}};
@@ -68,5 +69,9 @@ test('short chat previews report the shortage and cannot replace the published m
 });
 test('chat publication preserves an authentication failure instead of disguising it as missing metadata',async()=>{
   saveDraft();failAuthentication=true;await assert.rejects(generatePlaylist(p.id,false),/must sign in to Navidrome again/);assert.equal(writes,0);
+});
+test('saving a preview preserves a renewed authentication requirement rather than labelling it stale metadata',async()=>{
+  saveDraft();const preview=await generatePlaylist(p.id,true);database.exec('DELETE FROM listener_music_snapshots');failAuthentication=true;
+  await assert.rejects(savePlaylistPreview(p.id,preview.runId),/must sign in to Navidrome again/);assert.equal(writes,0);assert.deepEqual(published,['native-2']);
 });
 test.after(()=>{globalThis.fetch=originalFetch;aiClient.structured=originalStructured;database.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;rmSync(directory,{recursive:true,force:true})});
