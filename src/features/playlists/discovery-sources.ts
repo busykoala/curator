@@ -5,13 +5,16 @@ import {openWebPage,webSearch,type OpenedPage} from '@/features/ai/web-tools';
 export type DiscoveryRequestKind='api'|'editorial'|'search'|'identity';
 export class DiscoverySourceDeferred extends Error{}
 const limits={total:100,editorial:20,search:5};
+function assertDiscoveryRequestAvailable(provider:string,kind:DiscoveryRequestKind,now:number){
+  const cooldown=Number(stateGet(`playlist_source_cooldown:${provider}`,'0'));
+  if(cooldown>now)throw new DiscoverySourceDeferred(`${provider} is cooling down`);
+  const day=new Date(now).setUTCHours(0,0,0,0);
+  const counts=db().prepare("SELECT count(*) total,sum(kind='editorial') editorial,sum(kind='search') search FROM playlist_source_requests WHERE created_at>=?").get(day) as {total:number;editorial:number;search:number};
+  if(counts.total>=limits.total||kind==='editorial'&&counts.editorial>=limits.editorial||kind==='search'&&counts.search>=limits.search)throw new DiscoverySourceDeferred('Daily discovery request budget exhausted');
+}
 export function reserveDiscoveryRequest(provider:string,kind:DiscoveryRequestKind,now=Date.now()){
   return db().transaction(()=>{
-    const cooldown=Number(stateGet(`playlist_source_cooldown:${provider}`,'0'));
-    if(cooldown>now)throw new DiscoverySourceDeferred(`${provider} is cooling down`);
-    const day=new Date(now).setUTCHours(0,0,0,0);
-    const counts=db().prepare("SELECT count(*) total,sum(kind='editorial') editorial,sum(kind='search') search FROM playlist_source_requests WHERE created_at>=?").get(day) as {total:number;editorial:number;search:number};
-    if(counts.total>=limits.total||kind==='editorial'&&counts.editorial>=limits.editorial||kind==='search'&&counts.search>=limits.search)throw new DiscoverySourceDeferred('Daily discovery request budget exhausted');
+    assertDiscoveryRequestAvailable(provider,kind,now);
     return Number(db().prepare('INSERT INTO playlist_source_requests(provider,kind,created_at) VALUES(?,?,?)').run(provider,kind,now).lastInsertRowid);
   }).immediate();
 }
@@ -37,6 +40,9 @@ export async function cachedDiscoveryRequest<T>(provider:string,key:string,kind:
     try{const raw=JSON.parse(cached.payload_json);return{value:decode?decode(raw):raw,fetchedAt:new Date(cached.fetched_at).toISOString(),cached:true}}
     catch{db().prepare('DELETE FROM playlist_source_cache WHERE cache_key=?').run(cacheKey)}
   }
+  // Check cache misses before waiting for a network slot. Final reservation
+  // rechecks atomically after the wait, so concurrent callers cannot exceed caps.
+  assertDiscoveryRequestAvailable(provider,kind,Date.now());
   await providerSlot(provider);
   const receipt=reserveDiscoveryRequest(provider,kind);
   try{

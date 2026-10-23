@@ -961,3 +961,27 @@ The original goal is preserved without rewriting its historical requirements.
   is identical to the evaluated build. The remaining full-pool gate stays open;
   neither an inferred identity nor a compilation of uncertain type was used to
   fill it. No three-night observation is claimed under the user's amendment.
+
+## Cache fallback correction
+
+- The lighter single-edition lookup also hit an upstream connection timeout.
+  A read-only audit identified fifty fresh public canonical responses retained
+  from the live source tests. A guarded cache-only projection copied 53,682
+  bytes with exact request-key/schema checks, original dates/TTLs and newer-
+  production precedence. No owner recommendation, history, configuration,
+  credential, raw tag or profile transferred; non-cache invariants are unchanged.
+  This did not itself create any recommendations or lift a cooldown/budget.
+- Three integration regressions then reproduced a real general fallback bug:
+  artist/tag radio stopped at the first deferred identity, hiding later fully
+  cached candidates even though cache hits require no provider requests.
+  Both bounded loops now continue checking the remaining candidates. An
+  unavailable first artist seed likewise cannot hide later cached seeds.
+  Canonical artist mismatches remain rejected. Deferred cache misses fail before
+  waiting for a network slot; final reservations still enforce caps atomically.
+- Successful responses with an exhausted provider quota now remain visible as
+  cooldown deferrals even when no error message exists. Seven new regressions
+  cover these cases. Full suite: **340/340**. The production build and final
+  deployed cache-fallback proof follow; the full ten-candidate gate remains open.
+  Private evidence: `discovery/canonical-cache-audit.json` and
+  `discovery/canonical-cache-transfer.json`. No evaluation database or synthetic
+  playlist was promoted.

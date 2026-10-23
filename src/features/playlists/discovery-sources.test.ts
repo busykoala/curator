@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {config} from '@/config';
-import {db,stateGet} from '@/features/db/client';
+import {db,stateGet,stateSet} from '@/features/db/client';
 import {cachedDiscoveryRequest,discoveryJson,reserveDiscoveryRequest} from './discovery-sources';
 
 const directory=mkdtempSync(join(tmpdir(),'curator-discovery-sources-'));config.DATABASE_PATH=join(directory,'test.sqlite');const database=db();
@@ -40,6 +40,16 @@ test('an empty successful provider result is distinct from an unavailable provid
   const rows=database.prepare('SELECT provider,status FROM playlist_source_requests ORDER BY id').all();
   assert.deepEqual(rows,[{provider:'empty',status:'success'},{provider:'broken',status:'failed'}]);
   assert.equal(stateGet('playlist_source_error:empty'),'');assert.match(stateGet('playlist_source_error:broken'),/Unavailable/);
+});
+test('deferred cache misses do not reserve network slots, while fresh cache hits remain usable',async()=>{
+  const first=await cachedDiscoveryRequest('limited','warm','identity',30,async()=>({id:'known'}));
+  database.prepare('DELETE FROM state WHERE key=?').run('playlist_source_next:limited');
+  stateSet('playlist_source_cooldown:limited',String(Date.now()+60_000));
+  await assert.rejects(cachedDiscoveryRequest('limited','cold','identity',30,async()=>{throw Error('Must not load')}),/cooling/);
+  assert.equal(stateGet('playlist_source_next:limited'),'');
+  const warm=await cachedDiscoveryRequest('limited','warm','identity',30,async()=>{throw Error('Must not load')});
+  assert.deepEqual(warm.value,first.value);assert.equal(warm.cached,true);
+  assert.equal((database.prepare('SELECT count(*) n FROM playlist_source_requests').get() as {n:number}).n,1);
 });
 test('malformed provider data is not cached as success and does not suppress another source',async()=>{
   const original=globalThis.fetch;globalThis.fetch=async()=>Response.json({error:'Wrong schema'});

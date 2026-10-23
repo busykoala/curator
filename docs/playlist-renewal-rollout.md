@@ -30,9 +30,18 @@ publication checks from source availability and unobserved overnight cycles.
 - Keep `delivery/playlist-renewal/` private and ignored by Git. It contains the
   frozen 16,344-track baseline, owner listening snapshots and evaluation reports.
 - Never promote the private evaluation database to production. It contains
-  synthetic definitions, controls and test history. Transfer only the separately
-  exported vector artifact; the importer verifies each current description hash,
-  model version, dimensions and evidence version. Changed tracks must be skipped.
+  synthetic definitions, controls and test history. The separately exported
+  vector artifact verifies each current description hash, model version,
+  dimensions and evidence version; changed tracks must be skipped.
+- A separate public-provider cache projection may reuse real captured API
+  responses during an upstream outage. It must validate schema, exact request-URL
+  hash, original fetch/expiry dates and the normal thirty-day identity TTL;
+  newer production responses win. This transfers no owner recommendations,
+  listening history, settings, tags, profiles or credentials. The source database
+  stays read-only and the only writable table is the public response cache.
+  Record the projection and verify production definition/credential/library
+  invariants. Ordinary production research must still validate and associate
+  recommendations; a warmed public response is not an admitted recommendation.
 - The pre-renewal production backup is encrypted in
   `/app/data/playlist-renewal-private/`. Authenticated decryption and SQLite
   `quick_check` passed. The real-copy schema 12→27 rehearsal preserved every

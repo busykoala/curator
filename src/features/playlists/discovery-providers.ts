@@ -56,7 +56,8 @@ export async function listenBrainzCandidates(playlist:PlaylistDefinition,recent:
   const rotation=seeds.slice(0,12),start=(day+cycle)%rotation.length;
   for(let offset=0;offset<Math.min(3,rotation.length);offset++){
     const seed=rotation[(start+offset)%rotation.length],endpoint=`https://api.listenbrainz.org/1/lb-radio/artist/${seed.id}?${query}`;
-    const result=await discoveryJson<Record<string,Array<{recording_mbid:string;similar_artist_mbid:string;similar_artist_name:string}>>>('listenbrainz',endpoint,7,'api',undefined,raw=>radioRecordings.parse(raw));
+    const result=await discoveryJson<Record<string,Array<{recording_mbid:string;similar_artist_mbid:string;similar_artist_name:string}>>>('listenbrainz',endpoint,7,'api',undefined,raw=>radioRecordings.parse(raw)).catch(()=>null);
+    if(!result)continue; // Other bounded seeds may still have usable cached radio results.
     const records=Object.values(result.value).flat().filter(record=>record.similar_artist_mbid!==seed.id&&!seen.has(record.recording_mbid)).slice(0,10);
     for(const item of records){
       if(seen.size>=12)return[...output.values()];seen.add(item.recording_mbid);
@@ -67,7 +68,7 @@ export async function listenBrainzCandidates(playlist:PlaylistDefinition,recent:
         const verified=await verifiedDiscoveryRelease(groupId,[evidence]);
         if(verified&&verified.artistId===item.similar_artist_mbid&&(!recent||verified.releaseDate&&Date.parse(verified.releaseDate)>=Date.now()-120*86400_000))output.set(verified.id,verified);
         if(output.size>=10)return[...output.values()];
-      }catch(error){if(/budget|cooling|retry/i.test(String(error)))return[...output.values()]}
+      }catch{/* A deferred cache miss must not hide later cached identities. */}
     }
   }
   return[...output.values()];
@@ -89,7 +90,7 @@ export async function listenBrainzTagCandidates(playlist:PlaylistDefinition,rece
       const release=await verifiedDiscoveryRelease(groupId,[evidence]);
       if(release&&release.artistId===artistId&&(!recent||release.releaseDate&&Date.parse(release.releaseDate)>=Date.now()-120*86400_000))output.set(release.id,release);
       if(output.size>=10)break;
-    }catch(error){if(/budget|cooling|retry/i.test(String(error)))break}
+    }catch{/* Each remaining bounded candidate can still resolve entirely from cache. */}
   }
   return[...output.values()];
 }

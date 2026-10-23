@@ -62,10 +62,10 @@ export async function researchDiscoveryPools(adapters=providers,now=new Date()){
   // the actual dependency errors separately from a successful empty response.
   // Individual adapters still enforce their own cooldowns on every request;
   // an unavailable source must not delay trying the other sources for two hours.
-  const deferredSources=(db().prepare(`SELECT e.key,e.value error,c.value retry_at FROM state e JOIN state c
-    ON c.key='playlist_source_cooldown:'||substr(e.key,length('playlist_source_error:')+1)
-    WHERE e.key LIKE 'playlist_source_error:%' AND e.value<>'' AND CAST(c.value AS INTEGER)>?`).all(finished) as Array<{key:string;error:string;retry_at:string}>)
-    .map(row=>({provider:row.key.slice('playlist_source_error:'.length),error:row.error,retryAt:new Date(Number(row.retry_at)).toISOString()}));
+  const deferredSources=(db().prepare(`SELECT c.key,coalesce(nullif(e.value,''),'Provider cooldown active') error,c.value retry_at FROM state c LEFT JOIN state e
+    ON e.key='playlist_source_error:'||substr(c.key,length('playlist_source_cooldown:')+1)
+    WHERE c.key LIKE 'playlist_source_cooldown:%' AND CAST(c.value AS INTEGER)>?`).all(finished) as Array<{key:string;error:string;retry_at:string}>)
+    .map(row=>({provider:row.key.slice('playlist_source_cooldown:'.length),error:row.error,retryAt:new Date(Number(row.retry_at)).toISOString()}));
   const utcDay=new Date(finished).setUTCHours(0,0,0,0);
   const requestFailures=db().prepare("SELECT provider,detail,created_at FROM playlist_source_requests WHERE status='failed' AND created_at>=? ORDER BY id DESC LIMIT 20").all(began) as Array<{provider:string;detail:string;created_at:number}>;
   const requests=(db().prepare('SELECT count(*) n FROM playlist_source_requests WHERE created_at>=?').get(utcDay) as {n:number}).n;

@@ -68,6 +68,13 @@ test('successful empty research remains distinct from unavailable providers and 
   const outcome=JSON.parse(stateGet(`playlist_research_outcome:${p.id}`));
   assert.equal(outcome.availability,'no_new_matches');assert.deepEqual(outcome.deferredSources,[]);
 });
+test('a successful response that exhausts a provider quota remains a deferral even without an error message',async()=>{
+  stateSet('playlist_source_cooldown:listenbrainz',String(Date.now()+60_000));
+  await researchDiscoveryPools([{name:'cached',load:async()=>[]}]);
+  const outcome=JSON.parse(stateGet(`playlist_research_outcome:${p.id}`));
+  assert.equal(outcome.availability,'source_deferred');assert.equal(outcome.deferredSources[0].provider,'listenbrainz');
+  assert.equal(outcome.deferredSources[0].error,'Provider cooldown active');
+});
 test('a growing but underfilled healthy pool replenishes promptly instead of waiting two hours',async()=>{
   const before=Date.now();await researchDiscoveryPools([{name:'partial',load:async()=>releases.slice(0,2)}]);
   const next=Number(stateGet(`playlist_research_next:${p.id}`));
