@@ -58,3 +58,18 @@ export function groundFestivalExclusion(intent:PlaylistIntent,userDirections:str
   intent.hard.requirements=intent.hard.requirements.map(rule=>['genre','style'].includes(rule.field)&&rule.match==='none'?{...rule,values:[...new Set(rule.values.map(grounded))]}:rule);
   return changed;
 }
+
+// These are two independent evidence fields. A model sometimes translates the
+// listener's explicit climax exclusion into just one, even with an example.
+// Ground both from the real directions; ordinary calm/dynamic preferences do
+// not imply this exclusion. Later explicit permission cancels this text guard.
+export function groundClimaxExclusion(intent:PlaylistIntent,userDirections:string[]){
+  let excluded=false;
+  const clauses=/\b(?:(?:no|without|avoid)\s+(?:any\s+)?dramatic\s+climax(?:es)?|(?:allow|include)\s+(?:some\s+)?dramatic\s+climax(?:es)?|dramatic\s+climax(?:es)?\s+(?:are|is)\s+(?:now\s+)?(?:fine|allowed|okay)|(?:keine\s+dramatischen|ohne\s+dramatische)\s+höhepunkte|dramatische\s+höhepunkte\s+sind\s+(?:wieder\s+)?erlaubt)\b/giu;
+  for(const direction of userDirections)for(const match of direction.normalize('NFKC').matchAll(clauses))excluded=/^(?:no\b|without\b|avoid\b|keine\b|ohne\b)/i.test(match[0]);
+  if(!excluded)return false;
+  for(const [field,value] of [['dynamicCharacter','crescendo_build'],['structuralCharacter','build_drop']] as const){
+    if(!intent.hard.requirements.some(rule=>rule.field===field&&rule.match==='none'&&rule.values.includes(value)))intent.hard.requirements.push({field,values:[value],match:'none'});
+  }
+  return true;
+}

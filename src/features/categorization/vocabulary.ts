@@ -39,6 +39,10 @@ export function normalizeList(values:unknown,max:number):string[]{
 }
 
 function genre(value:string):string{
+  // Electronic swing fusion must not qualify as jazz just because
+  // its compound style contains the generic swing root. Explicit jazz tags
+  // can still independently establish jazz relevance for a recording.
+  if(/(^|_)electro_?swing($|_)/.test(value))return"electronic";
   if(/soundtrack|score/.test(value))return"soundtrack_score";if(/spoken|comedy/.test(value))return"spoken_word_comedy";if(/religious|spiritual|gospel/.test(value))return"religious_spiritual";if(/child/.test(value))return"childrens";
   if(/latin|salsa|cumbia|reggaeton|samba|bossa|tango/.test(value))return"latin";if(/afro|african|highlife|soukous|amapiano/.test(value))return"african";if(/arab|middle_east|rai|gnawa|anatolian|persian/.test(value))return"middle_eastern_north_african";if(/south_asian|bollywood|hindustani|carnatic|qawwali|bhangra/.test(value))return"south_asian";if(/east_asian|j_pop|k_pop|cantopop|mandopop|gamelan/.test(value))return"east_southeast_asian";
   if(/metal/.test(value))return"metal";if(/punk|hardcore|emo|screamo/.test(value))return"punk_hardcore";if(/reggae|dub|ska|dancehall|rocksteady/.test(value))return"reggae_dub_ska";if(/hip_hop|(^|_)rap($|_)|trap|drill|grime/.test(value))return"hip_hop";if(/rnb|soul|funk|motown|disco|boogie|new_jack_swing/.test(value))return"rnb_soul_funk";if(/jazz|swing|bebop/.test(value))return"jazz";if(/classical|baroque|opera|orchestral|chamber|choral/.test(value))return"classical";if(/country|americana|bluegrass|honky_tonk/.test(value))return"country_americana";if(/folk|acoustic|singer_songwriter/.test(value))return"folk_acoustic";

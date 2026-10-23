@@ -52,6 +52,13 @@ test('New Jack Swing remains R&B and cannot satisfy a jazz requirement',()=>{
   const def=definition('depth'),intent=configuredIntent(def,'genre-root');intent.hard.requirements=[{field:'genre',values:['jazz'],match:'any'}];
   assert.equal(assessCandidate(track(1,{genre:['rnb_soul_funk'],style:['new_jack_swing']}),def,intent,snapshot,now).eligible,false);
 });
+test('electro swing alone cannot establish jazz while explicit jazz evidence still can',()=>{
+  assert.equal(canonicalSemanticValue('genre','Electro Swing'),'electronic');
+  assert.equal(canonicalSemanticValue('genre','swing'),'jazz');
+  const def=definition('mood'),intent=configuredIntent(def,'revision');intent.hard.requirements=[{field:'genre',values:['jazz'],match:'any'}];
+  assert.equal(assessCandidate(track(1,{genre:['electronic'],style:['electro_swing','chamber_pop']}),def,intent,snapshot,now).eligible,false);
+  assert.equal(assessCandidate(track(2,{genre:['jazz'],style:['electro_swing','nu_jazz']}),def,intent,snapshot,now).eligible,true);
+});
 test('a scene or artist association cannot substitute for track genre/style evidence',()=>{
   const def=definition('chat'),intent=configuredIntent(def,'direction');intent.soft.styles=['trip_hop'];
   const sceneOnly=track(1,{genre:['electronic'],style:['downtempo','chillout'],scenes:['bristol_trip_hop_scene']});

@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {configuredIntent,canonicalIntent} from './intent-schema';import {defaultConfig,type PlaylistDefinition} from './types';
-import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion} from './intent-preferences';
+import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion} from './intent-preferences';
 const base=()=>configuredIntent({config:defaultConfig('mood'),intent:''} as PlaylistDefinition,'revision');
 test('ordinary mood/context preferences cannot become mandatory all-term filters',()=>{
   const intent=base();intent.hard.requirements=[{field:'genre',values:['trip_hop'],match:'all'},{field:'mood',values:['dark','atmospheric'],match:'all'},{field:'listeningContexts',values:['late_night'],match:'all'},{field:'mood',values:['aggressive'],match:'none'}];
@@ -60,4 +60,22 @@ test('grounding never narrows a real general EDM exclusion',()=>{
     assert.equal(groundFestivalExclusion(intent,[configured?'No festival EDM.':'No EDM, especially festival EDM.'],preserved),false);
     assert.deepEqual(intent.hard.exclusions,['edm']);
   }
+});
+test('an explicit climax exclusion always covers dynamics and build/drop structure',()=>{
+  for(const direction of ['No dramatic climaxes.','Calm music without dramatic climaxes.','Avoid any dramatic climaxes.','Keine dramatischen Höhepunkte.']){
+    const intent=base();intent.hard.requirements=[{field:'dynamicCharacter',values:['crescendo_build'],match:'none'}];
+    assert.equal(groundClimaxExclusion(intent,[direction]),true);
+    assert.deepEqual(intent.hard.requirements,[{field:'dynamicCharacter',values:['crescendo_build'],match:'none'},{field:'structuralCharacter',values:['build_drop'],match:'none'}]);
+    groundClimaxExclusion(intent,[direction]);assert.equal(intent.hard.requirements.length,2);
+  }
+});
+test('calm preferences and unrelated percussion exclusions do not invent a climax exclusion',()=>{
+  for(const direction of ['Calm instrumental music for reading.','No forceful percussion.','I like dramatic climaxes.']){
+    const intent=base();assert.equal(groundClimaxExclusion(intent,[direction]),false);assert.deepEqual(intent.hard.requirements,[]);
+  }
+});
+test('later explicit permission prevents an earlier climax instruction from being reintroduced',()=>{
+  const intent=base();assert.equal(groundClimaxExclusion(intent,['No dramatic climaxes.','Dramatic climaxes are fine now.']),false);assert.deepEqual(intent.hard.requirements,[]);
+  assert.equal(groundClimaxExclusion(intent,['No dramatic climaxes.','Allow dramatic climaxes.']),false);
+  assert.equal(groundClimaxExclusion(intent,['Allow dramatic climaxes.','No dramatic climaxes.']),true);
 });

@@ -16,6 +16,7 @@ import {acquireChatLease,releaseChatLease,storeRefreshedChatSelection,storeChatR
 import {suggestIntentChatPlaylist} from './chat-selection';
 import {unrestrictedRequirements} from './chat-agent';
 import {aiClient} from '@/features/ai/client';
+import {assessCandidate} from './selection-policy';
 
 const directory=mkdtempSync(join(tmpdir(),'curator-selection-integration-'));config.DATABASE_PATH=join(directory,'db.sqlite');
 const database=db(),user=provisionUser({token:'listener-one',navidromeUserId:'one',username:'one',displayName:'One'}),other=provisionUser({token:'listener-two',navidromeUserId:'two',username:'two',displayName:'Two'});
@@ -77,6 +78,15 @@ test('compiled description cannot remove configured exclusions, and cache is fen
   await compilePlaylistIntent(definition,[],{client});assert.equal(requests,1);
   database.prepare('UPDATE smart_playlists SET revision=revision+1 WHERE id=?').run(playlist.id);
   await compilePlaylistIntent(getPlaylist(playlist.id)!,[],{client});assert.equal(requests,2);
+});
+test('a model omission cannot admit a build/drop recording under the real no-climax direction',async()=>{
+  const p=createPlaylist({name:'Explicit focus exclusion',category:'mood',ownerUserId:user.id,intent:'Calm instrumental music for reading. No singing or spoken word, no dramatic climaxes.',config:{targetTracks:1}});
+  const client={async structured<T>(){const value=configuredIntent(p,'ignored');value.hard.vocal='instrumental';value.hard.requirements=[{field:'dynamicCharacter',values:['crescendo_build'],match:'none'}];return{data:{...value,pinFileIds:[],positionLocks:[],conflicts:[]} as T,usage:{input_tokens:1,output_tokens:1,total_tokens:2}}}};
+  const compiled=await compilePlaylistIntent(p,[],{client}),snapshot=await(await import('./listening-snapshot')).listenerMusicSnapshot(user.id),track=loadEvidencedCandidates(p,snapshot)[0];
+  track.evidence.fields.dynamicCharacter={value:['moderately_dynamic'],source:'model_inference',scope:'recording',confidence:'low',references:[]};
+  track.evidence.fields.structuralCharacter={value:['build_drop'],source:'model_inference',scope:'recording',confidence:'low',references:[]};
+  assert.equal(compiled.detail.groundedClimaxExclusion,true);
+  assert.ok(assessCandidate(track,p,compiled.intent,snapshot).violations.includes('structuralCharacter: none build_drop'));
 });
 test('a shortage preview cannot replace the previous mix',async()=>{
   database.prepare("UPDATE smart_playlists SET config_json=json_set(config_json,'$.targetTracks',10) WHERE id=?").run(foreign.id);

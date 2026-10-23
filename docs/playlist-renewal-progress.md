@@ -611,3 +611,25 @@ changes in the infrastructure repository. Update this record at each handoff.
   The complete final live replay is running from `final-v6` with a fresh, complete
   owner snapshot; its matching fourteen-night simulation must finish before
   deployment. No real new-pipeline production night has been observed yet.
+- The v6 full replay found a genuine omission in the third focus repeat: the
+  model compiled “no dramatic climaxes” into a dynamic-character exclusion only,
+  admitting Bonobo “1009” with recorded `build_drop` structure. Compiler v12 now
+  grounds both required exclusions directly in the real user directions,
+  without hardening ordinary calm preferences or unrelated percussion limits.
+  Integration coverage proves an incomplete model translation remains blocked.
+- The jazz Mood replay/simulation also admitted Parov Stelar “Josephine
+  (Candlelight Version)” through the generic swing parent despite having only
+  Electronic/electro-swing/chamber-pop evidence. Electro swing now maps to
+  Electronic before generic swing; explicit jazz tags and ordinary swing remain
+  eligible for jazz. [Austrian Music Export](https://www.musicexport.at/artist/parov-stelar/)
+  identifies the artist's music as electronic fusion; this is a conservative
+  eligibility correction, not a factual rewrite of the recording's metadata.
+- Focused regressions: 46/46 pass, TypeScript passes after correcting the literal
+  tuple type. The old v6 replay/simulation continues unchanged to expose further
+  defects; it is failed evidence and cannot authorize deployment. The f1a58e2
+  image passed CI and its infrastructure pin was pushed as server `119ec99`, but
+  MUST be replaced with the corrected, fully evaluated build before rollout.
+- v28 full validation passes: 302/302 tests, TypeScript, production and all four
+  worker builds. The current v6 matrix remains on its original bundled code so
+  its findings are reproducible; a complete corrected-code replay and simulation
+  remain required. No new-pipeline production migration or activation has begun.
