@@ -72,8 +72,11 @@ finish quickly.
   but absent edition UUID tags let native scanning select an eleven-track bonus
   edition. After proving the complete ten-recording identity set, missing edition
   and track UUIDs were filled using the existing copy-on-write repair routine.
-  Existing nonempty identity values were checked for conflicts first. Native
-  completion is now 10/10; FLAC audio MD5s and `anyReleaseOk=true` were preserved.
+  Existing nonempty identity values were checked for conflicts first. The first
+  any-edition attempt reached 10/10 but reverted after restart. The final repair
+  holds the shared album write lease and explicitly pins the complete standard
+  edition (`anyReleaseOk=false`), with unchanged FLAC audio MD5s. A second
+  controlled Lidarr restart preserved 10/10 tracks and the selected edition.
   This reconciled existing music and is not counted as a new download.
 - The real accepted Lou Reed collection submission was reconciled against a
   completed download actually tracked as studio *Transformer* (album 486).
@@ -85,8 +88,8 @@ finish quickly.
 - Verified import identity jobs now backfill complete native MusicBrainz edition,
   release-group, release-track and recording UUIDs when missing. UUIDs must be
   valid and bound to the verified artist/album; existing populated values remain
-  protected. This prevents the identity-loss pattern observed in the Quincy case
-  from being repeated by newly recovered full-release imports.
+  protected. This protects identity information on recovered full releases.
+  The exact writer responsible for the earlier Quincy tag loss was not proven.
 - Exact-title native lookups for *Welcome to Jamrock* and *Kaya* remain ambiguous:
   the catalogue contains a same-name album/single or multiple release groups.
   A controlled Lidarr restart did not fix these cases; no native database rows
@@ -98,3 +101,49 @@ was added. That result alone does not establish a peer-connectivity failure.
 Final runtime measurements and any independent transport proof belong in the
 private final assessment. Sustained acquisition throughput remains a separate
 operational limitation until actual new downloads and imports demonstrate it.
+
+The final safeguards build is `e34c7f7` (349 tests; exact-commit CI/container
+workflows passed). It deploys as Helm revision 96 with immutable OCI index
+`sha256:61bf28b97b4ce8c178cb3b42573afbf5d11ad03de7fc9e94efd574f68e1914ba`.
+Native worker execution has independently recovered the complete 40-track James
+Newton Howard score using the new bound film-credit handling. Two capped official
+Ubuntu probes transferred actual bytes from peers and cleaned up completely;
+there is no demonstrated general peer-connectivity outage.
+
+## Final production assessment
+
+At 21:35 UTC (22:35 Zurich), the monitored backlog was **3,918 releases**,
+including **2,694 albums**, 748 singles, 452 EPs and 24 other releases. Three
+albums have been reconciled to complete library files: Booker T. (11 tracks),
+James Newton Howard (40 tracks), and Quincy Jones (10 existing tracks). All
+three remained complete after the final controlled Lidarr restart. These
+recoveries do not establish a new-download throughput rate.
+
+Native blocked queue entries fell from 14 to 11. The redundant studio
+*Transformer* warning was retired only after confirming the existing 13-track
+library and its quality cutoff. Its torrent and library files were retained.
+The other eleven imports remain blocked where track/edition evidence does not
+support safe acceptance.
+
+All six music deployments are ready. Curator readiness and all four worker
+processes pass. qBittorrent has peer connectivity, no global download limit,
+24 download slots, and approximately 15 TiB of available music storage. Two
+capped official Ubuntu probes transferred 877,519 and 247,708 bytes from peers
+and removed their temporary torrents/files. The initial diagnostic web-page
+fetch reset; a failed external web request is not a peer-connectivity verdict.
+
+**The bulk library target remains underperforming.** The final measured music
+transfer rate is zero, with no active incomplete music torrents. Provider
+quotas, unreported/unsupported quality, genuine edition mismatches and native
+identity ambiguities still reject candidates. The initial preceding-day
+measurement was only three complete albums; the previously observed 36/day
+is not demonstrated now. The normal acquisition worker remains enabled and
+unpaused, with bounded retries and no quota reset. Reconciliation cleared the
+obsolete accepted Quincy submission; no accepted/submitting records remain.
+Its final observed stage was import repair, with a live heartbeat and no global
+worker error; a complete post-deployment search cycle was not yet observed. No completion date is
+credible from the current evidence. Playlist settings were not changed.
+
+Private JSON measurements, native proofs, encrypted backup and deployment
+checks are retained under the ignored acquisition-recovery evidence directory;
+credentials and private download URLs are not committed to this report.
