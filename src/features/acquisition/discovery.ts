@@ -130,6 +130,13 @@ async function sourceCandidates(source: Indexer, query: string) {
     }
   }));
 }
+export function discoverySearchQuery(artist:string,title:string){
+  // Nicknames and accents can overconstrain general indexers. This broadens
+  // retrieval only; the original canonical artist still governs acceptance.
+  const name=artist.replace(/[“"][^”"]+[”"]/g,' ').replace(/\s+/g,' ').trim()||artist;
+  return `${/^various artists$/i.test(artist)?'':name} ${title.replace(/\([^)]*\)|\[[^\]]*\]/g,' ')}`
+    .normalize('NFKD').replace(/\p{M}/gu,'').replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim();
+}
 export async function directCandidates(artist: string, title: string, remainingSources=false, attemptedSources?:Set<number>) {
   if (!sources || sources.expires < Date.now()) sources = { expires: Date.now() + 300_000, rows: await prowlarr<Indexer[]>('/indexer') };
   const preferred = ['TorrentsCSV', 'Knaben', 'LimeTorrents', 'Nyaa.si', 'The Pirate Bay', 'TorrentKitty', 'TorrentDownload'];
@@ -138,8 +145,7 @@ export async function directCandidates(artist: string, title: string, remainingS
     (s.protocol==='torrent'&&s.capabilities?.searchParams?.includes('q')&&categoryIds(s.capabilities.categories??[]).some(id=>(id>=3000&&id<4000)||id===8000))))
     .sort((a, b) => rank(a.name)-rank(b.name));
   // Broaden the query, never the identity acceptance criteria.
-  const query = `${/^various artists$/i.test(artist) ? '' : artist} ${title.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')}`
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+  const query=discoverySearchQuery(artist,title);
   if (!query) return [];
   const candidates=rows.filter(source=>!attemptedSources?.has(source.id)&&(!remainingSources||(cache.get(`direct:${source.id}:${query}`)?.expires??0)<=Date.now()));
   const result: Release[] = [], errors: unknown[] = [];

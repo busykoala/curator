@@ -1,8 +1,8 @@
 import {createHash} from 'node:crypto';
 export type CatalogAlbum = {
-  id: number; artistId: number; title: string; monitored: boolean;anyReleaseOk?:boolean;
+  id: number; artistId: number; title: string; monitored: boolean;anyReleaseOk?:boolean;foreignAlbumId?:string;
   releaseDate?: string; albumType?:string; secondaryTypes?: string[]; disambiguation?: string;
-  releases?: Array<{ id?:number;title: string;disambiguation?:string;trackCount?:number;mediumCount?:number;monitored?:boolean }>;
+  releases?: Array<{ id?:number;foreignReleaseId?:string;title: string;disambiguation?:string;trackCount?:number;mediumCount?:number;monitored?:boolean }>;
   statistics?: { trackFileCount?: number; percentOfTracks?: number };
 };
 export type Release = Record<string, unknown>;

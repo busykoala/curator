@@ -4,7 +4,19 @@ import {mkdtemp,writeFile,readFile,mkdir,link,symlink,rm} from 'node:fs/promises
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {config} from '@/config';
-import {identityRepairPlan,libraryImportPath,missingIdentityProperties,repairImportedFile} from './imported-identity';
+import {identityRepairPlan,libraryImportPath,missingIdentityProperties,repairImportedFile,importedEditionIdentity} from './imported-identity';
+test('edition identities require complete native UUIDs bound to the proven artist and album',()=>{
+ const group='11111111-1111-4111-8111-111111111111',release='22222222-2222-4222-8222-222222222222',recording='33333333-3333-4333-8333-333333333333',releaseTrack='44444444-4444-4444-8444-444444444444';
+ const a={id:10,artistId:20,title:'Album',monitored:true,foreignAlbumId:group,releases:[{id:30,title:'Album',foreignReleaseId:release}]};
+ const track={id:40,albumId:10,artistId:20,title:'Song',duration:180000,absoluteTrackNumber:1,mediumNumber:1,foreignRecordingId:recording,foreignTrackId:releaseTrack};
+ const ids=importedEditionIdentity(a,30,track);
+ assert.deepEqual(ids,{MUSICBRAINZ_ALBUMID:release,MUSICBRAINZ_RELEASEGROUPID:group,MUSICBRAINZ_RELEASETRACKID:releaseTrack,MUSICBRAINZ_TRACKID:recording});
+ assert.deepEqual(importedEditionIdentity(a,31,track),{});
+ assert.deepEqual(importedEditionIdentity(a,30,{...track,albumId:11}),{});
+ assert.deepEqual(importedEditionIdentity(a,30,{...track,artistId:21}),{});
+ assert.deepEqual(importedEditionIdentity(a,30,{...track,foreignRecordingId:'unverified'}),{});
+ assert.equal(missingIdentityProperties({MUSICBRAINZ_ALBUMID:['existing-user-value']},ids).MUSICBRAINZ_ALBUMID,undefined);
+});
 test('verified imports undo only the exact wrong identity generated from unidentified source tags',()=>{
  const expected={ARTIST:'Jimi Hendrix',ALBUMARTIST:'Jimi Hendrix',ALBUM:'War Heroes',TITLE:'Bleeding Heart',DATE:'1972-10-01'};
  const tags={ARTIST:['Shinedown'],ALBUM:['Leave a Whisper'],GENRE:['Rock']};

@@ -2,7 +2,7 @@ import {basename,dirname,extname} from 'node:path';
 import {allowedQuality,decodeTitle} from './matching';
 
 export type ImportRow = Record<string,unknown> & {path:string;audioTags?:{title?:string;artistTitle?:string;duration?:string;trackNumbers?:number[];discNumber?:number}};
-export type ReleaseTrack = {id:number;albumId:number;artistId:number;title:string;duration:number;absoluteTrackNumber:number;mediumNumber:number;foreignRecordingId?:string;titleAliases?:string[];hasFile?:boolean;trackFileId?:number};
+export type ReleaseTrack = {id:number;albumId:number;artistId:number;title:string;duration:number;absoluteTrackNumber:number;mediumNumber:number;foreignRecordingId?:string;foreignTrackId?:string;titleAliases?:string[];hasFile?:boolean;trackFileId?:number};
 export type ImportProof = {releaseId:number;files:Array<{row:ImportRow;track:ReleaseTrack}>;excludedImages:string[];durationError:number};
 const key=(s:string)=>decodeTitle(s).normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/\bthree\b/g,'3').replace(/[^\p{L}\p{N}]/gu,'');
 export function durationMs(value?:string){

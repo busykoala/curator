@@ -8,6 +8,8 @@ import {db,stateGet,stateSet} from '@/features/db/client';
 import {album,artist,releaseTracks,trackFiles} from './lidarr';
 import {rescanFolders} from '@/features/sources/lidarr';
 import {refreshLibrary} from '@/features/integrations/navidrome';
+import type {CatalogAlbum} from './matching';
+import type {ReleaseTrack} from './import-proof';
 const run=promisify(execFile);
 type IdentityJob={albumId:number;artistId:number;releaseId:number;artist:string;album:string;date?:string;trackIds:number[]};
 const jobKey=(id:number)=>`acquisition_identity_pending:${id}`;
@@ -27,6 +29,13 @@ export function missingIdentityProperties(tags:Record<string,unknown>,expected:R
     if(!values.some(v=>v!==undefined&&v!==null&&String(v).trim()&&String(v)!=='0'))missing[name]=[value];
   }
   return missing;
+}
+export function importedEditionIdentity(a:CatalogAlbum,releaseId:number,track:ReleaseTrack):Record<string,string>{
+  if(track.albumId!==a.id||track.artistId!==a.artistId)return{};
+  const release=a.releases?.find(r=>r.id===releaseId);
+  const values={MUSICBRAINZ_ALBUMID:release?.foreignReleaseId,MUSICBRAINZ_RELEASEGROUPID:a.foreignAlbumId,MUSICBRAINZ_RELEASETRACKID:track.foreignTrackId,MUSICBRAINZ_TRACKID:track.foreignRecordingId};
+  if(Object.values(values).some(value=>!value||!/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(value)))return{};
+  return values as Record<string,string>;
 }
 type GeneratedIdentity={artist:string;album:string};
 export function identityRepairPlan(tags:Record<string,unknown>,expected:Record<string,string>,generated?:GeneratedIdentity){
@@ -105,7 +114,7 @@ export async function recoverImportedIdentities(){
         const tags=JSON.parse(previous.tags_json),first=(v:unknown)=>String(Array.isArray(v)?v[0]??'':v??'');
         generated={artist:first(tags.artist),album:first(tags.album)};
       }
-      if(await repairImportedFile(path,{TITLE:track.title,ARTIST:job.artist,ALBUMARTIST:job.artist,ALBUM:job.album,TRACKNUMBER:String(track.absoluteTrackNumber),DISCNUMBER:String(track.mediumNumber),...(job.date?{DATE:job.date.slice(0,10)}:{})},undefined,generated))repaired++;
+      if(await repairImportedFile(path,{TITLE:track.title,ARTIST:job.artist,ALBUMARTIST:job.artist,ALBUM:job.album,TRACKNUMBER:String(track.absoluteTrackNumber),DISCNUMBER:String(track.mediumNumber),...importedEditionIdentity(a,job.releaseId,track),...(job.date?{DATE:job.date.slice(0,10)}:{})},undefined,generated))repaired++;
       if(generated){db().prepare('DELETE FROM track_profiles WHERE file_id IN (SELECT id FROM files WHERE path=?)').run(path);db().prepare("UPDATE files SET status='error',applied_hash=NULL WHERE path=?").run(path);stateSet('last_scan','0')}
     }
     if(folders.size)await rescanFolders([...folders]);

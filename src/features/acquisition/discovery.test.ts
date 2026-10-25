@@ -5,10 +5,17 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {config} from '@/config';
 import {db,stateGet} from '@/features/db/client';
-import {clearDiscoveryCache,directCandidates,directRelease} from './discovery';
+import {clearDiscoveryCache,directCandidates,directRelease,discoverySearchQuery} from './discovery';
 import {releasePushPayload} from './lidarr';
 const dir=mkdtempSync(join(tmpdir(),'curator-discovery-'));config.DATABASE_PATH=join(dir,'test.sqlite');
 after(()=>{db().close();rmSync(dir,{recursive:true,force:true})});
+test('provider queries broaden nicknames and accents without discarding non-Latin names',()=>{
+ assert.equal(discoverySearchQuery('Damian “Jr. Gong” Marley','Welcome to Jamrock'),'Damian Marley Welcome to Jamrock');
+ assert.equal(discoverySearchQuery('Hermanos Gutiérrez','Los Ojos del Cóndor'),'Hermanos Gutierrez Los Ojos del Condor');
+ assert.equal(discoverySearchQuery('"Queen"','Live'),'Queen Live');
+ assert.equal(discoverySearchQuery('東京','夜'),'東京 夜');
+ assert.equal(discoverySearchQuery('Various Artists','Jazz (Deluxe Edition)'),'Jazz');
+});
 test('hash-only search results get an exact magnet and an explicitly observed transport date',()=>{
   const hash='0123456789012345678901234567890123456789',at='2026-10-16T19:00:00.000Z';
   const item=directRelease({title:'Quincy Jones - Big Band Bossa Nova FLAC',guid:'source-id',infoHash:hash},'TorrentsCSV',at);
