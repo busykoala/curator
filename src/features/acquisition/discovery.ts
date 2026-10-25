@@ -130,7 +130,7 @@ async function sourceCandidates(source: Indexer, query: string) {
     }
   }));
 }
-export async function directCandidates(artist: string, title: string, remainingSources=false) {
+export async function directCandidates(artist: string, title: string, remainingSources=false, attemptedSources?:Set<number>) {
   if (!sources || sources.expires < Date.now()) sources = { expires: Date.now() + 300_000, rows: await prowlarr<Indexer[]>('/indexer') };
   const preferred = ['TorrentsCSV', 'Knaben', 'LimeTorrents', 'Nyaa.si', 'The Pirate Bay', 'TorrentKitty', 'TorrentDownload'];
   const rank=(name:string)=>preferred.includes(name)?preferred.indexOf(name):preferred.length;
@@ -141,10 +141,11 @@ export async function directCandidates(artist: string, title: string, remainingS
   const query = `${/^various artists$/i.test(artist) ? '' : artist} ${title.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')}`
     .replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
   if (!query) return [];
-  const candidates=remainingSources?rows.filter(source=>(cache.get(`direct:${source.id}:${query}`)?.expires??0)<=Date.now()):rows;
+  const candidates=rows.filter(source=>!attemptedSources?.has(source.id)&&(!remainingSources||(cache.get(`direct:${source.id}:${query}`)?.expires??0)<=Date.now()));
   const result: Release[] = [], errors: unknown[] = [];
   let completed = 0;
   for (const source of candidates) {
+    attemptedSources?.add(source.id);
     try {
       result.push(...await sourceCandidates(source, query));
       if (++completed >= 2) break;

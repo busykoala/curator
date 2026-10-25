@@ -74,6 +74,9 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
       for(const {item,source,score} of candidates) {
         if(failedSources.has(source))continue;
         const hash=releaseInfoHash(item);
+        if(db().prepare("SELECT 1 FROM source_outcomes WHERE event='submission_mismatch' AND json_extract(detail_json,'$.albumId')=? AND json_extract(detail_json,'$.guid')=? AND created_at>=datetime('now','-7 days') LIMIT 1").get(metadata.id,String(item.guid))){
+          evidence['Release previously tracked as a different album']=(evidence['Release previously tracked as a different album']??0)+1;continue;
+        }
         if(hash&&db().prepare("SELECT 1 FROM source_outcomes WHERE event IN ('replacement','unavailable','submission_failure') AND lower(json_extract(detail_json,'$.hash'))=? AND created_at>=datetime('now','-1 day') LIMIT 1").get(hash)){
           evidence['Recently failed torrent hash']=(evidence['Recently failed torrent hash']??0)+1;continue;
         }
@@ -136,8 +139,15 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
     // Provider-scoped discovery is independent of Lidarr's all-indexer fanout.
     // Share broad artist results with siblings before spending album queries.
     if(artistFirst&&await submit(await discover('direct artist',()=>directArtist(target.lidarr_artist_id!,target.artist))))return {grabbed:true};
-    if(tried<3&&await submit(await discover('alternate sources',()=>directCandidates(target.artist,metadata.title))))return {grabbed:true};
-    if(tried<3&&await submit(await discover('remaining sources',()=>directCandidates(target.artist,metadata.title,true))))return {grabbed:true};
+    const attemptedSources=new Set<number>();
+    // Each batch returns after two responding providers. Continue bounded
+    // batches so healthy empty early sources cannot hide later useful ones.
+    // Every provider is attempted at most once; its quota/cooldown still applies.
+    for(let batch=0;batch<4&&tried<3;batch++){
+      const before=attemptedSources.size,completedBefore=completed;
+      if(await submit(await discover(batch?'remaining sources':'alternate sources',()=>directCandidates(target.artist,metadata.title,false,attemptedSources))))return {grabbed:true};
+      if(attemptedSources.size===before){completed=completedBefore;break}
+    }
     if(artistFirst&&await submit(await discover('artist',()=>nativeArtist(target.lidarr_artist_id!))))return {grabbed:true};
     if(await submit(await discover('album',()=>nativeAlbum(metadata.id))))return {grabbed:true};
     if(!artistFirst&&target.lidarr_artist_id&&await submit(await discover('artist',()=>nativeArtist(target.lidarr_artist_id!))))return {grabbed:true};

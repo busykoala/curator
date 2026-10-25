@@ -53,3 +53,20 @@ test('complete multi-disc proofs use disc evidence, bounded typos and verified r
   const live=catalogue.map((t,i)=>i===7?{...t,title:t.title+' (Live)',titleAliases:['How Insensitive']}:t);
   assert.equal(run(files,live),undefined);
 });
+
+test('mastering version labels do not suppress exact titles or recording-bound aliases',()=>{
+ const ts=tracks.map((t,i)=>({...t,title:t.title+' (2002 remastered version)',...(i===1?{title:'Official title (2002 remastered version)',titleAliases:[t.title]}:{})}));
+ assert.equal(prove(rows,ts)?.files.length,3);
+ assert.equal(prove(rows,ts.map((t,i)=>i?t:{...t,title:t.title+' (Live)'})),undefined);
+ assert.equal(prove(rows,ts.map((t,i)=>i?t:{...t,title:t.title+' (alternate version)'})),undefined);
+});
+
+test('film-score credits are removable only when bound to the canonical album title',()=>{
+ const files=rows.map((r,i)=>({...r,path:`/data/downloads/Film/${i+1}. Credit.flac`,audioTags:{duration:'00:03:00.1',title:tracks[i].title+' (from "Film Name" Score)'}}));
+ const run=(name:string,filesToCheck=files,ts=tracks)=>proveRelease(filesToCheck,ts,30,10,20,'Jimi Hendrix',undefined,name);
+ assert.equal(run('Film Name: Original Motion Picture Score')?.files.length,3);
+ assert.equal(run('Film Name (Original Motion Picture Score)')?.files.length,3);
+ assert.equal(run('Another Film: Original Motion Picture Score'),undefined);
+ assert.equal(prove(files),undefined);
+ assert.equal(run('Film Name: Original Motion Picture Score',files,tracks.map((t,i)=>i?t:{...t,title:t.title+' (Live)'})),undefined);
+});

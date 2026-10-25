@@ -24,8 +24,8 @@ globalThis.fetch=async(input,init)=>{
  if(/\/album\/[23]$/.test(url)){const id=Number(url.split('/').at(-1));return Response.json({id,artistId:7,title:id===2?'Second':'Third',monitored:true,statistics:{percentOfTracks:0}})}
  if(url.endsWith('/album/1'))return Response.json({id:1,artistId:1,title:'Album',monitored:true,statistics:{percentOfTracks:0}});
  if(url.includes('/album?artistId='))return Response.json([]);
- if(url.endsWith('/indexer'))return Response.json(url.includes('9696')?(mode==='native-outage'?[{id:3,name:'LimeTorrents',enable:true}]:['native-quota','all-deferred'].includes(mode)?[{id:10,name:'TorrentsCSV',enable:true,capabilities:{categories:[{id:8000}]}}]:[]):[{id:1,enableInteractiveSearch:true}]);
- if(url.includes('/search?')){if(mode==='native-quota')assert.equal(new URL(url).searchParams.has('categories'),false);return Response.json([{guid:'alternate',title:'Test - Album FLAC',indexerId:3,protocol:'torrent',seeders:10,size:300000000,infoHash:'0123456789012345678901234567890123456789',indexerFlags:[]}]);}
+ if(url.endsWith('/indexer'))return Response.json(url.includes('9696')?(mode==='late-provider'?['TorrentsCSV','Knaben','LimeTorrents','Nyaa.si','The Pirate Bay','TorrentKitty','TorrentDownload'].map((name,i)=>({id:100+i,name,enable:true})):mode==='native-outage'?[{id:3,name:'LimeTorrents',enable:true}]:['native-quota','all-deferred'].includes(mode)?[{id:10,name:'TorrentsCSV',enable:true,capabilities:{categories:[{id:8000}]}}]:[]):[{id:1,enableInteractiveSearch:true}]);
+ if(url.includes('/search?')){if(mode==='native-quota')assert.equal(new URL(url).searchParams.has('categories'),false);if(mode==='late-provider'&&new URL(url).searchParams.get('indexerIds')!=='106')return Response.json([]);return Response.json([{guid:'alternate',title:'Test - Album FLAC',indexerId:3,protocol:'torrent',seeders:10,size:300000000,infoHash:'0123456789012345678901234567890123456789',indexerFlags:[]}]);}
  assert.match(url,/\/api\/v1\/release/);
  if(init?.method==='POST'){
   const release=JSON.parse(String(init.body));posts.push(release.indexer);
@@ -73,6 +73,9 @@ const previousSearch=targetByAlbum(1)!.last_search_at;
 assert.equal((await findRelease(targetByAlbum(1)!,false)).searchCompleted,false);
 assert.equal(targetByAlbum(1)!.last_search_at,previousSearch);
 assert.deepEqual(posts,[]);
+reset();posts=[];mode='late-provider';db().exec('DELETE FROM acquisition_requests');
+assert.equal((await findRelease(targetByAlbum(1)!,false)).grabbed,true);
+assert.deepEqual(posts,['Curator magnet / TorrentDownload (Prowlarr)']);
 reset();posts=[];mode='payload-invalid';db().exec('DELETE FROM acquisition_requests');
 await assert.rejects(findRelease(targetByAlbum(1)!,false),/validation errors/);
 assert.equal((db().prepare('SELECT count(*) n FROM acquisition_submissions').get() as {n:number}).n,0);

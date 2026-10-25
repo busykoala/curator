@@ -10,12 +10,19 @@ export function durationMs(value?:string){
   return m?(Number(m[1])*3600+Number(m[2])*60+Number(m[3]))*1000:0;
 }
 function withoutMastering(value:string){
-  return value.replace(/\(([^)]*)\)/g,(whole,inside:string)=>/^(?:(?:\d{4}|24[- ]?bit)\s+)?(?:(?:rudy van gelder|digital(?:ly)?|24[- ]?bit)\s+)*(?:remaster(?:ed)?|mastering|edition)(?:\s+(?:\d{2}|\d{4}))?$/i.test(inside.trim())||/^rudy van gelder$/i.test(inside.trim())?'':whole);
+  return value.replace(/\(([^)]*)\)/g,(whole,inside:string)=>/^(?:(?:\d{4}|24[- ]?bit)\s+)?(?:(?:rudy van gelder|digital(?:ly)?|24[- ]?bit)\s+)*(?:remaster(?:ed)?|mastering|edition)(?:\s+(?:\d{2}|\d{4}))?(?:\s+version)?$/i.test(inside.trim())||/^rudy van gelder$/i.test(inside.trim())?'':whole);
 }
-function titles(row:ImportRow,artist:string){
+function withoutScoreCredit(value:string,albumTitle?:string){
+  if(!albumTitle)return value;
+  return value.replace(/\s*\(from\s+["“](.+?)["”]\s+score\)\s*$/i,(whole,credit:string)=>{
+    const root=albumTitle.replace(/[:\s]*(?:\(?original motion picture score\)?)\s*$/i,'');
+    return key(credit)===key(root)?'':whole;
+  });
+}
+function titles(row:ImportRow,artist:string,albumTitle?:string){
   const name=basename(row.path,extname(row.path)).replace(/^\d+[.\s_-]+/,'');
   const prefix=key(artist);
-  return [row.audioTags?.title,name].filter((s):s is string=>Boolean(s)).map(s=>key(withoutMastering(s))).flatMap(s=>[s,...(s.startsWith(prefix)?[s.slice(prefix.length)]:[])]);
+  return [row.audioTags?.title,name].filter((s):s is string=>Boolean(s)).map(s=>key(withoutMastering(withoutScoreCredit(s,albumTitle)))).flatMap(s=>[s,...(s.startsWith(prefix)?[s.slice(prefix.length)]:[])]);
 }
 function variants(value:string){return [...new Set(value.toLowerCase().match(/\b(?:live|remix(?:ed)?|instrumental|karaoke|reprise|alternate|version|take|demo|edit|acoustic)\b/g)??[])].sort().join(',')}
 function oneTypo(a:string,b:string){
@@ -26,7 +33,7 @@ function oneTypo(a:string,b:string){
 }
 function titleMatch(names:string[],track:ReleaseTrack,row:ImportRow,allowTypo:boolean){
   const expected=key(withoutMastering(track.title)),source=row.audioTags?.title??basename(row.path,extname(row.path));
-  const sameVariant=variants(source)===variants(track.title);
+  const sameVariant=variants(withoutMastering(source))===variants(withoutMastering(track.title));
   const labels=[expected,...(sameVariant?track.titleAliases??[]:[]).map(s=>key(withoutMastering(s)))];
   if(names.some(n=>labels.includes(n)||(sameVariant&&n.length>=24&&n.length/expected.length>=.95&&expected.startsWith(n))))return 0;
   return allowTypo&&sameVariant&&names.some(n=>labels.some(label=>oneTypo(n,label)))?1:-1;
@@ -36,7 +43,7 @@ function discNumber(row:ImportRow){
   return tag&&folder&&tag!==folder?-1:tag||folder;
 }
 /** Full release proof; no partial track lists, fuzzy artist aliases or recording substitutions. */
-export function proveRelease(rows:ImportRow[],tracks:ReleaseTrack[],releaseId:number,albumId:number,artistId:number,artist:string,onMissingTitle?:(track:ReleaseTrack)=>void):ImportProof|undefined{
+export function proveRelease(rows:ImportRow[],tracks:ReleaseTrack[],releaseId:number,albumId:number,artistId:number,artist:string,onMissingTitle?:(track:ReleaseTrack)=>void,albumTitle?:string):ImportProof|undefined{
   if(tracks.length<3||tracks.some(t=>t.albumId!==albumId||t.artistId!==artistId||t.hasFile||t.trackFileId||t.duration<=0)||new Set(tracks.map(t=>t.id)).size!==tracks.length)return;
   const total=tracks.reduce((n,t)=>n+t.duration,0);
   const images=rows.filter(r=>durationMs(r.audioTags?.duration)>total*.95&&rows.length===tracks.length+1);
@@ -51,7 +58,7 @@ export function proveRelease(rows:ImportRow[],tracks:ReleaseTrack[],releaseId:nu
     if(!row.path.startsWith('/data/downloads/')||row.path.split('/').includes('..')||!/\.(flac|mp3)$/i.test(row.path))return;
     if(!allowedQuality(row,true))return;
     if(row.audioTags?.artistTitle&&key(row.audioTags.artistTitle)!==key(artist))return;
-    const duration=durationMs(row.audioTags?.duration),names=titles(row,artist);
+    const duration=durationMs(row.audioTags?.duration),names=titles(row,artist,albumTitle);
     if(!duration)return;
     const position=row.audioTags?.trackNumbers?.find(n=>n>0)??Number(/^([0-9]+)[.\s_-]/.exec(basename(row.path))?.[1]??0);
     const disc=discNumber(row);

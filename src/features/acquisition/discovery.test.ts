@@ -140,3 +140,22 @@ test('enabled generic audio providers remain reachable independently of combined
  };
  try{assert.deepEqual(await directCandidates('Test','Album'),[]);assert.equal(calls,1)}finally{globalThis.fetch=original}
 });
+
+test('bounded batches reach the last provider without repeating early empty or deferred sources',async()=>{
+ db().exec('DELETE FROM state; DELETE FROM acquisition_requests');clearDiscoveryCache();
+ const original=globalThis.fetch,queried:number[]=[],attempted=new Set<number>();
+ const providers=['TorrentsCSV','Knaben','LimeTorrents','Nyaa.si','The Pirate Bay','TorrentKitty','TorrentDownload'];
+ globalThis.fetch=async input=>{
+  const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexer'))return Response.json(providers.map((name,i)=>({id:100+i,name,enable:true})));
+  const id=Number(u.searchParams.get('indexerIds'));queried.push(id);
+  return Response.json(id===106?[{title:'Test - Album FLAC',seeders:10,size:300000000}]:[]);
+ };
+ try{
+  const results=[];
+  for(let batch=0;batch<4;batch++)results.push(...await directCandidates('Test','Album',false,attempted));
+  assert.equal(results.length,1);assert.equal(attempted.size,7);
+  assert.deepEqual(queried,[100,101,102,103,104,105,106]);
+  assert.equal((db().prepare('SELECT count(*) n FROM acquisition_requests').get() as {n:number}).n,7);
+ }finally{globalThis.fetch=original}
+});

@@ -23,7 +23,7 @@ async function recoverCompleteRelease(rows:Record<string,unknown>[],item:QueueIt
     const lookedUp=new Set<number>();let proof:ImportProof|undefined;
     for(let pass=0;pass<4;pass++){
       let missing:typeof tracks[number]|undefined;
-      proof=proveRelease(rows as ImportRow[],tracks,release.id!,metadata.id,metadata.artistId,artist,t=>{missing=t});
+      proof=proveRelease(rows as ImportRow[],tracks,release.id!,metadata.id,metadata.artistId,artist,t=>{missing=t},metadata.title);
       if(proof||pass===3||!missing||!missing.foreignRecordingId||lookedUp.has(missing.id))break;
       lookedUp.add(missing.id);
       missing.titleAliases=await recordingTitleAliases(missing.foreignRecordingId,`acquisition:${metadata.id}`).catch(()=>[]);
