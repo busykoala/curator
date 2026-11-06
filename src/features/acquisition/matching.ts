@@ -58,8 +58,13 @@ export function matchesAlbum(item: Release, album: CatalogAlbum, artist: string,
   const raw = decodeTitle(String(item.title ?? "")), titleWords = words(raw), artistWords = significant(artist);
   const verified=parsed?.artist?.id===album.artistId&&parsed.albums?.length===1&&parsed.albums[0].id===album.id;
   // Never mistake e.g. Delores Keane for Keane. Collaborative credits may follow.
-  const prefix = significant(raw).slice(0, artistWords.length).join(" ");
-  if (!artistWords.length || (prefix !== artistWords.join(" ")&&!verified)) return false;
+  // Canonical credits can include a quoted nickname while source titles omit
+  // it (Damian “Jr. Gong” Marley). Search already omits that nickname; retain
+  // the same evidenced credit during matching, before exact native-ID approval.
+  const plainCredit=significant(artist.replace(/[“"][^”"]+[”"]/g,' '));
+  const credits=[artistWords,...(plainCredit.length>=2?[plainCredit]:[])];
+  const creditMatches=credits.some(credit=>significant(raw).slice(0,credit.length).join(' ')===credit.join(' '));
+  if (!artistWords.length || (!creditMatches&&!verified)) return false;
   // Some catalogue groups reuse a studio album's name for a multi-album box.
   // The shared title alone cannot establish that collection's identity.
   if(/\bbox\s*set\b/i.test(album.disambiguation??'')&&!/\bbox\s*set\b|\bdisk union\b/i.test(raw)){

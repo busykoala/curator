@@ -23,7 +23,10 @@ async function main(){
   function inspect(database:Database.Database){
     const preserved:Record<string,{rows:number;hash:string}>={};
     for(const[name,sql]of Object.entries(tracked)){const hash=createHash('sha256');let rows=0;for(const row of database.prepare(sql).iterate()){hash.update(JSON.stringify(row)+'\n');rows++}preserved[name]={rows,hash:hash.digest('hex')}}
-    return{schema:(database.prepare('SELECT max(version) n FROM schema_migrations').get() as {n:number}).n,preserved,foreignKeys:database.pragma('foreign_key_check')};
+    const work=Object.fromEntries(['playlist_refresh_jobs','playlist_publications'].map(table=>[table,
+      database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)?
+        (database.prepare(`SELECT count(*) n FROM ${table}`).get() as {n:number}).n:0]));
+    return{schema:(database.prepare('SELECT max(version) n FROM schema_migrations').get() as {n:number}).n,preserved,work,foreignKeys:database.pragma('foreign_key_check')};
   }
   const original=new Database(target,{readonly:true,fileMustExist:true}),before=inspect(original);original.close();
   let after:ReturnType<typeof inspect>|undefined;
@@ -31,8 +34,7 @@ async function main(){
     const migrated=db();after=inspect(migrated);
     if(JSON.stringify(before.preserved)!==JSON.stringify(after.preserved)||JSON.stringify(before.foreignKeys)!==JSON.stringify(after.foreignKeys))throw Error('Migration changed preserved user/library/playlist data or foreign-key integrity');
     if(after.schema!==28)throw Error('Expected all migrations through version 28');
-    if((migrated.prepare('SELECT count(*) n FROM playlist_refresh_jobs').get() as {n:number}).n||
-      (migrated.prepare('SELECT count(*) n FROM playlist_publications').get() as {n:number}).n)throw Error('Migration unexpectedly created refresh or publication work');
+    if(JSON.stringify(before.work)!==JSON.stringify(after.work))throw Error('Migration unexpectedly changed refresh or publication work counts');
     migrated.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;
   }
   const report={at:new Date().toISOString(),durationMs:Date.now()-started,scope:'Consistent read-only production copy, two migration passes, no workers/inference/acquisition/publication. Hashes cover preserved definitions, snapshots, song ordering, library metadata/profiles and encrypted credential fields; credentials are never printed.',before,after,passes:2,preserved:true};

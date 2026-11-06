@@ -3,6 +3,15 @@ import assert from "node:assert/strict";
 import {conflictingAlbum,matchesAlbum,releaseQuality,repairedTitle, type CatalogAlbum} from "./matching";
 const album=(title:string,releaseDate='1975-01-01'):CatalogAlbum=>({id:1,artistId:1,title,releaseDate,monitored:true});
 const item=(title:string,extra={})=>({title,...extra});
+test('source credits may omit an explicitly quoted canonical nickname without accepting other artists or live versions',()=>{
+ const target=album('Welcome to Jamrock','2005-09-12'),artist='Damian “Jr. Gong” Marley';
+ assert.equal(matchesAlbum(item('Damian Marley - Welcome to Jamrock 2005 (FLAC)'),target,artist),true);
+ assert.equal(matchesAlbum(item('Damian “Jr. Gong” Marley - Welcome to Jamrock FLAC'),target,artist),true);
+ assert.equal(matchesAlbum(item('Ziggy Marley - Welcome to Jamrock FLAC'),target,artist),false);
+ assert.equal(matchesAlbum(item('Damian Marley - Welcome to Jamrock Live FLAC'),target,artist),false);
+ assert.equal(matchesAlbum(item('Queen - Queen (1973) FLAC'),album('Queen','1973-01-01'),'“Queen”'),false);
+ assert.equal(matchesAlbum(item('Queen - Queen (1973) FLAC'),album('Queen','1973-01-01'),'“Queen”',{artist:{id:1},albums:[{id:1}]}),true);
+});
 test('short catalogue aliases cannot turn studio audio into a cast recording or a meditation edition into the standard album',()=>{
  const broadway={...album('American Idiot: The Original Broadway Cast Recording','2010-01-01'),releases:[{title:'American Idiot'}]};
  const raw=item('Green Day - American Idiot (2004) [2012 Remastered Hi-Res 24-48] FLAC 88');
