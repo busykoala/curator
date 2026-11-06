@@ -54,6 +54,7 @@ test('an unavailable preferred provider cannot suppress other sources or turn he
   clearDiscoveryCache();
   globalThis.fetch=async input=>{
     const url=new URL(String(input));
+    if(url.pathname.endsWith('/indexerstatus'))return Response.json([]);
     if(url.pathname.endsWith('/indexer'))return Response.json([{id:1,name:'The Pirate Bay',enable:true},{id:3,name:'LimeTorrents',enable:true},{id:12,name:'TorrentKitty',enable:true}]);
     const id=Number(url.searchParams.get('indexerIds'));queried.push(id);
     assert.equal(url.searchParams.get('query'),'Sounds of Soul Deep Volume 7');
@@ -83,6 +84,7 @@ test('generic providers are queried without an unsupported music category and re
   let calls=0;
   globalThis.fetch=async input=>{
     const url=new URL(String(input));
+    if(url.pathname.endsWith('/indexerstatus'))return Response.json([]);
     if(url.pathname.endsWith('/indexer'))return Response.json([{id:10,name:'TorrentsCSV',enable:true,capabilities:{categories:[{id:8000}]}}]);
     calls++;
     assert.equal(url.searchParams.has('categories'),false);
@@ -104,6 +106,7 @@ test('music-capable providers retain the music category',async()=>{
   const original=globalThis.fetch;
   globalThis.fetch=async input=>{
     const url=new URL(String(input));
+    if(url.pathname.endsWith('/indexerstatus'))return Response.json([]);
     if(url.pathname.endsWith('/indexer'))return Response.json([{id:3,name:'LimeTorrents',enable:true,capabilities:{categories:[{id:3000,subCategories:[{id:3040}]}]}}]);
     assert.equal(url.searchParams.get('categories'),'3000');return Response.json([]);
   };
@@ -115,6 +118,7 @@ test('an enabled Knaben provider adds capacity while a manually disabled one sta
   const original=globalThis.fetch;let enabled=false,calls=0;
   globalThis.fetch=async input=>{
     const url=new URL(String(input));
+    if(url.pathname.endsWith('/indexerstatus'))return Response.json([]);
     if(url.pathname.endsWith('/indexer'))return Response.json([{id:4,name:'Knaben',enable:enabled,capabilities:{categories:[{id:3000}]}}]);
     calls++;assert.equal(url.searchParams.get('indexerIds'),'4');assert.equal(url.searchParams.get('categories'),'3000');return Response.json([]);
   };
@@ -129,6 +133,7 @@ test('a second discovery batch reaches other providers after two healthy empty s
  const original=globalThis.fetch,queried:number[]=[];
  globalThis.fetch=async input=>{
   const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexerstatus'))return Response.json([]);
   if(u.pathname.endsWith('/indexer'))return Response.json([{id:10,name:'TorrentsCSV',enable:true},{id:4,name:'Knaben',enable:true},{id:3,name:'LimeTorrents',enable:true}]);
   const id=Number(u.searchParams.get('indexerIds'));queried.push(id);
   return Response.json(id===3?[{title:'Test - Album FLAC',infoHash:'0123456789012345678901234567890123456789',seeders:10,size:300000000}]:[]);
@@ -144,6 +149,7 @@ test('enabled generic audio providers remain reachable independently of combined
  db().exec('DELETE FROM state; DELETE FROM acquisition_requests');clearDiscoveryCache();
  const original=globalThis.fetch;let calls=0;
  globalThis.fetch=async input=>{const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexerstatus'))return Response.json([]);
   if(u.pathname.endsWith('/indexer'))return Response.json([{id:8,name:'Configured audio provider',enable:true,protocol:'torrent',capabilities:{searchParams:['q'],categories:[{id:3000}]}},{id:99,name:'Disabled provider',enable:false,protocol:'torrent',capabilities:{searchParams:['q'],categories:[{id:3000}]}}]);
   calls++;assert.equal(u.searchParams.get('indexerIds'),'8');assert.equal(u.searchParams.get('categories'),'3000');return Response.json([]);
  };
@@ -156,6 +162,7 @@ test('bounded batches reach the last provider without repeating early empty or d
  const providers=['TorrentsCSV','Knaben','LimeTorrents','Nyaa.si','The Pirate Bay','TorrentKitty','TorrentDownload'];
  globalThis.fetch=async input=>{
   const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexerstatus'))return Response.json([]);
   if(u.pathname.endsWith('/indexer'))return Response.json(providers.map((name,i)=>({id:100+i,name,enable:true})));
   const id=Number(u.searchParams.get('indexerIds'));queried.push(id);
   return Response.json(id===106?[{title:'Test - Album FLAC',seeders:10,size:300000000}]:[]);
@@ -174,6 +181,7 @@ test('provider results survive a worker cache reset and quota exhaustion, but di
  const original=globalThis.fetch;let calls=0,enabled=true;
  globalThis.fetch=async input=>{
   const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexerstatus'))return Response.json([]);
   if(u.pathname.endsWith('/indexer'))return Response.json([{id:10,name:'TorrentsCSV',enable:enabled}]);
   calls++;return Response.json([{title:'Test - Persistent Album FLAC',seeders:5,size:300000000}]);
  };
@@ -187,4 +195,48 @@ test('provider results survive a worker cache reset and quota exhaustion, but di
   enabled=false;clearDiscoveryCache();
   await assert.rejects(directCandidates('Test','Persistent Album'),/No enabled discovery providers/);assert.equal(calls,1);
  }finally{globalThis.fetch=original}
+});
+
+test('HTTP 200 empty results accompanied by a provider failure are deferred and never cached as misses',async()=>{
+ db().exec('DELETE FROM state; DELETE FROM acquisition_requests');clearDiscoveryCache();
+ const original=globalThis.fetch;let failed=true;
+ const retry=new Date(Date.now()+120_000).toISOString();
+ globalThis.fetch=async input=>{
+  const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexer'))return Response.json([{id:501,name:'TorrentsCSV',enable:true}]);
+  if(u.pathname.endsWith('/indexerstatus'))return Response.json(failed?[{indexerId:501,disabledTill:retry}]:[]);
+  return Response.json([]);
+ };
+ try{
+  await assert.rejects(directCandidates('Test','Failed Empty'),error=>{assert.equal((error as {retryAt:string}).retryAt,retry);return /failed during search/.test(String(error))});
+  assert.equal((db().prepare('SELECT count(*) n FROM acquisition_source_cache').get() as {n:number}).n,0);
+  assert.equal((db().prepare("SELECT count(*) n FROM source_outcomes WHERE indexer_id=501 AND event='search_failure'").get() as {n:number}).n,1);
+  failed=false;db().exec("DELETE FROM state WHERE key LIKE 'acquisition_source_%'");clearDiscoveryCache();
+  assert.deepEqual(await directCandidates('Test','Failed Empty'),[]);
+  assert.equal((db().prepare('SELECT count(*) n FROM acquisition_source_cache').get() as {n:number}).n,1);
+ }finally{globalThis.fetch=original}
+});
+
+test('unavailable provider responses use the actual recovery time instead of imposing thirty minutes',async()=>{
+ db().exec('DELETE FROM state; DELETE FROM acquisition_requests');clearDiscoveryCache();
+ const original=globalThis.fetch,retry=new Date(Date.now()+180_000).toISOString();
+ globalThis.fetch=async input=>{
+  const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexer'))return Response.json([{id:502,name:'TorrentsCSV',enable:true}]);
+  if(u.pathname.endsWith('/indexerstatus'))return Response.json([{indexerId:502,disabledTill:retry}]);
+  return Response.json({message:'Search failed due to all selected indexers being unavailable'},{status:400});
+ };
+ try{await assert.rejects(directCandidates('Test','Unavailable'),error=>(error as {retryAt:string}).retryAt===retry)}finally{globalThis.fetch=original}
+});
+
+test('unverifiable empty responses are not saved when provider health metadata fails',async()=>{
+ db().exec('DELETE FROM state; DELETE FROM acquisition_requests');clearDiscoveryCache();
+ const original=globalThis.fetch;
+ globalThis.fetch=async input=>{
+  const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexer'))return Response.json([{id:503,name:'TorrentsCSV',enable:true}]);
+  if(u.pathname.endsWith('/indexerstatus'))return Response.json({}, {status:503});
+  return Response.json([]);
+ };
+ try{await assert.rejects(directCandidates('Test','Unknown Health'),/503/);assert.equal((db().prepare('SELECT count(*) n FROM acquisition_source_cache').get() as {n:number}).n,0)}finally{globalThis.fetch=original}
 });

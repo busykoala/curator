@@ -81,6 +81,12 @@ async function serializedSource<T>(id: number, work: () => Promise<T>): Promise<
   sourceWork.set(id, next);
   try { return await next; } finally { if (sourceWork.get(id) === next) sourceWork.delete(id); }
 }
+async function unavailableUntil(id:number){
+  const states=await prowlarr<Array<{indexerId:number;disabledTill?:string}>>('/indexerstatus');
+  if(!Array.isArray(states))throw Error('Invalid provider health response');
+  const until=Date.parse(states.find(s=>s.indexerId===id)?.disabledTill??'');
+  return Number.isFinite(until)&&until>Date.now()?new Date(until).toISOString():undefined;
+}
 export function directRelease(report: Release, sourceName: string, observedAt = new Date().toISOString()): Release {
   const title = String(report.title ?? ''), hash = releaseInfoHash(report);
   const quality = /\bflac\b/i.test(title) ? 'FLAC' : /\bmp3\b.*\b320\b|\b320\s*kbps\b/i.test(title) ? 'MP3-320' : /\bmp3\b.*\bv0\b/i.test(title) ? 'MP3-VBR-V0' : 'Unknown';
@@ -126,14 +132,26 @@ async function sourceCandidates(source: Indexer, query: string) {
     const started = Date.now();
     try {
       const reports = await prowlarr<Release[]>(`/search?${params}`);
+      // A failed Prowlarr indexer can return HTTP 200 with [], then report its
+      // failure only in /indexerstatus. Never turn that failure into a day-long
+      // cached miss or a successfully completed search.
+      if(Array.isArray(reports)&&!reports.length){
+        const retry=await unavailableUntil(source.id);
+        if(retry)throw new SearchDeferred(retry,'Indexer failed during search');
+      }
       rememberSourceResults(source.id,query,reports);
       recordSearch(source.name, source.id, 'search', started, { query, categories, results: reports.length });
       stateSet(`acquisition_source_error:${source.id}`, '');
       stateSet(`acquisition_source_status:${source.id}`, JSON.stringify({ at: new Date().toISOString(), results: reports.length }));
       return reports.map(r => directRelease(r, source.name));
     } catch (error) {
-      recordSearch(source.name, source.id, 'search_failure', started, { query, reason: String(error) });
-      throw error;
+      let failure=error;
+      if(error instanceof SearchDeferred&&error.message==='Indexer temporarily unavailable')try{
+        const retry=await unavailableUntil(source.id);
+        if(retry)failure=new SearchDeferred(retry,error.message);
+      }catch{/* Preserve the original cooldown if health metadata is unavailable. */}
+      recordSearch(source.name, source.id, 'search_failure', started, { query, reason: String(failure) });
+      throw failure;
     }
   }));
 }

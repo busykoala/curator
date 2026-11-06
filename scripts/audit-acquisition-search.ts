@@ -15,6 +15,7 @@ upsertTarget({albumId:1,origin:'migration',artist:'Test',title:'Album'});
 let mode='empty',posts:string[]=[],artistSearches=0;
 globalThis.fetch=async(input,init)=>{
  const url=String(input);
+ if(url.endsWith('/indexerstatus'))return Response.json([]);
  if(url.includes('/api/v2/auth/login'))return new Response('Ok.',{headers:{'set-cookie':'SID=test-cookie'}});
  if(url.includes('/api/v2/sync/maindata'))return Response.json({torrents:{},server_state:{free_space_on_disk:mode==='capacity'?1:1024**4}});
  if(url.includes('/parse?')&&mode.startsWith('generic'))return Response.json({artist:{id:1},albums:[{id:mode==='generic'?4:99}]});

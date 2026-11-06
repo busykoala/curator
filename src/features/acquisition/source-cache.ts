@@ -2,7 +2,8 @@ import {createHash} from 'node:crypto';
 import {db} from '@/features/db/client';
 import type {Release} from './matching';
 
-const cacheKey=(id:number,query:string)=>createHash('sha256').update(`${id}:${query}`).digest('hex');
+// Older misses were saved before checking Prowlarr's out-of-band failures.
+const cacheKey=(id:number,query:string)=>createHash('sha256').update(`health-v1:${id}:${query}`).digest('hex');
 
 // Only provider results are reusable. Native release handles expire and must
 // never enter this cache. Every cached candidate still passes normal identity,
