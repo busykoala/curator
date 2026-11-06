@@ -8,7 +8,7 @@ const {db}=await import('../src/features/db/client');
 const {upsertTarget,targetByAlbum}=await import('../src/features/acquisition/repository');
 const {findRelease}=await import('../src/features/acquisition/search');
 const {clearDiscoveryCache}=await import('../src/features/acquisition/discovery');
-const reset=()=>{clearDiscoveryCache();db().exec('DELETE FROM acquisition_submissions')};
+const reset=()=>{clearDiscoveryCache();db().exec('DELETE FROM acquisition_submissions; DELETE FROM acquisition_source_cache')};
 const original=globalThis.fetch;
 try {
 upsertTarget({albumId:1,origin:'migration',artist:'Test',title:'Album'});

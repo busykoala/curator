@@ -1,4 +1,4 @@
-import test,{after} from 'node:test';
+import test,{after,beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
@@ -8,6 +8,7 @@ import {db,stateGet} from '@/features/db/client';
 import {clearDiscoveryCache,directCandidates,directRelease,discoverySearchQuery} from './discovery';
 import {releasePushPayload} from './lidarr';
 const dir=mkdtempSync(join(tmpdir(),'curator-discovery-'));config.DATABASE_PATH=join(dir,'test.sqlite');
+beforeEach(()=>db().exec('DELETE FROM acquisition_source_cache'));
 after(()=>{db().close();rmSync(dir,{recursive:true,force:true})});
 test('provider queries broaden nicknames and accents without discarding non-Latin names',()=>{
  assert.equal(discoverySearchQuery('Damian “Jr. Gong” Marley','Welcome to Jamrock'),'Damian Marley Welcome to Jamrock');
@@ -63,6 +64,7 @@ test('an unavailable preferred provider cannot suppress other sources or turn he
     assert.deepEqual(queried,[3,1,12]);
     assert.match(stateGet('acquisition_source_error:1'),/temporarily unavailable/);
     clearDiscoveryCache();
+    db().exec('DELETE FROM acquisition_source_cache');
     // An exhausted first provider must not stop a healthy provider either.
     db().prepare("UPDATE state SET value='0' WHERE key IN ('acquisition_source_wait:12','acquisition_source_wait:3')").run();
     const insert=db().prepare("INSERT INTO acquisition_requests(kind,indexer_id) VALUES('test',3)");
@@ -164,5 +166,25 @@ test('bounded batches reach the last provider without repeating early empty or d
   assert.equal(results.length,1);assert.equal(attempted.size,7);
   assert.deepEqual(queried,[100,101,102,103,104,105,106]);
   assert.equal((db().prepare('SELECT count(*) n FROM acquisition_requests').get() as {n:number}).n,7);
+ }finally{globalThis.fetch=original}
+});
+
+test('provider results survive a worker cache reset and quota exhaustion, but disabled sources stay disabled',async()=>{
+ db().exec('DELETE FROM state; DELETE FROM acquisition_requests; DELETE FROM acquisition_source_cache; DELETE FROM source_outcomes');clearDiscoveryCache();
+ const original=globalThis.fetch;let calls=0,enabled=true;
+ globalThis.fetch=async input=>{
+  const u=new URL(String(input));
+  if(u.pathname.endsWith('/indexer'))return Response.json([{id:10,name:'TorrentsCSV',enable:enabled}]);
+  calls++;return Response.json([{title:'Test - Persistent Album FLAC',seeders:5,size:300000000}]);
+ };
+ try{
+  assert.equal((await directCandidates('Test','Persistent Album')).length,1);
+  const insert=db().prepare("INSERT INTO acquisition_requests(kind,indexer_id) VALUES('test',10)");
+  db().transaction(()=>{for(let i=0;i<300;i++)insert.run()})();
+  clearDiscoveryCache();
+  assert.equal((await directCandidates('Test','Persistent Album')).length,1);assert.equal(calls,1);
+  assert.equal((db().prepare("SELECT count(*) n FROM source_outcomes WHERE event='cache_hit'").get() as {n:number}).n,1);
+  enabled=false;clearDiscoveryCache();
+  await assert.rejects(directCandidates('Test','Persistent Album'),/No enabled discovery providers/);assert.equal(calls,1);
  }finally{globalThis.fetch=original}
 });

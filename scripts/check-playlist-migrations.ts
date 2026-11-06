@@ -30,7 +30,7 @@ async function main(){
   for(let pass=0;pass<2;pass++){
     const migrated=db();after=inspect(migrated);
     if(JSON.stringify(before.preserved)!==JSON.stringify(after.preserved)||JSON.stringify(before.foreignKeys)!==JSON.stringify(after.foreignKeys))throw Error('Migration changed preserved user/library/playlist data or foreign-key integrity');
-    if(after.schema!==27)throw Error('Expected all playlist migrations through version 27');
+    if(after.schema!==28)throw Error('Expected all migrations through version 28');
     if((migrated.prepare('SELECT count(*) n FROM playlist_refresh_jobs').get() as {n:number}).n||
       (migrated.prepare('SELECT count(*) n FROM playlist_publications').get() as {n:number}).n)throw Error('Migration unexpectedly created refresh or publication work');
     migrated.close();delete(globalThis as {curatorDb?:unknown}).curatorDb;

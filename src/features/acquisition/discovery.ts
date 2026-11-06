@@ -4,6 +4,7 @@ import { artistReleases, releases, reserveSearch, SearchDeferred } from "./lidar
 import type { Release } from "./matching";
 import { releaseInfoHash } from './qbittorrent';
 import { configuredRequestLimits,type LimitField } from './source-limits';
+import {cachedSourceResults,rememberSourceResults} from './source-cache';
 
 const cache = new Map<string, { expires: number; work: Promise<Release[]> }>();
 const sourceWork = new Map<number, Promise<unknown>>();
@@ -103,6 +104,11 @@ export function directRelease(report: Release, sourceName: string, observedAt = 
 }
 async function sourceCandidates(source: Indexer, query: string) {
   return cached(`direct:${source.id}:${query}`, () => serializedSource(source.id, async () => {
+    const saved=cachedSourceResults(source.id,query);
+    if(saved){
+      recordSearch(source.name,source.id,'cache_hit',Date.now(),{query,results:saved.reports.length,observedAt:saved.observedAt});
+      return saved.reports.map(r=>directRelease(r,source.name,saved.observedAt));
+    }
     const until = Number(stateGet(`acquisition_source_wait:${source.id}`, '0'));
     if (until > Date.now()) {
       // Serialize the two workers across ordinary request spacing. A provider
@@ -120,6 +126,7 @@ async function sourceCandidates(source: Indexer, query: string) {
     const started = Date.now();
     try {
       const reports = await prowlarr<Release[]>(`/search?${params}`);
+      rememberSourceResults(source.id,query,reports);
       recordSearch(source.name, source.id, 'search', started, { query, categories, results: reports.length });
       stateSet(`acquisition_source_error:${source.id}`, '');
       stateSet(`acquisition_source_status:${source.id}`, JSON.stringify({ at: new Date().toISOString(), results: reports.length }));

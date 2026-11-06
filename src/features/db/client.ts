@@ -303,6 +303,10 @@ function migrate(instance: Database.Database) {
   `));
   migration(26,()=>addColumns(instance,'playlist_runs',[['source_kind',"TEXT NOT NULL DEFAULT 'manual'"]]));
   migration(27,()=>addColumns(instance,'playlist_discovery_recommendations',[['direction_revision','INTEGER NOT NULL DEFAULT 0']]));
+  migration(28,()=>instance.exec(`CREATE TABLE IF NOT EXISTS acquisition_source_cache(
+    cache_key TEXT PRIMARY KEY,indexer_id INTEGER NOT NULL,payload_json TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,expires_at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS acquisition_source_cache_expiry ON acquisition_source_cache(expires_at,fetched_at);`));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;
