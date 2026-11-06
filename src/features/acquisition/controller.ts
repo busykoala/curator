@@ -576,10 +576,10 @@ async function searchWork(
       }
     }
   };
-  const deadline=Date.now()+90_000;
-  for (let index = 0; index < selected.length; index += 2) {
+  const deadline=Date.now()+180_000;
+  for (let index = 0; index < selected.length; index += 4) {
     if(index>0&&Date.now()>deadline){stateSet('acquisition_requested_action','run');break}
-    const batch = selected.slice(index, index + 2);
+    const batch = selected.slice(index, index + 4);
     // Fallback temporarily changes the artist's quality profile. Searches for
     // the same artist must finish restoring it before another one starts.
     const artistIds = batch

@@ -164,7 +164,7 @@ export function discoverySearchQuery(artist:string,title:string){
 }
 export async function directCandidates(artist: string, title: string, remainingSources=false, attemptedSources?:Set<number>) {
   if (!sources || sources.expires < Date.now()) sources = { expires: Date.now() + 300_000, rows: await prowlarr<Indexer[]>('/indexer') };
-  const preferred = ['TorrentsCSV', 'Knaben', 'LimeTorrents', 'Nyaa.si', 'The Pirate Bay', 'TorrentKitty', 'TorrentDownload'];
+  const preferred = ['Redacted', 'Orpheus', 'TorrentsCSV', 'Knaben', 'LimeTorrents', 'Nyaa.si', 'The Pirate Bay', 'TorrentKitty', 'TorrentDownload'];
   const rank=(name:string)=>preferred.includes(name)?preferred.indexOf(name):preferred.length;
   const rows = sources.rows.filter(s => s.enable && (preferred.includes(s.name)||
     (s.protocol==='torrent'&&s.capabilities?.searchParams?.includes('q')&&categoryIds(s.capabilities.categories??[]).some(id=>(id>=3000&&id<4000)||id===8000))))
