@@ -3,12 +3,13 @@ import type { AcquisitionTarget } from "./types";
 import { album, albumCatalog, parseRelease, pushRelease, releaseIsBlocked, SearchDeferred } from "./lidarr";
 import { nativeAlbum, nativeArtist, directCandidates, directArtist, cachedArtistCandidates } from "./discovery";
 import { allowedQuality, conflictingAlbum, decodeTitle, matchesAlbum, needsQualityRepair, parserRejections, releaseQuality, repairedTitle, type Release } from "./matching";
-import { releaseScore } from "./policy";
+import { releaseScore,hoursSince } from "./policy";
 import { sourceScores, withHybrid } from "./quality";
 import { qbitCapacity, releaseInfoHash } from "./qbittorrent";
 import { updateTarget } from "./repository";
 
-export function viable(item:Release,fallback:boolean){return allowedQuality(item,fallback)&&String(item.protocol??"torrent")==="torrent"&&Number(item.seeders??0)>=2&&!(item.rejections as unknown[]|undefined)?.length&&!item.rejected}
+export function minimumReportedSeeders(target:Pick<AcquisitionTarget,'origin'|'created_at'|'attempts_today'>){return target.origin==='migration'&&target.attempts_today>=1&&hoursSince(target.created_at)>=72?1:2}
+export function viable(item:Release,fallback:boolean,minimumSeeders=2){return allowedQuality(item,fallback)&&String(item.protocol??"torrent")==="torrent"&&Number(item.seeders??0)>=minimumSeeders&&!(item.rejections as unknown[]|undefined)?.length&&!item.rejected}
 export function confirmedGrabConflict(error:unknown){const message=String(error);return/Lidarr \/release failed \(409\)/.test(message)||(/Lidarr \/release failed \(500\)/.test(message)&&/409:Conflict/.test(message)&&/qbittorrent|torrents\/add/i.test(message))}
 export function confirmedCandidateFailure(error:unknown){
   const message=String(error);
@@ -32,7 +33,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
     updateTarget(target.id,{status:metadata.monitored?'imported':'inactive',next_retry_at:null,detail_json:JSON.stringify({reason:metadata.monitored?'Verified album files in Lidarr':'Album is not monitored',strategyVersion:3})});
     return {grabbed:false,reason:'Album is no longer missing'};
   }
-  const day=new Date().toISOString().slice(0,10),attempts=target.attempts_day===day?target.attempts_today+1:1;
+  const day=new Date().toISOString().slice(0,10),attempts=target.attempts_day===day?target.attempts_today+1:1,minimumSeeders=minimumReportedSeeders(target);
   const evidence:Record<string,number>={};
   const discoveryErrors:Array<{stage:string;reason:string;retryAt?:string}>=[];
   let catalog:Awaited<ReturnType<typeof albumCatalog>>|undefined;
@@ -53,7 +54,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
         const reject=(reason:string)=>{evidence[reason]=(evidence[reason]??0)+1};
         if(!allowedQuality(item,fallback)){reject('Unsupported or unreported audio quality');continue}
         if(item.direct&&!item.downloadUrl&&!item.magnetUrl){reject('Missing torrent download handle');continue}
-        if(Number(item.seeders??0)<2){reject('Fewer than two reported seeders');continue}
+        if(Number(item.seeders??0)<minimumSeeders){reject(minimumSeeders===1?'No reported seeders':'Fewer than two reported seeders');continue}
         if(String(item.protocol??'torrent')!=='torrent'){reject('Unsupported download protocol');continue}
         let matched=matchesAlbum(item,metadata,target.artist);
         if(!matched){
@@ -65,7 +66,7 @@ export async function findRelease(target:AcquisitionTarget,fallback:boolean,cach
           matched=matchesAlbum(item,metadata,target.artist,parsed);
         }
         if(!matched){reject('Different artist, album or recording variant');continue}
-        if(viable(item,fallback)||parserRejections(item)||needsQualityRepair(item)||Boolean(item.direct))filtered.push(item);
+        if(viable(item,fallback,minimumSeeders)||parserRejections(item)||needsQualityRepair(item)||Boolean(item.direct))filtered.push(item);
       }
       const candidates=filtered.map(item=>{
         const source=String(item.indexer??'unknown'),sourceScore=scores.find(s=>s.name===source.replace(/ \(Prowlarr\)$/i,''))?.score??.5;
