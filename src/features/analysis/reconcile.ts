@@ -1,5 +1,6 @@
 import { db } from "@/features/db/client";
 import { versions } from "@/config";
+import {albumHasConsistentIdentity} from './identity-evidence';
 
 type FileRow = {
   id: number;
@@ -27,13 +28,6 @@ function present(value: unknown): boolean {
   return typeof value === "string" ? value.trim().length > 0 : value != null;
 }
 
-function releaseGroupId(tags: Record<string, unknown>): boolean {
-  const containers = [tags, tags.extraProperties].filter(Boolean) as Record<string, unknown>[];
-  return containers.some(container => Object.entries(container).some(([key, value]) =>
-    key.replace(/[^a-z0-9]/gi, "").toLowerCase() === "musicbrainzreleasegroupid" && present(value)
-  ));
-}
-
 export function reconcileIssues(): number {
   const database = db();
   const files = database.prepare("SELECT id,album_key,tags_json,artwork_json,desired_hash,status FROM files").all() as FileRow[];
@@ -57,7 +51,7 @@ export function reconcileIssues(): number {
     if (issue.code === "missing_albumArtist" && file && present(parse(file.tags_json).albumArtist)) resolved.push(issue.id);
     if (issue.code === "missing_genre" && file && present(parse(file.tags_json).genre)) resolved.push(issue.id);
     if (issue.code === "missing_embedded_art" && file && Object.keys(parse(file.artwork_json)).length > 0) resolved.push(issue.id);
-    if (issue.code === "identity_unresolved" && issue.album_key && (confirmed.has(issue.album_key) || album?.some(row => releaseGroupId(parse(row.tags_json))))) resolved.push(issue.id);
+    if (issue.code === "identity_unresolved" && issue.album_key && (confirmed.has(issue.album_key) || albumHasConsistentIdentity((album??[]).map(row=>parse(row.tags_json))))) resolved.push(issue.id);
     if (issue.code === "processing_deferred" && album?.every(row => row.desired_hash && !["error", "processing"].includes(row.status))) resolved.push(issue.id);
     if (["categorization_partial", "categorization_failed"].includes(issue.code) && issue.file_id != null && !currentIncomplete.has(issue.file_id)) resolved.push(issue.id);
   }
