@@ -45,6 +45,7 @@ export const albumCatalog=(artistId:number)=>call<CatalogAlbum[]>(`/album?artist
 export const releaseTracks=(releaseId:number)=>call<import('./import-proof').ReleaseTrack[]>(`/track?albumReleaseId=${releaseId}`);
 export const trackFiles=(albumId:number)=>call<Array<{id:number;albumId:number;path:string}>>(`/trackfile?albumId=${albumId}`);
 export const artistReleases=(artistId:number)=>call<Release[]>(`/release?artistId=${artistId}`);
+export const trackImportsSince=(date:string)=>call<Array<{albumId?:number;date?:string;data?:{importedPath?:string}}>>('/history/since?'+new URLSearchParams({date,eventType:'3'}));
 export const grabsSince=(date:string)=>call<Array<{sourceTitle:string;downloadId?:string;albumId?:number;data?:{torrentInfoHash?:string}}>>('/history/since?'+new URLSearchParams({date,eventType:'1'}));
 let blockedCache:{expires:number;titles:Set<string>;hashes:Set<string>}|undefined;
 const blockedKey=(title:string)=>title.replace(/&amp;/gi,'&').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');

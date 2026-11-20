@@ -47,3 +47,18 @@ test('transactional library metadata repair preserves hardlinked torrent origina
     assert.equal(await readFile(library,'utf8'),'concurrent edit');
   }finally{config.MUSIC_ROOT=beforeRoot;await rm(dir,{recursive:true,force:true})}
 });
+test('native Lidarr import history proves one album only for exact, unambiguous paths',async()=>{
+  const {nativeImportAlbum}=await import('./imported-identity');
+  const imports=[
+    {albumId:7,data:{importedPath:'/data/library/Don Henley/Best (2009)/01.flac'}},
+    {albumId:7,data:{importedPath:'/data/library/Don Henley/Best (2009)/02.flac'}},
+    {albumId:9,data:{importedPath:'/data/library/Other/Album/01.flac'}},
+    {albumId:11,data:{importedPath:'/data/library/Other/Album/01.flac'}},
+  ];
+  assert.equal(nativeImportAlbum(['/music/Don Henley/Best (2009)/01.flac','/music/Don Henley/Best (2009)/02.flac'],imports),7);
+  assert.equal(nativeImportAlbum(['/music/Don Henley/Best (2009)/01.flac','/music/Don Henley/Best (2009)/03.flac'],imports),undefined,'every file needs native import evidence');
+  assert.equal(nativeImportAlbum(['/music/Other/Album/01.flac'],imports),undefined,'conflicting albums are not proof');
+  assert.equal(nativeImportAlbum(['/music/Don Henley/Best (2009)/01.flac','/music/Other/Album/01.flac'],[imports[0],imports[2]]),undefined,'files must share one album');
+  assert.equal(nativeImportAlbum(['/elsewhere/01.flac'],imports),undefined);
+  assert.equal(nativeImportAlbum([],imports),undefined);
+});

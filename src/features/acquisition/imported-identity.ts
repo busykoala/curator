@@ -5,7 +5,7 @@ import {dirname,extname,relative,resolve,isAbsolute,sep} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {config} from '@/config';
 import {db,stateGet,stateSet} from '@/features/db/client';
-import {album,artist,releaseTracks,trackFiles} from './lidarr';
+import {album,artist,releaseTracks,trackFiles,trackImportsSince} from './lidarr';
 import {rescanFolders} from '@/features/sources/lidarr';
 import {refreshLibrary} from '@/features/integrations/navidrome';
 import type {CatalogAlbum} from './matching';
@@ -94,8 +94,43 @@ async function backfillProvenImports(){
   }
   stateSet('acquisition_identity_backfilled_v2','true');
 }
+export function libraryNativePath(libraryPath:string){
+  const path=relative(config.MUSIC_ROOT,libraryPath);
+  if(!path||path==='..'||path.startsWith('../')||isAbsolute(path))throw Error('File is outside the library');
+  return resolve(config.LIDARR_MUSIC_ROOT,path);
+}
+/** Returns the one Lidarr album that natively imported every file at exactly these paths, if any. */
+export function nativeImportAlbum(paths:string[],imports:Array<{albumId?:number;data?:{importedPath?:string}}>){
+  const byPath=new Map<string,Set<number>>();
+  for(const record of imports){const path=record.data?.importedPath;if(!path||!record.albumId)continue;const ids=byPath.get(path)??new Set<number>();ids.add(record.albumId);byPath.set(path,ids)}
+  const albums=new Set<number>();
+  for(const path of paths){let native:string;try{native=libraryNativePath(path)}catch{return undefined}const ids=byPath.get(native);if(!ids||ids.size!==1)return undefined;albums.add([...ids][0])}
+  return paths.length&&albums.size===1?[...albums][0]:undefined;
+}
+// Lidarr upgrades can replace tagged library files with sparsely tagged downloads.
+// When its own import history maps every untagged file to one complete album,
+// reuse the verified identity backfill instead of leaving the album unidentified.
+async function queueNativeImportIdentities(){
+  const albums=db().prepare("SELECT f.album_key,json_group_array(f.path) paths,max(f.mtime_ms) changed FROM files f WHERE f.status='error' AND EXISTS (SELECT 1 FROM issues i WHERE i.album_key=f.album_key AND i.status='open' AND i.code='identity_unresolved' AND i.message LIKE 'Artist or album tags are missing%') GROUP BY f.album_key LIMIT 20").all() as {album_key:string;paths:string;changed:number}[];
+  if(!albums.length)return;
+  const imports=await trackImportsSince(new Date(Date.now()-30*86_400_000).toISOString());
+  for(const row of albums){
+    const checked=`acquisition_identity_native_checked:${row.album_key}`;
+    if(stateGet(checked)===String(row.changed))continue;
+    const albumId=nativeImportAlbum(JSON.parse(row.paths) as string[],imports);
+    if(albumId&&!stateGet(jobKey(albumId))){
+      const a=await album(albumId),release=a.releases?.find(r=>r.monitored);
+      if(release?.id&&Number(a.statistics?.percentOfTracks??0)>=100){
+        const ar=await artist(a.artistId),tracks=await releaseTracks(release.id);
+        queueImportedIdentity({albumId:a.id,artistId:a.artistId,releaseId:release.id,artist:String(ar.artistName),album:a.title,date:a.releaseDate,trackIds:tracks.map(t=>t.id)});
+      }
+    }
+    stateSet(checked,String(row.changed));
+  }
+}
 export async function recoverImportedIdentities(){
   await backfillProvenImports();
+  await queueNativeImportIdentities();
   const jobs=db().prepare("SELECT key,value FROM state WHERE key LIKE 'acquisition_identity_pending:%' ORDER BY updated_at LIMIT 3").all() as {key:string;value:string}[];
   for(const saved of jobs)try{
     const job=JSON.parse(saved.value) as IdentityJob,a=await album(job.albumId);
@@ -117,6 +152,7 @@ export async function recoverImportedIdentities(){
       if(await repairImportedFile(path,{TITLE:track.title,ARTIST:job.artist,ALBUMARTIST:job.artist,ALBUM:job.album,TRACKNUMBER:String(track.absoluteTrackNumber),DISCNUMBER:String(track.mediumNumber),...importedEditionIdentity(a,job.releaseId,track),...(job.date?{DATE:job.date.slice(0,10)}:{})},undefined,generated))repaired++;
       if(generated){db().prepare('DELETE FROM track_profiles WHERE file_id IN (SELECT id FROM files WHERE path=?)').run(path);db().prepare("UPDATE files SET status='error',applied_hash=NULL WHERE path=?").run(path);stateSet('last_scan','0')}
     }
+    if(repaired)stateSet('last_scan','0');
     if(folders.size)await rescanFolders([...folders]);
     // Also retry notification after a restart or partial write failure.
     await refreshLibrary().catch(error=>console.warn(JSON.stringify({event:'acquisition_library_refresh_deferred',error:String(error)})));
