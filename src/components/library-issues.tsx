@@ -639,7 +639,15 @@ export function LibraryIssues() {
                     MusicBrainz release-group ID
                     <input
                       name="releaseGroupMbid"
-                      placeholder="Required to resolve identity"
+                      placeholder="Resolves identity"
+                    />
+                  </label>
+                  <label>
+                    Verified source URL
+                    <input
+                      name="sourceUrl"
+                      type="url"
+                      placeholder="Release page when not in MusicBrainz"
                     />
                   </label>
                   <label>

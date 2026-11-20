@@ -38,7 +38,7 @@ export function reconcileIssues(): number {
     group.push(file);
     byAlbum.set(file.album_key, group);
   }
-  const confirmed = new Set((database.prepare("SELECT album_key FROM manual_overrides WHERE confirmed=1 AND release_group_mbid IS NOT NULL AND trim(release_group_mbid)<>''").all() as {album_key:string}[]).map(row => row.album_key));
+  const confirmed = new Set((database.prepare("SELECT album_key FROM manual_overrides WHERE confirmed=1 AND (trim(coalesce(release_group_mbid,''))<>'' OR trim(coalesce(source_url,''))<>'')").all() as {album_key:string}[]).map(row => row.album_key));
   const currentIncomplete = new Set((database.prepare("SELECT p.file_id FROM track_profiles p JOIN files f ON f.id=p.file_id WHERE p.schema_version=? AND p.classifier_version=? AND coalesce(json_extract(p.provenance_json,'$.audioAnalyzer'),0)=? AND p.status IN ('partial','failed') AND f.updated_at<=p.source_updated_at").all(versions.categorizationSchema,versions.categorizationPrompt,versions.audioAnalysis) as {file_id:number}[]).map(row => row.file_id));
   const issues = database.prepare("SELECT id,file_id,album_key,code FROM issues WHERE status='open'").all() as IssueRow[];
   const resolved: number[] = [];

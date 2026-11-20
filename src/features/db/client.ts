@@ -307,6 +307,8 @@ function migrate(instance: Database.Database) {
     cache_key TEXT PRIMARY KEY,indexer_id INTEGER NOT NULL,payload_json TEXT NOT NULL,
     fetched_at INTEGER NOT NULL,expires_at INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS acquisition_source_cache_expiry ON acquisition_source_cache(expires_at,fetched_at);`));
+  // A verified non-catalogue source (for example a purchased Bandcamp release) can confirm identity.
+  migration(29,()=>addColumns(instance,'manual_overrides',[['source_url','TEXT']]));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;
