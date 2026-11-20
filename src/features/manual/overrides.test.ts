@@ -27,3 +27,15 @@ test('unsafe source URLs are rejected',()=>{
   assert.throws(()=>verifiedSourceUrl('not a url'));
   assert.equal(verifiedSourceUrl('  '),null);
 });
+test('confirmed overrides never inherit searched MusicBrainz IDs they do not state',async()=>{
+  const {applyManualIdentity}=await import('./overrides');
+  const searched=()=>({artistId:'searched-artist',releaseGroupId:'searched-group'});
+  const sourceOnly=searched();applyManualIdentity(sourceOnly,{artist_mbid:null,release_group_mbid:null,confirmed:1});
+  assert.deepEqual(sourceOnly,{artistId:undefined,releaseGroupId:undefined});
+  const sameGroup=searched();applyManualIdentity(sameGroup,{artist_mbid:null,release_group_mbid:'searched-group',confirmed:1});
+  assert.deepEqual(sameGroup,{artistId:'searched-artist',releaseGroupId:'searched-group'});
+  const otherGroup=searched();applyManualIdentity(otherGroup,{artist_mbid:null,release_group_mbid:'manual-group',confirmed:1});
+  assert.deepEqual(otherGroup,{artistId:undefined,releaseGroupId:'manual-group'});
+  const unconfirmed=searched();applyManualIdentity(unconfirmed,{artist_mbid:'manual-artist',release_group_mbid:null,confirmed:0});
+  assert.deepEqual(unconfirmed,{artistId:'manual-artist',releaseGroupId:'searched-group'});
+});
