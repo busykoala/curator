@@ -4,7 +4,7 @@ import { audioModelResults, type AudioModelResult } from "@/features/audio-model
 import { FAMILIES, familyOf, resolveStyle, styleFromDiscogs, type Family, type Style } from "./style-map";
 
 /** Bump to re-derive (and, where the result changes, rewrite) every album's GENRE/STYLE. */
-export const GENRE_DERIVATION_VERSION = 1;
+export const GENRE_DERIVATION_VERSION = 2;
 
 export type TrackGenreInput = {
   fileId: number;
@@ -14,7 +14,7 @@ export type TrackGenreInput = {
   llmStyles: string[];
   manual?: { genres?: string[]; styles?: string[] };
 };
-export type AlbumGenreInput = { albumKey: string; albumArtist: string; tracks: TrackGenreInput[]; musicbrainzTags: Array<{ name: string; count: number }>; appleGenre?: string };
+export type AlbumGenreInput = { albumKey: string; albumArtist: string; tracks: TrackGenreInput[]; musicbrainzTags: Array<{ name: string; count: number }>; appleGenre?: string; artistFamilies?: Record<string, number> };
 export type TrackGenre = { fileId: number; family: Family; mainStyle?: Style; styles: Style[]; cluster: string; confidence: number; genreTag: string[]; styleTag: string[] };
 
 type Scores = { family: Map<Family, number>; styles: Map<string, { style: Style; score: number }> };
@@ -33,7 +33,7 @@ const share = (scores: Scores, family: Family) => (scores.family.get(family) ?? 
 const best = (map: Map<Family, number>) => [...map].sort((a, b) => b[1] - a[1] || FAMILIES.indexOf(a[0]) - FAMILIES.indexOf(b[0]))[0];
 
 /** Evidence weights: hearing the recording beats catalogue tags, which beat the LLM's metadata guess. */
-const WEIGHT = { audio: 1, musicbrainz: 0.8, apple: 0.3, llmWithAudio: 0.3, llmAlone: 1 };
+const WEIGHT = { audio: 1, musicbrainz: 0.8, apple: 0.3, llmWithAudio: 0.3, llmAlone: 1, artist: 0.4 };
 
 function trackScores(track: TrackGenreInput, album: AlbumGenreInput): { all: Scores; audio: Scores } {
   const all = emptyScores(), audio = emptyScores();
@@ -46,6 +46,9 @@ function trackScores(track: TrackGenreInput, album: AlbumGenreInput): { all: Sco
   const tagTotal = album.musicbrainzTags.reduce((sum, tag) => sum + Math.max(1, tag.count), 0);
   for (const tag of album.musicbrainzTags) add(all, resolveStyle(tag.name), (WEIGHT.musicbrainz * Math.max(1, tag.count)) / Math.max(1, tagTotal));
   addFamily(all, album.appleGenre ? familyOf(album.appleGenre) : undefined, WEIGHT.apple);
+  // The artist's other albums pull gently toward one family, so an artist does not split album by album.
+  const artistTotal = Object.values(album.artistFamilies ?? {}).reduce((sum, value) => sum + value, 0);
+  for (const [family, count] of Object.entries(album.artistFamilies ?? {})) addFamily(all, family as Family, (WEIGHT.artist * count) / Math.max(1, artistTotal));
   const llm = track.audio ? WEIGHT.llmWithAudio : WEIGHT.llmAlone;
   const llmFamily = track.llmGenres.map(familyOf).find(Boolean);
   for (const value of track.llmStyles) add(all, resolveStyle(value, llmFamily), llm / Math.max(1, track.llmStyles.length));
@@ -141,9 +144,12 @@ export function loadAlbumGenreInput(albumKey: string): AlbumGenreInput | undefin
   const releaseGroupId = override?.release_group_mbid ?? list(tags.musicbrainzReleaseGroupId)[0] ?? list(extra.MUSICBRAINZ_RELEASEGROUPID)[0];
   const albumArtist = list(tags.albumArtist)[0] ?? files[0].artist_name;
   const audio = audioModelResults(files.map(file => file.id));
+  const artistFamilies = Object.fromEntries((db().prepare(`SELECT g.family,count(*) n FROM genre_derivations g JOIN files f ON f.id=g.file_id
+    WHERE g.album_key<>? AND g.derivation_version=? AND lower(f.artist_name)=lower(?) GROUP BY g.family`).all(albumKey, GENRE_DERIVATION_VERSION, albumArtist) as Array<{ family: string; n: number }>).map(row => [row.family, row.n]));
   return {
     albumKey,
     albumArtist,
+    artistFamilies,
     musicbrainzTags: musicbrainzTags(albumKey, releaseGroupId),
     appleGenre: appleGenre(albumKey, albumArtist),
     tracks: files.map(file => {

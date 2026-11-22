@@ -132,7 +132,7 @@ export function startAudioModelBackfill(): void {
         if (!batch.length) break;
         let ok = 0, failed = 0, unavailable = 0, next = 0;
         const started = Date.now();
-        await Promise.all(Array.from({ length: 2 }, async () => {
+        await Promise.all(Array.from({ length: config.CURATOR_AUDIO_ANALYZER_CONCURRENCY }, async () => {
           for (;;) {
             const file = batch[next++];
             if (!file || unavailable) return;

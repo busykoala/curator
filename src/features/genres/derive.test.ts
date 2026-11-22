@@ -50,3 +50,11 @@ test('regex-era family mistakes are gone',()=>{
     assert.equal(resolveStyle(style)?.family,family,style);
   assert.equal(familyOf('rnb_soul_funk'),'Soul & R&B');
 });
+test('an artist’s other albums tip a borderline album toward the same family',()=>{
+  const nearTie={styles:[{label:'Folk, World, & Country---Folk',p:0.42},{label:'Rock---Folk Rock',p:0.4}]};
+  const borderline=[track(1,{audio:nearTie}),track(2,{audio:nearTie})];
+  assert.equal(deriveAlbumGenres(album(borderline))[0].family,'Folk');
+  assert.equal(deriveAlbumGenres(album(borderline,{artistFamilies:{Rock:40}}))[0].family,'Rock');
+  const clear=[track(1,{audio:{styles:[{label:'Jazz---Cool Jazz',p:0.8}]}})];
+  assert.equal(deriveAlbumGenres(album(clear,{artistFamilies:{Rock:40}}))[0].family,'Jazz','a clear recording is not overruled by the artist prior');
+});

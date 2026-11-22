@@ -2,7 +2,7 @@ import { z } from "zod";
 const schema = z.object({
   MUSIC_ROOT: z.string().default("/music"), LIDARR_MUSIC_ROOT:z.string().default('/data/library'), CURATOR_DB_PATH: z.string().optional(), DATABASE_PATH: z.string().optional(),
   LIDARR_URL: z.string().url().default("http://lidarr:8686"), LIDARR_API_KEY: z.string().default(""),
-  CURATOR_AI_API_KEY: z.string().default(""), CURATOR_AI_BASE_URL: z.string().url().default("http://inference-api.inference.svc.cluster.local:8080/v1"), CURATOR_AI_MODEL: z.string().default("curator"), CURATOR_AUDIO_ANALYZER_URL: z.string().url().optional(),
+  CURATOR_AI_API_KEY: z.string().default(""), CURATOR_AI_BASE_URL: z.string().url().default("http://inference-api.inference.svc.cluster.local:8080/v1"), CURATOR_AI_MODEL: z.string().default("curator"), CURATOR_AUDIO_ANALYZER_URL: z.string().url().optional(), CURATOR_AUDIO_ANALYZER_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
   CURATOR_EMBEDDING_VERSION:z.string().default('Qwen3-Embedding-0.6B-Q8_0@370f27d7550e0def9b39c1f16d3fbaa13aa67728'),
   CURATOR_RERANKER_VERSION:z.string().default('gte-multilingual-reranker-base@8215cf04918ba6f7b6a62bb44238ce2953d8831c'),
   LASTFM_API_KEY:z.string().default(''),
