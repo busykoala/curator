@@ -146,7 +146,7 @@ export function startAudioModelBackfill(): void {
         }));
         const remaining = (db().prepare(`SELECT count(*) n FROM files f LEFT JOIN audio_model_results r ON r.file_id=f.id AND r.model_version=? AND r.error IS NULL WHERE f.status IN ('analyzed','written') AND r.file_id IS NULL`).get(AUDIO_MODEL_VERSION) as { n: number }).n;
         stateSet("audio_model_progress", JSON.stringify({ ok, failed, remaining, secondsPerFile: Math.round(((Date.now() - started) / 1000 / Math.max(1, ok + failed)) * 10) / 10, at: new Date().toISOString() }));
-        if (unavailable) { stateSet("audio_model_error", "analyzer unavailable; retrying in two minutes"); await new Promise(resolve => setTimeout(resolve, 120_000).unref()); continue; }
+        if (unavailable) { stateSet("audio_model_error", "analyzer unavailable; retrying in two minutes"); setTimeout(startAudioModelBackfill, 120_000).unref(); break; }
         stateSet("audio_model_error", "");
       }
     } catch (error) {
