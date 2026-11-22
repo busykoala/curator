@@ -8,10 +8,11 @@ import type {ListenerSong,ListenerSnapshot} from './listening-snapshot';
 import type {PlaylistIntent,SemanticRequirement} from './intent-schema';
 import {energyTarget,energyValue} from './sequence';
 import type {PlaylistCandidate,PlaylistDefinition} from './types';
+import {coherenceBonus,evaluateCoherence,planCoherence,transitionCost,type CoherenceEvaluation,type CoherenceFacts} from './coherence';
 
 export type EvidencedCandidate=PlaylistCandidate&{evidence:TrackEvidenceView;recordingGroupKey?:string;songId:string;listener:ListenerSong|null;exposureCount:number;removedAt:number|null;artistPlayCount?:number;albumLastPlayed?:string|null;albumHistoryUncertain?:boolean;discoveryBoost?:number;adjacent?:boolean;adjacencyReason?:string};
 export type CandidateAssessment={eligible:boolean;score:number;reasons:string[];violations:string[];uncertainty:string[]};
-export type PlaylistEvaluation={eligible:number;selected:number;requested:number;changed:number;retained:number;artistDiversity:number;albumDiversity:number;unheard:number|null;uncertainty:string[];relaxations:string[];shortage:number;violations:string[];diversityLimits?:{artist:number;album:number};adjacentAdditions?:number;familiarAdditions?:number;adjacentTarget?:number};
+export type PlaylistEvaluation={eligible:number;selected:number;requested:number;changed:number;retained:number;artistDiversity:number;albumDiversity:number;unheard:number|null;uncertainty:string[];relaxations:string[];shortage:number;violations:string[];diversityLimits?:{artist:number;album:number};adjacentAdditions?:number;familiarAdditions?:number;adjacentTarget?:number;coherence?:CoherenceEvaluation};
 const values=(v:unknown):string[]=>Array.isArray(v)?v.map(String):v==null?[]:[String(v)];
 const days=86400_000;
 
@@ -125,7 +126,7 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
 }
 
 const tie=(seed:string,fileId:number)=>parseInt(createHash('sha256').update(seed+':'+fileId).digest('hex').slice(0,8),16);
-export function selectPlaylist(input:{definition:PlaylistDefinition;intent:PlaylistIntent;pool:EvidencedCandidate[];previous:EvidencedCandidate[];snapshot:Pick<ListenerSnapshot,'complete'|'stale'>;now?:number;seed?:string}){
+export function selectPlaylist(input:{definition:PlaylistDefinition;intent:PlaylistIntent;pool:EvidencedCandidate[];previous:EvidencedCandidate[];snapshot:Pick<ListenerSnapshot,'complete'|'stale'>;now?:number;seed?:string;coherence?:Map<number,CoherenceFacts>}){
   const {definition,intent}=input,now=input.now??Date.now(),seed=input.seed??new Date(now).toISOString().slice(0,10),target=definition.config.targetTracks;
   if(definition.category==='discovery')input={...input,pool:input.pool.map(track=>({...track,...discoveryDirection(track,intent)}))};
   const assessments=new Map(input.pool.map(track=>[track.fileId,assessCandidate(track,definition,intent,input.snapshot,now)]));
@@ -151,18 +152,28 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
   const eligibleNew=pool.filter(track=>!priorKeys.has(selectionRecordingKey(track))&&!(track.removedAt&&now-track.removedAt<14*days));
   let artistLimit=definition.config.maxTracksPerArtist,albumLimit=definition.config.maxTracksPerAlbum;
   pool.sort((a,b)=>b.score-a.score||tie(seed,a.fileId)-tie(seed,b.fileId));
-  function add(track:EvidencedCandidate,pinned=false){
+  // Coherence: find the playlist's musical centre, reward closeness to it, and cap
+  // how many tracks may come from families outside it. A mood alone must not
+  // stitch together folk, pop-punk and soul.
+  const facts=input.coherence;
+  const plan=facts&&!intent.hard.singleArtist?planCoherence({ranked:pool,fixed:[...pins].flatMap(key=>pool.filter(track=>selectionRecordingKey(track)===key).map(track=>track.fileId)),target,facts,styleLanes:intent.soft.styles,offFamilyShare:definition.category==='rediscovery'?.4:.2}):null;
+  if(plan){for(const track of pool)track.score+=coherenceBonus(plan,facts!.get(track.fileId));pool.sort((a,b)=>b.score-a.score||tie(seed,a.fileId)-tie(seed,b.fileId))}
+  let offFamily=0;
+  const outsideCentre=(track:EvidencedCandidate)=>{const fact=plan?facts!.get(track.fileId):undefined;return Boolean(plan&&fact&&!plan.allowedFamilies.has(fact.family))};
+  function add(track:EvidencedCandidate,pinned=false,coherent=!pinned){
     const artist=norm(track.artist),album=artist+'|'+norm(track.album),key=selectionRecordingKey(track);
     if(keys.has(key)||chosen.length>=target)return false;
     if(!pinned&&((artists.get(artist)??0)>=artistLimit||(albums.get(album)??0)>=albumLimit))return false;
-    keys.add(key);artists.set(artist,(artists.get(artist)??0)+1);albums.set(album,(albums.get(album)??0)+1);
+    const outside=outsideCentre(track);
+    if(coherent&&outside&&offFamily>=plan!.offFamilyLimit)return false;
+    keys.add(key);artists.set(artist,(artists.get(artist)??0)+1);albums.set(album,(albums.get(album)??0)+1);if(outside)offFamily++;
     chosen.push({...track,retained:priorKeys.has(key)});return true;
   }
   // Pins never bypass eligibility. A new hard exclusion invalidates a pin.
   for(const track of pool)if(pins.has(selectionRecordingKey(track))||lockedIds.has(track.fileId))add(track,true);
   const retainTarget=Math.min(target,Math.max(chosen.filter(t=>t.retained).length,Math.round(target*(1-definition.config.rotationPercent/100))));
   for(const track of [...prior].sort((a,b)=>b.score-a.score)){
-    if(chosen.filter(t=>t.retained).length>=retainTarget)break;add(track,true);
+    if(chosen.filter(t=>t.retained).length>=retainTarget)break;add(track,true,true);
   }
   const replacements=target-chosen.length;
   const adjacentTarget=definition.category==='discovery'?Math.round(replacements*.3):0;
@@ -210,6 +221,7 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
     if(definition.category==='discovery'&&chosen.filter(track=>track.adjacent&&!track.retained).length>adjacentTarget)
       relaxations.push('Adjacent-style share expanded because familiar-style candidates were insufficient');
   }
+  if(chosen.length<target&&plan&&Number.isFinite(plan.offFamilyLimit)){const before=chosen.length;plan.offFamilyLimit=Infinity;fill(eligibleNew);if(chosen.length>before)relaxations.push('Stylistic focus relaxed because the main style had too few suitable recordings')}
   // Prefer keeping more suitable current tracks to violating exclusions or
   // recycling a recording removed during the last 14 days.
   if(chosen.length<target){fill(prior);if(chosen.length>=target)relaxations.push('Rotation reduced because too few suitable replacements were available')}
@@ -230,7 +242,8 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
     if(!available.length)break;
     const desired=energyTarget(curve,position,chosen.length),previous=ordered.at(-1);
     available.sort((a,b)=>{
-      const cost=(t:EvidencedCandidate)=>(previous&&norm(previous.artist)===norm(t.artist)?30:0)+(definition.category==='journey'?Math.abs(energyValue(t)-desired)*35:0)-t.score*.05;
+      const flow=(t:EvidencedCandidate)=>previous&&facts?transitionCost({fact:facts.get(previous.fileId),year:previous.evidence.originalYear},{fact:facts.get(t.fileId),year:t.evidence.originalYear}):0;
+      const cost=(t:EvidencedCandidate)=>(previous&&norm(previous.artist)===norm(t.artist)?30:0)+(definition.category==='journey'?Math.abs(energyValue(t)-desired)*35:0)+flow(t)-t.score*.05;
       return cost(a)-cost(b)||tie(seed,a.fileId)-tie(seed,b.fileId);
     });
     const track=available[0];ordered.push(track);remaining.splice(remaining.indexOf(track),1);
@@ -243,6 +256,7 @@ export function selectPlaylist(input:{definition:PlaylistDefinition;intent:Playl
     ...(definition.category==='discovery'?{adjacentAdditions:ordered.filter(track=>track.adjacent&&!track.retained).length,familiarAdditions:ordered.filter(track=>!track.adjacent&&!track.retained).length,adjacentTarget}:{}),
     artistDiversity:new Set(ordered.map(t=>norm(t.artist))).size,albumDiversity:new Set(ordered.map(t=>norm(t.artist)+'|'+norm(t.album))).size,
     unheard:input.snapshot.complete&&!input.snapshot.stale?ordered.filter(t=>t.listener&&!t.listener.hasPlayed&&!t.listener.favourite&&!t.listener.playCount).length:null,
-    uncertainty:[...new Set(ordered.flatMap(t=>assessments.get(t.fileId)?.uncertainty??[]))],relaxations,shortage:Math.max(0,target-ordered.length),violations,diversityLimits:{artist:artistLimit,album:albumLimit}};
+    uncertainty:[...new Set(ordered.flatMap(t=>assessments.get(t.fileId)?.uncertainty??[]))],relaxations,shortage:Math.max(0,target-ordered.length),violations,diversityLimits:{artist:artistLimit,album:albumLimit},
+    ...(facts?{coherence:evaluateCoherence(ordered.map(t=>t.fileId),facts,plan)}:{})};
   return{items:ordered,evaluation};
 }

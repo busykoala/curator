@@ -1,3 +1,4 @@
+import {loadCoherenceFacts} from './coherence';
 import {selectionRecordingKey,withRecordingGroups} from './recording-groups';
 import {createHash} from 'node:crypto';
 import {db,stateGet,stateSet} from '@/features/db/client';
@@ -148,7 +149,8 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
   const available=pool.filter(track=>!excludedKeys.has(selectionRecordingKey(track)));
   const trackRequests=resolveIntentTrackRequests(compiled.intent,selectionDefinition,available,current,snapshot);
   db().prepare("UPDATE playlist_intents SET intent_json=? WHERE playlist_id=? AND json_extract(intent_json,'$.sourceRevision')=?").run(JSON.stringify(compiled.intent),definition.id,compiled.intent.sourceRevision);
-  let selected=selectPlaylist({definition:selectionDefinition,intent:compiled.intent,pool:available,previous:current,snapshot});
+  const coherence=loadCoherenceFacts([...available,...current].map(track=>track.fileId));
+  let selected=selectPlaylist({definition:selectionDefinition,intent:compiled.intent,pool:available,previous:current,snapshot,coherence});
   const previousKeys=new Set(current.map(track=>selectionRecordingKey(track)));
   const lockedIds=new Set([...compiled.intent.pinnedRecordings.map(pin=>pin.fileId),...compiled.intent.positionLocks.map(lock=>lock.fileId)]);
   const fixed=selected.items.filter(track=>track.retained||lockedIds.has(track.fileId));
@@ -187,7 +189,7 @@ export async function generateIntentSelection(definition:PlaylistDefinition,opti
       });
       recordAiUsage('playlist_selection',aiModel,result.detail);aiDetails.push(result.detail);chosen.push(...result.items);
     }
-    const final=selectPlaylist({definition:selectionDefinition,intent:compiled.intent,pool:[...fixed,...chosen],previous:current,snapshot});
+    const final=selectPlaylist({definition:selectionDefinition,intent:compiled.intent,pool:[...fixed,...chosen],previous:current,snapshot,coherence});
     final.evaluation.eligible=selected.evaluation.eligible;
     final.evaluation.relaxations=[...new Set([...selected.evaluation.relaxations,...final.evaluation.relaxations])];
     if(final.evaluation.shortage||final.evaluation.violations.length)throw Error('AI selection failed final count, constraint or ordering validation; retained the previous mix');
