@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {config} from '@/config';
-import {db,stateGet} from '@/features/db/client';
+import {db,stateGet,stateSet} from '@/features/db/client';
 import {AUDIO_MODEL_VERSION,audioModelResults,decodeEmbedding,startAudioModelBackfill} from './client';
 
 test('embeddings round-trip through base64 and blobs',()=>{
@@ -36,5 +36,13 @@ test('backfill stores analyzer results and backs off unreadable files',async()=>
     assert.equal(good.voice,0.9);assert.equal(good.styles[0].label,'Rock---Folk Rock');assert.deepEqual([...good.embedding!],[1,0]);
     const bad=db().prepare('SELECT error,attempts,next_attempt_at>datetime(\'now\',\'+6 days\') later FROM audio_model_results WHERE file_id=?').get(ids[1]) as {error:string;attempts:number;later:number};
     assert.match(bad.error,/shorter/);assert.equal(bad.attempts,1);assert.equal(bad.later,1);
+    // An unreachable analyzer must not use up a file's attempts.
+    insert.run('/music/A/B/new.flac',3);const fresh=(db().prepare("SELECT id FROM files WHERE path='/music/A/B/new.flac'").get() as {id:number}).id;
+    globalThis.fetch=(async()=>{throw new TypeError('fetch failed')}) as typeof fetch;
+    stateSet('audio_model_paused','false');startAudioModelBackfill();
+    for(let i=0;i<50&&!/unavailable/.test(stateGet('audio_model_error'));i++)await new Promise(resolve=>setTimeout(resolve,20));
+    stateSet('audio_model_paused','true');
+    assert.match(stateGet('audio_model_error'),/unavailable/);
+    assert.equal(db().prepare('SELECT 1 FROM audio_model_results WHERE file_id=?').get(fresh),undefined,'no failure recorded against the file');
   }finally{globalThis.fetch=original;config.CURATOR_AUDIO_ANALYZER_URL=undefined;rmSync(dir,{recursive:true,force:true})}
 });

@@ -106,7 +106,9 @@ async function analyzeOne(file: Pending) {
     return true;
   } catch (error) {
     const status = (error as { status?: number }).status;
-    // Unreadable files (422) back off for a week; transient failures retry soon.
+    // An unreachable, busy or timed-out analyzer is not the file's fault: don't spend its attempts.
+    if (status == null || status === 503) return "unavailable" as const;
+    // Unreadable files (422) back off for a week; other file failures retry soon.
     const delay = status === 422 ? "+7 days" : "+30 minutes";
     db().prepare(`INSERT INTO audio_model_results(file_id,audio_fingerprint,model_version,error,attempts,next_attempt_at) VALUES (?,?,?,?,1,datetime('now',?))
       ON CONFLICT(file_id) DO UPDATE SET error=excluded.error,model_version=excluded.model_version,audio_fingerprint=excluded.audio_fingerprint,attempts=audio_model_results.attempts+1,next_attempt_at=excluded.next_attempt_at,updated_at=CURRENT_TIMESTAMP`)
@@ -128,19 +130,22 @@ export function startAudioModelBackfill(): void {
       while (stateGet("paused") !== "true" && stateGet("audio_model_paused") !== "true") {
         const batch = pendingFiles(40);
         if (!batch.length) break;
-        let ok = 0, failed = 0, next = 0;
+        let ok = 0, failed = 0, unavailable = 0, next = 0;
         const started = Date.now();
         await Promise.all(Array.from({ length: 2 }, async () => {
           for (;;) {
             const file = batch[next++];
-            if (!file) return;
-            if (await analyzeOne(file)) ok++;
+            if (!file || unavailable) return;
+            const outcome = await analyzeOne(file);
+            if (outcome === "unavailable") unavailable++;
+            else if (outcome) ok++;
             else failed++;
           }
         }));
         const remaining = (db().prepare(`SELECT count(*) n FROM files f LEFT JOIN audio_model_results r ON r.file_id=f.id AND r.model_version=? AND r.error IS NULL WHERE f.status IN ('analyzed','written') AND r.file_id IS NULL`).get(AUDIO_MODEL_VERSION) as { n: number }).n;
         stateSet("audio_model_progress", JSON.stringify({ ok, failed, remaining, secondsPerFile: Math.round(((Date.now() - started) / 1000 / Math.max(1, ok + failed)) * 10) / 10, at: new Date().toISOString() }));
-        if (!ok && failed) break; // analyzer down: wait for the next scheduler cycle
+        if (unavailable) { stateSet("audio_model_error", "analyzer unavailable; retrying in two minutes"); await new Promise(resolve => setTimeout(resolve, 120_000).unref()); continue; }
+        stateSet("audio_model_error", "");
       }
     } catch (error) {
       stateSet("audio_model_error", String(error));
