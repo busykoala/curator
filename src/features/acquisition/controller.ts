@@ -1,3 +1,4 @@
+import { config } from "@/config";
 import { db, stateGet, stateSet } from "@/features/db/client";
 import { runtimeSettings } from "@/features/settings/runtime";
 import {
@@ -16,6 +17,7 @@ import {
   qbitTransfer,
   finishAudioPayload,
   reannounce,
+  recheckTorrent,
   removeTorrent,
   setPreferences,
   topPriority,
@@ -35,6 +37,8 @@ import {
   retryDelay,
   searchBudget,
   stalledDecision,
+  errorDecision,
+  isAbandonedPartial,
   productiveTransfer,
   hoursSince,
 } from "./policy";
@@ -42,6 +46,7 @@ import {
   acquireControllerLease,
   destructiveAllowed,
   intervene,
+  lastApplied,
   observe,
   pruneAcquisitionTelemetry,
   targetByAlbum,
@@ -351,6 +356,16 @@ async function cleanupOrphans(
     // missingFiles means qBittorrent has no payload to delete. Remove only the
     // stale client record so a later Lidarr search can add a clean download.
     await removeTorrent(item.hash, false);
+    intervene({ hash: item.hash, action: "cleanup", status: "applied", evidence });
+  }
+  const owned = new Set(targets().map((target) => target.download_hash?.toLowerCase()).filter((hash): hash is string => Boolean(hash)));
+  for (const item of torrents) {
+    const hash = item.hash.toLowerCase();
+    if (!isAbandonedPartial(item, queueByHash.has(hash) || owned.has(hash), Boolean(lastApplied(item.hash, "replace")), config.QBITTORRENT_CATEGORY)) continue;
+    const evidence = { reason: "Partial download no longer tracked by Lidarr or Curator", state: item.state, progress: item.progress, ageHours: Math.round((Date.now() - item.added_on * 1_000) / 3_600_000) };
+    if (!apply) { intervene({ hash: item.hash, action: "cleanup", status: "proposed", evidence }); continue; }
+    if (!destructiveAllowed()) { intervene({ hash: item.hash, action: "cleanup", status: "deferred", evidence }); break; }
+    await removeTorrent(item.hash, true);
     intervene({ hash: item.hash, action: "cleanup", status: "applied", evidence });
   }
   const settings = runtimeSettings(),
@@ -725,13 +740,16 @@ export async function runAcquisitionCycle(consumeRequest=false) {
         apply &&
         Date.now() - Number(stateGet("acquisition_probe_at", "0")) > connectivityProbeInterval(JSON.parse(stateGet('acquisition_probe','{}')))
       ) {
-        const probe = await connectivityProbe().catch((error) => ({ ok: false, error: String(error) }));
+        // Failing to fetch the probe torrent says nothing about peer connectivity;
+        // only a probe that ran and moved no bytes may pause stalled-download repairs.
+        const probe = await connectivityProbe().catch((error) => ({ ok: null, inconclusive: true, error: String(error) }));
         stateSet("acquisition_probe", JSON.stringify(probe));
         stateSet("acquisition_probe_at", String(Date.now()));
-        torrentConnectivityHealthy = probe.ok;
-      } else
-        torrentConnectivityHealthy =
-          JSON.parse(stateGet("acquisition_probe", '{"ok":true}')).ok !== false;
+        torrentConnectivityHealthy = probe.ok !== false;
+      } else {
+        const probe = JSON.parse(stateGet("acquisition_probe", '{"ok":true}')) as {ok?:boolean|null;error?:string};
+        torrentConnectivityHealthy = probe.ok !== false || Boolean(probe.error);
+      }
     }
     let staleRepairs = 0;
     for (const row of managed) {
@@ -752,6 +770,16 @@ export async function runAcquisitionCycle(consumeRequest=false) {
       if(apply&&row.item.progress>=.9&&row.item.progress<1&&row.item.dlspeed===0&&age>=.25&&hoursSince(targetByAlbum(target.lidarr_album_id)?.last_progress_at)>=.25){
         const finished=await finishAudioPayload(row.item.hash).catch(()=>false as const);
         if(finished){intervene({targetId:target.id,hash:row.item.hash,action:'finish-audio',status:'applied',evidence:{...finished,reason:'All audio files complete; only optional artwork or text was unavailable'}});continue}
+      }
+      const errored = errorDecision(row.item.state, lastApplied(row.item.hash, "recheck"));
+      if (errored === "recheck") {
+        intervene({ targetId: target.id, hash: row.item.hash, action: "recheck", status: apply ? "applied" : "proposed", evidence: { state: row.item.state } });
+        if (apply) await recheckTorrent(row.item.hash).catch((error) => console.warn(JSON.stringify({ event: "acquisition_recheck_failed", error: String(error) })));
+        continue;
+      }
+      if (errored === "replace" && staleRepairs < 5) {
+        const queued = queueByHash.get(row.item.hash.toLowerCase());
+        if (queued) { await replace(queued, target, "Torrent client error persisted after a recheck", apply); staleRepairs++; continue; }
       }
       const decision = stalledDecision(target, row.value, row.before, age);
       if (decision && torrentConnectivityHealthy && staleRepairs < 5) {

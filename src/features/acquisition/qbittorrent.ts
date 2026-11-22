@@ -17,6 +17,7 @@ export const reannounce=(hash:string)=>call("/torrents/reannounce",{hashes:hash}
 export const topPriority=(hashes:string[])=>hashes.length?call("/torrents/topPrio",{hashes:hashes.join("|")}):Promise.resolve();
 export const forceStart=(hash:string,value:boolean)=>call("/torrents/setForceStart",{hashes:hash,value:String(value)});
 export const stopTorrent=(hash:string)=>call("/torrents/stop",{hashes:hash});
+export const recheckTorrent=async(hash:string)=>{await call("/torrents/recheck",{hashes:hash});await call("/torrents/start",{hashes:hash})};
 export type TorrentFile={index:number;name:string;progress:number;priority:number;size:number};
 export function incompleteExtras(files:TorrentFile[]){
   const audio=files.filter(f=>/\.(flac|mp3)$/i.test(f.name));

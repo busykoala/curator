@@ -185,6 +185,21 @@ export function isStaleOrphan(
     now - item.added_on * 1_000 >= 24 * hour
   );
 }
+/** Client errors get one recheck; if the error persists for an hour the download is replaced. */
+export function errorDecision(state:string,recheckedAt:number|undefined,now=Date.now()):'recheck'|'replace'|null{
+  if(!/^(error|missingFiles)$/.test(state))return null;
+  if(!recheckedAt)return'recheck';
+  return now-recheckedAt>=hour?'replace':null;
+}
+/**
+ * A torrent Lidarr no longer tracks and Curator does not own: after Curator replaced it
+ * (6 h grace) or after 3 days without completing, its partial payload is abandoned.
+ */
+export function isAbandonedPartial(item:{progress:number;dlspeed:number;added_on:number;category:string},tracked:boolean,replaced:boolean,category:string,now=Date.now()){
+  if(tracked||item.progress>=1||item.dlspeed>0||item.category!==category)return false;
+  const age=now-item.added_on*1_000;
+  return replaced?age>=6*hour:age>=72*hour;
+}
 export function stalledDecision(
   target: AcquisitionTarget,
   now: DownloadObservation,

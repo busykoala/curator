@@ -53,11 +53,29 @@ export function outcomeScore(outcome: Outcomes, latency: number) {
     ),
   );
 }
+type YieldState={baseQueries:number;baseGrabs:number;disabledAt?:number};
+export type IndexerYield={queries:number;grabs:number};
+const YIELD_MIN_QUERIES=2_000,YIELD_REPROBE_MS=7*86_400_000,MIN_ENABLED_SOURCES=3;
+/** Zero-yield indexers burn the shared search budget; park them and re-probe weekly. */
+export function yieldDecision(stats:IndexerYield,saved:YieldState,enabled:boolean,enabledCount:number,now=Date.now()):'disable'|'reprobe'|'keep'{
+  if(!enabled)return saved.disabledAt&&now-saved.disabledAt>=YIELD_REPROBE_MS?'reprobe':'keep';
+  const queries=stats.queries-saved.baseQueries,grabs=stats.grabs-saved.baseGrabs;
+  return queries>=YIELD_MIN_QUERIES&&grabs<=0&&enabledCount>MIN_ENABLED_SOURCES?'disable':'keep';
+}
+/** Priority tiers by grab rate once an indexer has enough history (10 is searched first). */
+export function yieldPriority(stats:IndexerYield):number|undefined{
+  if(stats.queries<500)return undefined;
+  const rate=stats.grabs/stats.queries;
+  return rate>=0.01?10:rate>=0.001?25:40;
+}
 export async function maintainSources(apply: boolean) {
   const rows = await call<Indexer[]>("/indexer"),
+    stats = new Map(((await call<{indexers?:Array<{indexerId:number;numberOfQueries?:number;numberOfGrabs?:number}>}>("/indexerstats").catch(()=>({indexers:[]}))).indexers??[]).map(row=>[row.indexerId,{queries:Number(row.numberOfQueries??0),grabs:Number(row.numberOfGrabs??0)}])),
+    tuning: Array<{indexerId:number;name:string;decision:string;queries:number;grabs:number}> = [],
     scores: SourceScore[] = [],
     updatePriorities =
       Date.now() - Number(stateGet("source_priority_at", "0")) > 86_400_000;
+  let enabledSources = rows.filter(row=>row.enable).length;
   for (const item of rows) {
     const key = `source_health_${item.id}`,
       saved = JSON.parse(
@@ -108,8 +126,17 @@ export async function maintainSources(apply: boolean) {
         "SELECT sum(event='grab') grabs,sum(event='import') imports,sum(event='hard_failure') failures,sum(event='grab_failure') grabFailures,sum(event='replacement') replacements,sum(event='unavailable') unavailable FROM source_outcomes WHERE (indexer_id=? OR lower(replace(indexer_name,' (Prowlarr)',''))=lower(?)) AND created_at>=datetime('now','-7 days')",
       )
       .get(item.id, item.name) as Outcomes;
+    const yieldStats=stats.get(item.id);
+    if(yieldStats){
+      const yieldKey=`source_yield_${item.id}`,yieldSaved=JSON.parse(stateGet(yieldKey,'null')??'null') as YieldState|null??{baseQueries:0,baseGrabs:0};
+      const decision=yieldDecision(yieldStats,yieldSaved,enable,enabledSources);
+      if(apply&&decision==='disable'){enable=false;enabledSources--;stateSet(yieldKey,JSON.stringify({...yieldSaved,disabledAt:Date.now()}))}
+      else if(apply&&decision==='reprobe'){enable=true;enabledSources++;stateSet(yieldKey,JSON.stringify({baseQueries:yieldStats.queries,baseGrabs:yieldStats.grabs}))}
+      else if(!stateGet(yieldKey))stateSet(yieldKey,JSON.stringify(yieldSaved));
+      tuning.push({indexerId:item.id,name:item.name,decision,...yieldStats});
+    }
     const score = outcomeScore(outcome, latency),
-      priority = score > 0.7 ? 10 : score > 0.35 ? 25 : 40;
+      priority = (yieldStats&&yieldPriority(yieldStats)) ?? (score > 0.7 ? 10 : score > 0.35 ? 25 : 40);
     // Save health and priority together. A later priority update using the old
     // snapshot used to undo a disable/recovery and lose recovery ownership.
     if (
@@ -137,5 +164,6 @@ export async function maintainSources(apply: boolean) {
   if (apply && updatePriorities)
     stateSet("source_priority_at", String(Date.now()));
   stateSet("source_scores", JSON.stringify(scores));
+  stateSet("source_yield_tuning", JSON.stringify({at:new Date().toISOString(),apply,indexers:tuning}));
   return scores;
 }

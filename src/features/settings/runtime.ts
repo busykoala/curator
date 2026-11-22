@@ -16,6 +16,8 @@ export type RuntimeSettings = {
   activeDownloadMax: number;
   seedRatio: number;
   seedDays: number;
+  repairsPer15Minutes: number;
+  repairsPerHour: number;
 };
 
 const defaults: RuntimeSettings = {
@@ -33,6 +35,8 @@ const defaults: RuntimeSettings = {
   activeDownloadMax: 48,
   seedRatio: 1,
   seedDays: 14,
+  repairsPer15Minutes: 10,
+  repairsPerHour: 40,
 };
 
 const ranges: Partial<Record<keyof RuntimeSettings, [number, number]>> = {
@@ -47,6 +51,8 @@ const ranges: Partial<Record<keyof RuntimeSettings, [number, number]>> = {
   activeDownloadMax: [12, 96],
   seedRatio: [0.1, 10],
   seedDays: [1, 60],
+  repairsPer15Minutes: [1, 30],
+  repairsPerHour: [5, 120],
 };
 
 export function runtimeSettings(): RuntimeSettings {

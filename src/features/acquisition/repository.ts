@@ -1,4 +1,5 @@
 import { db,stateGet,stateSet } from "@/features/db/client";
+import { runtimeSettings } from "@/features/settings/runtime";
 import type { AcquisitionTarget,DownloadObservation,TargetOrigin } from "./types";
 
 export function upsertTarget(input:{albumId:number;artistId?:number;origin:TargetOrigin;artist?:string;title?:string}){
@@ -23,5 +24,7 @@ export function pruneAcquisitionTelemetry(){
   })();
 }
 export function intervene(decision:{targetId?:number;hash?:string;action:string;status:string;evidence?:unknown}){return db().prepare("INSERT INTO download_interventions(target_id,torrent_hash,action,status,evidence_json) VALUES(?,?,?,?,?)").run(decision.targetId??null,decision.hash??null,decision.action,decision.status,JSON.stringify(decision.evidence??{})).lastInsertRowid}
-export function destructiveAllowed(){const row=db().prepare("SELECT sum(created_at>=datetime('now','-15 minutes')) short,sum(created_at>=datetime('now','-1 hour')) hourly FROM download_interventions WHERE status='applied' AND action IN ('replace','cleanup','disable-source')").get() as{short:number|null;hourly:number|null};return Number(row.short??0)<5&&Number(row.hourly??0)<20}
+/** Epoch ms of the latest applied intervention of this kind for a torrent. */
+export function lastApplied(hash:string,action:string):number|undefined{const row=db().prepare("SELECT created_at FROM download_interventions WHERE lower(torrent_hash)=? AND action=? AND status='applied' ORDER BY id DESC LIMIT 1").get(hash.toLowerCase(),action) as {created_at:string}|undefined;return row?Date.parse(row.created_at.replace(' ','T')+'Z'):undefined}
+export function destructiveAllowed(){const row=db().prepare("SELECT sum(created_at>=datetime('now','-15 minutes')) short,sum(created_at>=datetime('now','-1 hour')) hourly FROM download_interventions WHERE status='applied' AND action IN ('replace','cleanup','disable-source')").get() as{short:number|null;hourly:number|null};const settings=runtimeSettings();return Number(row.short??0)<settings.repairsPer15Minutes&&Number(row.hourly??0)<settings.repairsPerHour}
 export function acquireControllerLease(){return db().transaction(()=>{const until=Number(stateGet("acquisition_lease","0"));if(until>Date.now())return false;stateSet("acquisition_lease",String(Date.now()+4*60_000));return true}).immediate()}
