@@ -1,3 +1,4 @@
+import { audioModelResults } from "@/features/audio-model/client";
 import { createHash } from "node:crypto";
 import { db } from "@/features/db/client";
 import {
@@ -297,6 +298,40 @@ export async function browseLibrary(
   };
 }
 
+/** What the audio model heard and how GENRE/STYLE were derived, for the metadata view. */
+function trackAnalysis(fileId: number) {
+  const heard = audioModelResults([fileId]).get(fileId);
+  const derived = db()
+    .prepare(
+      "SELECT family,main_style,cluster,styles_json,confidence,audio_based,derivation_version FROM genre_derivations WHERE file_id=?",
+    )
+    .get(fileId) as
+    | { family: string; main_style: string | null; cluster: string; styles_json: string; confidence: number; audio_based: number; derivation_version: number }
+    | undefined;
+  const pct = (value: number | null | undefined) => (value == null ? null : Math.round(value * 100));
+  return {
+    heard: heard
+      ? {
+          styles: heard.styles.slice(0, 6).map((style) => ({ label: style.label.replace("---", " · "), percent: pct(style.p) })),
+          voice: pct(heard.voice),
+          danceable: pct(heard.danceable),
+          moods: Object.fromEntries(Object.entries(heard.moods).map(([mood, value]) => [mood, pct(value)])),
+          instruments: heard.instruments.slice(0, 6).map((item) => ({ label: item.label, percent: pct(item.p) })),
+        }
+      : null,
+    derivation: derived
+      ? {
+          family: derived.family,
+          mainStyle: derived.main_style,
+          cluster: derived.cluster,
+          styles: JSON.parse(derived.styles_json) as string[],
+          confidence: derived.confidence,
+          audioBased: Boolean(derived.audio_based),
+          version: derived.derivation_version,
+        }
+      : null,
+  };
+}
 export async function libraryEntity(view: BrowseView, key: string) {
   if (view === "playlists") return navidromePlaylist(key);
   let rows: FileRow[];
@@ -360,6 +395,7 @@ export async function libraryEntity(view: BrowseView, key: string) {
           profile: profile ? JSON.parse(profile.profile_json) : null,
           manual: profile ? JSON.parse(profile.manual_json) : null,
           profileStatus: profile?.status ?? "missing",
+          analysis: trackAnalysis(row.id),
         };
       })
       .sort(

@@ -20,6 +20,7 @@ import {
 import { useListener } from "./app-shell";
 import { useSearchParams } from "next/navigation";
 import { readJson } from "./http";
+import { MetadataPanel, type TrackAnalysis } from "./metadata-panel";
 type Track = {
   id: number;
   title: string;
@@ -33,6 +34,7 @@ type Track = {
   status: string;
   tags: Record<string, unknown>;
   profile: Record<string, unknown> | null;
+  analysis?: TrackAnalysis;
 };
 type Entity = {
   view: string;
@@ -525,6 +527,9 @@ export function LibraryEntityView({
           ))}
         </div>
       </section>
+      {["albums", "songs"].includes(view) && (
+        <MetadataPanel view={view} tracks={entity.tracks} />
+      )}
       <details>
         <summary>Credits and library details</summary>
         <dl className="details-list">
