@@ -13,3 +13,4 @@ test-results
 npm-debug.log*
 .DS_Store
 delivery
+analyzer
