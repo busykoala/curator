@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { db } from "@/features/db/client";
 import { versions } from "@/config";
 import type { CategorizationFile } from "./types";
+import { withoutCuratorTags } from "./curator-tags";
 
 function parse(value:string):Record<string,unknown>{try{return JSON.parse(value) as Record<string,unknown>}catch{return{}}}
 function bounded(value:unknown,depth=0):unknown{
@@ -38,7 +39,39 @@ function stableEvidence(value:unknown):unknown{
   return value;
 }
 
-export function sourceFingerprint(file:CategorizationFile,evidence:Record<string,unknown>):string{
+/** Pre-v2 fingerprint; it included Curator's own written tags. Kept only to migrate stored values. */
+export function legacySourceFingerprint(file:CategorizationFile,evidence:Record<string,unknown>):string{
   const relevant={artist:file.artist,album:file.album,tags:bounded(file.tags),evidence:stableEvidence(bounded(evidence))};
   return createHash("sha256").update(JSON.stringify(relevant)).digest("hex");
+}
+/** Source evidence for classification, excluding tags Curator writes itself (so tag rewrites are not "changes"). */
+export function sourceFingerprint(file:CategorizationFile,evidence:Record<string,unknown>):string{
+  const relevant={artist:file.artist,album:file.album,tags:bounded(withoutCuratorTags(file.tags)),evidence:stableEvidence(bounded(evidence))};
+  return "v2:"+createHash("sha256").update(JSON.stringify(relevant)).digest("hex");
+}
+/**
+ * Move stored fingerprints to v2. The legacy value hashed tags Curator wrote after
+ * classifying, so a mismatch usually means "Curator wrote tags", not "the source
+ * changed"; artist/album and audio changes are caught by the album-key and audio
+ * fingerprint checks. Mismatches are counted for visibility only.
+ * Must finish before any library-wide tag rewrite, or every album would be reclassified.
+ * Returns the number of albums still to check.
+ */
+export function upgradeSourceFingerprints(albumLimit=200):number{
+  const pending=db().prepare("SELECT DISTINCT album_key FROM track_profiles WHERE source_fingerprint NOT LIKE 'v2:%' LIMIT ?").all(albumLimit) as Array<{album_key:string}>;
+  const update=db().prepare("UPDATE track_profiles SET source_fingerprint=? WHERE file_id=? AND source_fingerprint=?");
+  const stale=db().prepare("UPDATE track_profiles SET source_fingerprint='v2:stale' WHERE file_id=? AND source_fingerprint=?");
+  let legacyMismatches=Number(db().prepare("SELECT value FROM state WHERE key='source_fingerprint_v2_mismatches'").pluck().get()??0);
+  for(const {album_key} of pending){
+    const evidence=albumEvidence(album_key),files=new Map(loadAlbumFiles(album_key).map(file=>[file.id,file]));
+    const rows=db().prepare("SELECT file_id,source_fingerprint FROM track_profiles WHERE album_key=? AND source_fingerprint NOT LIKE 'v2:%'").all(album_key) as Array<{file_id:number;source_fingerprint:string}>;
+    db().transaction(()=>{for(const row of rows){
+      const file=files.get(row.file_id);
+      if(!file){stale.run(row.file_id,row.source_fingerprint);continue} // not loadable now: classify when it returns
+      if(legacySourceFingerprint(file,evidence)!==row.source_fingerprint)legacyMismatches++;
+      update.run(sourceFingerprint(file,evidence),row.file_id,row.source_fingerprint);
+    }})();
+  }
+  db().prepare("INSERT INTO state(key,value) VALUES ('source_fingerprint_v2_mismatches',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(String(legacyMismatches));
+  return(db().prepare("SELECT count(DISTINCT album_key) n FROM track_profiles WHERE source_fingerprint NOT LIKE 'v2:%'").get() as{n:number}).n;
 }
