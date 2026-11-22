@@ -315,6 +315,13 @@ function migrate(instance: Database.Database) {
     styles_json TEXT NOT NULL DEFAULT '[]',heads_json TEXT NOT NULL DEFAULT '{}',embedding BLOB,dimensions INTEGER,analyzed_seconds REAL,
     error TEXT,attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at TEXT,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE INDEX IF NOT EXISTS audio_model_results_retry ON audio_model_results(error,next_attempt_at);`));
+  // Deterministic GENRE/STYLE per file from audio-model, catalogue and LLM evidence.
+  migration(31,()=>instance.exec(`CREATE TABLE IF NOT EXISTS genre_derivations(
+    file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,album_key TEXT NOT NULL,derivation_version INTEGER NOT NULL,
+    family TEXT NOT NULL,main_style TEXT,cluster TEXT NOT NULL,styles_json TEXT NOT NULL DEFAULT '[]',genre_tag_json TEXT NOT NULL,style_tag_json TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0,audio_based INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE INDEX IF NOT EXISTS genre_derivations_album ON genre_derivations(album_key,derivation_version);
+    CREATE INDEX IF NOT EXISTS genre_derivations_cluster ON genre_derivations(cluster);`));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;
