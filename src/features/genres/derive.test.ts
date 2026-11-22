@@ -34,8 +34,8 @@ test('compilations are decided per track',()=>{
 
 test('a track departs from its album only on strong audio evidence',()=>{
   const rock={styles:[{label:'Rock---Classic Rock',p:0.7}]};
-  const result=deriveAlbumGenres(album([track(1,{audio:rock}),track(2,{audio:rock}),track(3,{audio:{styles:[{label:'Classical---Romantic',p:0.85}]}}),track(4,{audio:{styles:[{label:'Rock---Classic Rock',p:0.3},{label:'Classical---Romantic',p:0.35}]}})]));
-  assert.deepEqual(result.map(r=>r.family),['Rock','Rock','Classical','Rock']);
+  const result=deriveAlbumGenres(album([track(1,{audio:rock}),track(2,{audio:rock}),track(3,{audio:{styles:[{label:'Classical---Romantic',p:0.85}]},llmGenres:['classical']}),track(4,{audio:{styles:[{label:'Rock---Classic Rock',p:0.3},{label:'Classical---Romantic',p:0.35}]}}),track(5,{audio:{styles:[{label:'Folk, World, & Country---Éntekhno',p:0.8}]},llmGenres:['rock']})]));
+  assert.deepEqual(result.map(r=>r.family),['Rock','Rock','Classical','Rock','Rock'],'a lone audio misfire stays with the album');
 });
 
 test('manual overrides win and evidence without audio still works',()=>{

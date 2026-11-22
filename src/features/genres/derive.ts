@@ -4,7 +4,7 @@ import { audioModelResults, type AudioModelResult } from "@/features/audio-model
 import { FAMILIES, familyOf, resolveStyle, styleFromDiscogs, type Family, type Style } from "./style-map";
 
 /** Bump to re-derive (and, where the result changes, rewrite) every album's GENRE/STYLE. */
-export const GENRE_DERIVATION_VERSION = 3;
+export const GENRE_DERIVATION_VERSION = 4;
 
 export type TrackGenreInput = {
   fileId: number;
@@ -96,7 +96,10 @@ export function deriveAlbumGenres(album: AlbumGenreInput): TrackGenre[] {
     const own = best(all.family)?.[0];
     const audioOwn = best(audio.family);
     let family = manualFamily ?? (compilation ? own : albumFamily) ?? own ?? "World";
-    if (!manualFamily && !compilation && albumFamily && audioOwn && audioOwn[0] !== albumFamily && share(audio, audioOwn[0]) >= 0.6 && share(audio, albumFamily) < 0.15) family = audioOwn[0];
+    // Leaving the album's family needs the recording to clearly sound different AND a
+    // second, independent source to agree (a lone audio-model misfire stays with the album).
+    const llmFamilies = new Set([...track.llmGenres.map(familyOf), ...track.llmStyles.map(value => resolveStyle(value)?.family ?? familyOf(value))].filter(Boolean));
+    if (!manualFamily && !compilation && albumFamily && audioOwn && audioOwn[0] !== albumFamily && share(audio, audioOwn[0]) >= 0.6 && share(audio, albumFamily) < 0.15 && llmFamilies.has(audioOwn[0])) family = audioOwn[0];
     const manualStyles = (track.manual?.styles ?? []).map(value => resolveStyle(value, family)).filter((style): style is Style => Boolean(style));
     const ranked = manualStyles.length ? manualStyles : stylesIn(all, family);
     const mainStyle = manualStyles[0] ?? (!compilation && family === albumFamily && albumMain ? albumMain : ranked[0]);
