@@ -58,3 +58,11 @@ test('an artist’s other albums tip a borderline album toward the same family',
   const clear=[track(1,{audio:{styles:[{label:'Jazz---Cool Jazz',p:0.8}]}})];
   assert.equal(deriveAlbumGenres(album(clear,{artistFamilies:{Rock:40}}))[0].family,'Jazz','a clear recording is not overruled by the artist prior');
 });
+test('featured guests do not turn an artist album into a compilation; bare family words are not styles',()=>{
+  const swing={styles:[{label:'Jazz---Swing',p:0.4},{label:'Pop---Vocal',p:0.2}]};
+  const tracks=['Michael Bublé','Michael Bublé feat. Nelly Furtado','Michael Bublé & Shania Twain','Michael Bublé with Bryan Adams','Michael Bublé'].map((artist,i)=>track(i+1,{artist,audio:swing,llmGenres:['jazz'],llmStyles:['jazz','swing']}));
+  const result=deriveAlbumGenres(album(tracks,{albumArtist:'Michael Bublé'}));
+  assert.ok(result.every(r=>r.family==='Jazz'&&r.genreTag[1]==='Swing'),JSON.stringify(result.map(r=>r.genreTag)));
+  assert.ok(result.every(r=>!r.styleTag.includes('Jazz')));
+  assert.equal(resolveStyle('electronic'),undefined);assert.equal(resolveStyle('ambient')?.display,'Ambient');
+});

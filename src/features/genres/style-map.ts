@@ -145,7 +145,9 @@ export function resolveStyle(value: string, familyHint?: Family): Style | undefi
   const direct = styles.get(key) ?? (ALIASES[key] ? styles.get(styleKey(ALIASES[key])) : undefined);
   if (direct) return direct;
   const family = familyOf(value);
-  return family ? { key: styleKey(`${family}_${value}`), display: titleCase(value), family, cluster: clusterOf(family, titleCase(value)) } : undefined;
+  // A bare family word ("jazz", "electronic") is family evidence, not a style.
+  if (!family || familyByKey.has(key) || FAMILY_WORDS[key] || LLM_GENRES[key]) return undefined;
+  return { key: styleKey(`${family}_${value}`), display: titleCase(value), family, cluster: clusterOf(family, titleCase(value)) };
 }
 
 /**

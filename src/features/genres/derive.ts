@@ -4,7 +4,7 @@ import { audioModelResults, type AudioModelResult } from "@/features/audio-model
 import { FAMILIES, familyOf, resolveStyle, styleFromDiscogs, type Family, type Style } from "./style-map";
 
 /** Bump to re-derive (and, where the result changes, rewrite) every album's GENRE/STYLE. */
-export const GENRE_DERIVATION_VERSION = 2;
+export const GENRE_DERIVATION_VERSION = 3;
 
 export type TrackGenreInput = {
   fileId: number;
@@ -44,14 +44,20 @@ function trackScores(track: TrackGenreInput, album: AlbumGenreInput): { all: Sco
     add(audio, style, p);
   }
   const tagTotal = album.musicbrainzTags.reduce((sum, tag) => sum + Math.max(1, tag.count), 0);
-  for (const tag of album.musicbrainzTags) add(all, resolveStyle(tag.name), (WEIGHT.musicbrainz * Math.max(1, tag.count)) / Math.max(1, tagTotal));
+  for (const tag of album.musicbrainzTags) {
+    const weight = (WEIGHT.musicbrainz * Math.max(1, tag.count)) / Math.max(1, tagTotal), style = resolveStyle(tag.name);
+    if (style) add(all, style, weight); else addFamily(all, familyOf(tag.name), weight);
+  }
   addFamily(all, album.appleGenre ? familyOf(album.appleGenre) : undefined, WEIGHT.apple);
   // The artist's other albums pull gently toward one family, so an artist does not split album by album.
   const artistTotal = Object.values(album.artistFamilies ?? {}).reduce((sum, value) => sum + value, 0);
   for (const [family, count] of Object.entries(album.artistFamilies ?? {})) addFamily(all, family as Family, (WEIGHT.artist * count) / Math.max(1, artistTotal));
   const llm = track.audio ? WEIGHT.llmWithAudio : WEIGHT.llmAlone;
   const llmFamily = track.llmGenres.map(familyOf).find(Boolean);
-  for (const value of track.llmStyles) add(all, resolveStyle(value, llmFamily), llm / Math.max(1, track.llmStyles.length));
+  for (const value of track.llmStyles) {
+    const weight = llm / Math.max(1, track.llmStyles.length), style = resolveStyle(value, llmFamily);
+    if (style) add(all, style, weight); else addFamily(all, familyOf(value), weight);
+  }
   addFamily(all, llmFamily, llm * 0.5);
   return { all, audio };
 }
@@ -60,10 +66,13 @@ function stylesIn(scores: Scores, family: Family) {
   return [...scores.styles.values()].filter(entry => entry.style.family === family).sort((a, b) => b.score - a.score).map(entry => entry.style);
 }
 
+/** "Michael Bublé feat. Nelly Furtado" -> "michael buble". */
+const primaryArtist = (artist: string) => normalized(artist.split(/\s+(?:feat\.?|featuring|ft\.?|with|vs\.?|x)\s+|\s*[,;/&]\s*/i)[0] ?? artist);
 function isCompilation(album: AlbumGenreInput) {
   if (/^various( artists)?$/i.test(album.albumArtist.trim())) return true;
-  const artists = new Set(album.tracks.map(track => normalized(track.artist)));
-  return album.tracks.length >= 4 && artists.size / album.tracks.length > 0.5;
+  if (album.tracks.length < 4) return false;
+  const owner = primaryArtist(album.albumArtist);
+  return album.tracks.filter(track => primaryArtist(track.artist) === owner).length / album.tracks.length < 0.5;
 }
 
 /**
