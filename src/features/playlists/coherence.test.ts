@@ -50,3 +50,12 @@ test('transitions prefer close sounds, the same cluster and nearby decades',()=>
   assert.ok(transitionCost({fact:jazz,year:1959},{fact:jazz2,year:1962})<transitionCost({fact:jazz,year:1959},{fact:hiphop,year:2004}));
   assert.equal(cosine(vector(1,0),vector(1,0)),1);assert.equal(cosine(null,vector(1)),null);
 });
+test('audiobooks and children’s stories stay out of music playlists unless asked for',async()=>{
+  const {assessCandidate}=await import('./selection-policy');
+  const story=track(90);story.evidence=buildTrackEvidence({artist:'Fünf Freunde',title:'Folge 1',profile:{genre:['spoken_word_comedy'],style:['audio_drama'],mood:['warm']},tags:{},provenance:{model:'curator'}});
+  const def=definition(),intent=configuredIntent(def,'m');
+  assert.ok(assessCandidate(story,def,intent,snapshot,now).violations.some(v=>/Spoken word/.test(v)));
+  intent.soft.styles=['audio drama'];
+  assert.ok(!assessCandidate(story,def,intent,snapshot,now).violations.some(v=>/Spoken word/.test(v)),'an explicit spoken-word playlist may include it');
+  assert.ok(!assessCandidate(track(1),def,configuredIntent(def,'m'),snapshot,now).violations.some(v=>/Spoken word/.test(v)),'music is unaffected');
+});

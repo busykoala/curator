@@ -14,6 +14,7 @@ export type EvidencedCandidate=PlaylistCandidate&{evidence:TrackEvidenceView;rec
 export type CandidateAssessment={eligible:boolean;score:number;reasons:string[];violations:string[];uncertainty:string[]};
 export type PlaylistEvaluation={eligible:number;selected:number;requested:number;changed:number;retained:number;artistDiversity:number;albumDiversity:number;unheard:number|null;uncertainty:string[];relaxations:string[];shortage:number;violations:string[];diversityLimits?:{artist:number;album:number};adjacentAdditions?:number;familiarAdditions?:number;adjacentTarget?:number;coherence?:CoherenceEvaluation};
 const values=(v:unknown):string[]=>Array.isArray(v)?v.map(String):v==null?[]:[String(v)];
+const SPOKEN=/(^| )(spoken( word)?|audiobook|audio drama|radio ?play|narrative fiction|narrative|comedy|stand up|story|stories|children s|childrens|nursery|horspiel|hörspiel)( |$)/;
 const days=86400_000;
 
 export function evidenceValues(track:Pick<EvidencedCandidate,'evidence'>,field:string):string[]{
@@ -58,6 +59,10 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
   const semantic=Object.keys(track.evidence.fields).flatMap(field=>evidenceValues(track,field));
   const identity=norm(`${track.artist} ${track.album} ${track.title}`);
   if(hard.exclusions.some(term=>matches(term,[identity,...semantic])))violations.push('Explicit exclusion');
+  // Audiobooks, radio plays, comedy and children's stories never belong in a music
+  // playlist unless the playlist explicitly asks for spoken word.
+  const wantsSpoken=[...soft.styles,...hard.requirements.flatMap(rule=>rule.match==='none'?[]:rule.values)].some(term=>SPOKEN.test(norm(term)));
+  if(!wantsSpoken&&evidenceValues(track,'genre').some(value=>SPOKEN.test(norm(value))))violations.push('Spoken word or children’s audio is not music for this playlist');
   const vocal=evidenceValues(track,'vocalProfile').map(norm),instrumental=vocal.some(v=>v==='instrumental'||v==='no vocals');
   const hasVoice=vocal.some(v=>!['instrumental','no vocals','unknown','none'].includes(v))||track.evidence.fields.vocalProfile?.source!=='user_override'&&track.evidence.fields.vocalPresence?.value===true;
   if(hard.vocal==='instrumental'&&(!instrumental||hasVoice))violations.push('Instrumental requirement lacks consistent track evidence');
