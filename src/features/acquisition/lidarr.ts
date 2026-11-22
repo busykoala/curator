@@ -44,6 +44,8 @@ export const parseRelease=(title:string)=>call<{artist?:{id:number};albums?:Arra
 export const albumCatalog=(artistId:number)=>call<CatalogAlbum[]>(`/album?artistId=${artistId}`);
 export const releaseTracks=(releaseId:number)=>call<import('./import-proof').ReleaseTrack[]>(`/track?albumReleaseId=${releaseId}`);
 export const trackFiles=(albumId:number)=>call<Array<{id:number;albumId:number;path:string}>>(`/trackfile?albumId=${albumId}`);
+export const trackFilesByArtist=(artistId:number)=>call<Array<{id:number;albumId:number;path:string}>>(`/trackfile?artistId=${artistId}`);
+export const artists=()=>call<Array<Record<string,unknown>&{id:number;artistName:string;path?:string}>>('/artist');
 export const artistReleases=(artistId:number)=>call<Release[]>(`/release?artistId=${artistId}`);
 export const trackImportsSince=(date:string)=>call<Array<{albumId?:number;date?:string;data?:{importedPath?:string}}>>('/history/since?'+new URLSearchParams({date,eventType:'3'}));
 export const grabsSince=(date:string)=>call<Array<{sourceTitle:string;downloadId?:string;albumId?:number;data?:{torrentInfoHash?:string}}>>('/history/since?'+new URLSearchParams({date,eventType:'1'}));

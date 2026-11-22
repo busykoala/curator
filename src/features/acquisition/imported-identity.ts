@@ -131,6 +131,7 @@ async function queueNativeImportIdentities(){
 export async function recoverImportedIdentities(){
   await backfillProvenImports();
   await queueNativeImportIdentities();
+  await import('./native-identity').then(module=>module.confirmNativeIdentities()).catch(error=>console.warn(JSON.stringify({event:'native_identity_deferred',error:String(error)})));
   const jobs=db().prepare("SELECT key,value FROM state WHERE key LIKE 'acquisition_identity_pending:%' ORDER BY updated_at LIMIT 3").all() as {key:string;value:string}[];
   for(const saved of jobs)try{
     const job=JSON.parse(saved.value) as IdentityJob,a=await album(job.albumId);
