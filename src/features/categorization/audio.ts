@@ -20,7 +20,7 @@ async function mp3Fingerprint(path:string,size:number):Promise<string>{
   return new Promise((resolve,reject)=>{const hash=createHash("sha256"),stream=createReadStream(path,{start,end});stream.on("data",chunk=>hash.update(chunk));stream.on("error",reject);stream.on("end",()=>resolve(`mp3:${hash.digest("hex")}`))});
 }
 
-async function fingerprint(file:CategorizationFile):Promise<string>{return file.format.toLowerCase()==="flac"?flacFingerprint(file.path):mp3Fingerprint(file.path,file.size)}
+export async function fingerprint(file:CategorizationFile):Promise<string>{return file.format.toLowerCase()==="flac"?flacFingerprint(file.path):mp3Fingerprint(file.path,file.size)}
 
 async function decode(path:string):Promise<Float32Array>{return new Promise((resolve,reject)=>{
   const child=spawn("ffmpeg",["-v","error","-i",path,"-t",String(SECONDS),"-vn","-ac","1","-ar",String(RATE),"-f","f32le","pipe:1"],{stdio:["ignore","pipe","pipe"]});

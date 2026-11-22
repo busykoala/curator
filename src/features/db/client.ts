@@ -309,6 +309,12 @@ function migrate(instance: Database.Database) {
     CREATE INDEX IF NOT EXISTS acquisition_source_cache_expiry ON acquisition_source_cache(expires_at,fetched_at);`));
   // A verified non-catalogue source (for example a purchased Bandcamp release) can confirm identity.
   migration(29,()=>addColumns(instance,'manual_overrides',[['source_url','TEXT']]));
+  // Essentia audio-model results: styles, voice, danceability, moods, instruments, sound embedding.
+  migration(30,()=>instance.exec(`CREATE TABLE IF NOT EXISTS audio_model_results(
+    file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,audio_fingerprint TEXT NOT NULL,model_version TEXT NOT NULL,
+    styles_json TEXT NOT NULL DEFAULT '[]',heads_json TEXT NOT NULL DEFAULT '{}',embedding BLOB,dimensions INTEGER,analyzed_seconds REAL,
+    error TEXT,attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at TEXT,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE INDEX IF NOT EXISTS audio_model_results_retry ON audio_model_results(error,next_attempt_at);`));
 }
 export function db(): Database.Database {
   if (globalDb.curatorDb) return globalDb.curatorDb;
