@@ -107,7 +107,9 @@ async function analyzeOne(file: Pending) {
   } catch (error) {
     const status = (error as { status?: number }).status;
     // An unreachable, busy or timed-out analyzer is not the file's fault: don't spend its attempts.
-    if (status == null || status === 503) return "unavailable" as const;
+    // A per-request timeout is this file's problem (e.g. an unusually long recording): charge an attempt.
+    const timedOut = (error as Error).name === "TimeoutError";
+    if (!timedOut && (status == null || status === 503)) return "unavailable" as const;
     // Unreadable files (422) back off for a week; other file failures retry soon.
     const delay = status === 422 ? "+7 days" : "+30 minutes";
     db().prepare(`INSERT INTO audio_model_results(file_id,audio_fingerprint,model_version,error,attempts,next_attempt_at) VALUES (?,?,?,?,1,datetime('now',?))

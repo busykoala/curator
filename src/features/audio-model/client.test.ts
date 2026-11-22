@@ -44,5 +44,10 @@ test('backfill stores analyzer results and backs off unreadable files',async()=>
     stateSet('audio_model_paused','true');
     assert.match(stateGet('audio_model_error'),/unavailable/);
     assert.equal(db().prepare('SELECT 1 FROM audio_model_results WHERE file_id=?').get(fresh),undefined,'no failure recorded against the file');
+    globalThis.fetch=(async()=>{throw Object.assign(new Error('The operation was aborted due to timeout'),{name:'TimeoutError'})}) as typeof fetch;
+    stateSet('audio_model_paused','false');startAudioModelBackfill();
+    for(let i=0;i<50&&!db().prepare('SELECT 1 FROM audio_model_results WHERE file_id=?').get(fresh);i++)await new Promise(resolve=>setTimeout(resolve,20));
+    stateSet('audio_model_paused','true');
+    assert.equal((db().prepare('SELECT attempts FROM audio_model_results WHERE file_id=?').get(fresh) as {attempts:number}).attempts,1,'a timeout counts against the file');
   }finally{globalThis.fetch=original;config.CURATOR_AUDIO_ANALYZER_URL=undefined;rmSync(dir,{recursive:true,force:true})}
 });
