@@ -53,3 +53,11 @@ test('conflicting original dates are reviewable and explicit year overrides are 
   const conflict=buildTrackEvidence(input);assert.equal(conflict.originalYear,null);assert.equal(conflict.fields.originalYear.source,'conflict');
   const override=buildTrackEvidence({...input,manual:{originalYear:1977}});assert.equal(override.originalYear,1977);assert.equal(override.fields.originalYear.source,'user_override');
 });
+test('what the audio model hears overrules an inferred vocal claim in either direction',()=>{
+  const sung=buildTrackEvidence({artist:'A',title:'T',tags:{},profile:{vocalProfile:['clean_sung']},provenance:{model:'curator'},external:[{field:'vocalPresence',value:false,scope:'recording',url:'curator:audio-model'}]});
+  assert.equal(sung.fields.vocalProfile.source,'conflict');
+  const instrumental=buildTrackEvidence({artist:'A',title:'T',tags:{},profile:{vocalProfile:['instrumental']},provenance:{model:'curator'},external:[{field:'vocalPresence',value:true,scope:'recording',url:'curator:audio-model'}]});
+  assert.equal(instrumental.fields.vocalProfile.source,'conflict');
+  const agreed=buildTrackEvidence({artist:'A',title:'T',tags:{},profile:{vocalProfile:['instrumental']},provenance:{model:'curator'},external:[{field:'vocalPresence',value:false,scope:'recording',url:'curator:audio-model'}]});
+  assert.notEqual(agreed.fields.vocalProfile.source,'conflict');
+});

@@ -2,6 +2,7 @@ import {db} from '@/features/db/client';
 import {buildTrackEvidence,trackEvidenceHash,trackEvidenceVersion,type ExternalTrackFact,type TrackEvidenceView} from './track-evidence';
 import {reviewIdentity,reviewIdentityHash} from './metadata-review';
 import {reviewedTrackFacts} from './reviewed-track-facts';
+import {audioModelResults} from '@/features/audio-model/client';
 
 export function playlistTrackEvidence(fileId:number):TrackEvidenceView|null{
   const row=db().prepare(`SELECT f.id,f.artist_name,f.album_key,f.tags_json,f.properties_json,p.profile_json,p.provenance_json,o.patch_json,m.release_group_mbid,a.features_json
@@ -26,6 +27,9 @@ export function playlistTrackEvidence(fileId:number):TrackEvidenceView|null{
       break;
     }
   }
+  // What the audio model heard: a confident voice/instrumental decision is a recording fact.
+  const heard=audioModelResults([fileId]).get(fileId);
+  if(heard?.voice!=null&&(heard.voice>=0.8||heard.voice<=0.15))external.push({field:'vocalPresence',value:heard.voice>=0.8,scope:'recording',url:'curator:audio-model'});
   const input={artist:row.artist_name,title:String(Array.isArray(tags.title)?tags.title[0]:tags.title??''),tags,profile:JSON.parse(row.profile_json??'{}'),manual:JSON.parse(row.patch_json??'{}'),provenance:JSON.parse(row.provenance_json??'{}'),audio:JSON.parse(row.features_json??'{}'),external};
   const hash=trackEvidenceHash(input),cached=db().prepare('SELECT evidence_json FROM playlist_track_evidence WHERE file_id=? AND version=? AND source_hash=?').get(fileId,trackEvidenceVersion,hash) as {evidence_json:string}|undefined;
   if(cached)return JSON.parse(cached.evidence_json);

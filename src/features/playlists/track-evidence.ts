@@ -46,6 +46,9 @@ export function buildTrackEvidence(input:Input):TrackEvidenceView{
   if(fields.vocalPresence?.value===true&&vocal.includes('instrumental')&&fields.vocalProfile.source!=='user_override'){
     fields.vocalProfile={...fields.vocalProfile,value:null,source:'conflict',confidence:'unknown',note:'Verified vocal credits contradict instrumental inference'};conflicts.push('vocalProfile');
   }
+  if(fields.vocalPresence?.value===false&&vocal.length&&!vocal.includes('instrumental')&&fields.vocalProfile?.source!=='user_override'){
+    fields.vocalProfile={...fields.vocalProfile,value:null,source:'conflict',confidence:'unknown',note:'The recording sounds instrumental but vocals were inferred'};conflicts.push('vocalProfile');
+  }
   if(vocal.includes('instrumental')&&vocal.some(v=>/^(spoken|rap|clean_sung|sung|chant|choir)$/.test(v))&&fields.vocalProfile.source!=='user_override'){
     fields.vocalProfile={...fields.vocalProfile,value:null,source:'conflict',confidence:'unknown',note:'Instrumental and vocal/spoken claims conflict'};conflicts.push('vocalProfile');
   }
