@@ -27,7 +27,10 @@ export async function compilePlaylistIntent(definition:PlaylistDefinition,curren
   const cached=db().prepare('SELECT intent_json,detail_json FROM playlist_intents WHERE playlist_id=? AND source_hash=?').get(definition.id,sourceHash) as {intent_json:string;detail_json:string}|undefined;
   if(cached&&!options.force)return{intent:canonicalIntent(JSON.parse(cached.intent_json)),detail:{...JSON.parse(cached.detail_json),cached:true}};
   const base=configuredIntent(definition,revision),started=Date.now();
-  const savedIntent=chat?.result?.detail.intent,saved=chat?.result?.detail.requirements;
+  // Earlier compilations could exclude the very styles they asked for; never carry that contradiction forward.
+  const storedIntent=chat?.result?.detail.intent,saved=chat?.result?.detail.requirements;
+  const savedIntent=storedIntent?structuredClone(storedIntent):storedIntent;
+  if(savedIntent)dropContradictingExclusions(savedIntent);
   if(savedIntent&&!options.interactive){
     base.summary=savedIntent.summary;
     base.energyCurve=savedIntent.energyCurve??'configured';
