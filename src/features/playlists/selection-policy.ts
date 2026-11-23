@@ -27,6 +27,7 @@ export function evidenceValues(track:Pick<EvidencedCandidate,'evidence'>,field:s
 }
 // Phrase boundaries prevent rock matching hard rock's antonym-like substrings
 // (or an artist named Rockwell). Synonyms use the shared vocabulary.
+const DESCRIPTOR_FIELDS=new Set(['acousticElectronicCharacter','timbre','production','texture','dynamicCharacter','structuralCharacter','groove','tempoFeel','energy','valence','danceability','bpm','musicalKey','mode','meter','trackDescription']);
 function matches(term:string,available:string[]){
   return semanticTermVariants(term).some(term=>{const wanted=norm(term);return Boolean(wanted)&&available.some(value=>{
     const actual=norm(value);return actual===wanted||(' '+actual+' ').includes(' '+wanted+' ');
@@ -56,7 +57,9 @@ export function assessCandidate(track:EvidencedCandidate,definition:PlaylistDefi
   const exactArtist=(artist:string)=>trackArtistMatches([track.artist],artist,undefined);
   if(hard.artists.length&&!hard.artists.some(exactArtist))violations.push('Required artist');
   if(hard.excludeArtists.some(exactArtist))violations.push('Excluded artist');
-  const semantic=Object.keys(track.evidence.fields).flatMap(field=>evidenceValues(track,field));
+  // Exclusions name kinds of music ("no electronic", "no live"), so they are checked against what a song
+  // is, not against sound descriptors: "acoustic_electronic_hybrid" or a "classical" timbre is no genre.
+  const semantic=Object.keys(track.evidence.fields).filter(field=>!DESCRIPTOR_FIELDS.has(field)).flatMap(field=>evidenceValues(track,field));
   const identity=norm(`${track.artist} ${track.album} ${track.title}`);
   if(hard.exclusions.some(term=>matches(term,[identity,...semantic])))violations.push('Explicit exclusion');
   // Audiobooks, radio plays, comedy and children's stories never belong in a music

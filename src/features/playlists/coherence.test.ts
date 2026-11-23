@@ -59,3 +59,12 @@ test('audiobooks and children’s stories stay out of music playlists unless ask
   assert.ok(!assessCandidate(story,def,intent,snapshot,now).violations.some(v=>/Spoken word/.test(v)),'an explicit spoken-word playlist may include it');
   assert.ok(!assessCandidate(track(1),def,configuredIntent(def,'m'),snapshot,now).violations.some(v=>/Spoken word/.test(v)),'music is unaffected');
 });
+
+test('exclusions name kinds of music, not sound descriptors',async()=>{
+  const {assessCandidate}=await import('./selection-policy');
+  const def=definition(),intent=configuredIntent(def,'m');intent.hard.exclusions=['electronic','classical'];
+  const jazz=track(70);jazz.evidence=buildTrackEvidence({artist:'Norah Jones',title:'Sunrise',profile:{genre:['jazz'],style:['vocal_jazz'],acousticElectronicCharacter:'acoustic_electronic_hybrid',timbre:['warm'],mood:['warm']},tags:{},provenance:{model:'curator'}});
+  assert.ok(!assessCandidate(jazz,def,intent,snapshot,now).violations.includes('Explicit exclusion'));
+  const synth=track(71);synth.evidence=buildTrackEvidence({artist:'Moderat',title:'Bad Kingdom',profile:{genre:['electronic'],style:['idm'],mood:['warm']},tags:{},provenance:{model:'curator'}});
+  assert.ok(assessCandidate(synth,def,intent,snapshot,now).violations.includes('Explicit exclusion'));
+});
