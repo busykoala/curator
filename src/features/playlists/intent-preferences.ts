@@ -121,3 +121,20 @@ export function groundRetentionRequest(intent:PlaylistIntent,userDirections:stri
   intent.positionLocks=intent.positionLocks.filter(lock=>positions.has(lock.fileId+':'+lock.position));
   return changed;
 }
+
+/** A genre/style the listener asks for can never also be excluded. Model-compiled none-rules that name a
+ *  requested style (soft styles or a positive genre/style rule) are dropped; configured rules stay. */
+export function dropContradictingExclusions(intent:PlaylistIntent,preserved:SemanticRequirement[]=[]){
+  const genreLike=new Set(['genre','style']);
+  const key=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+  const wanted=new Set([...intent.soft.styles,...intent.hard.requirements.filter(rule=>genreLike.has(rule.field)&&rule.match!=='none').flatMap(rule=>rule.values)].map(key));
+  const kept=new Set(preserved.map(rule=>JSON.stringify(rule))),dropped:string[]=[];
+  intent.hard.requirements=intent.hard.requirements.flatMap(rule=>{
+    if(rule.match!=='none'||!genreLike.has(rule.field)||kept.has(JSON.stringify(rule)))return[rule];
+    const values=rule.values.filter(value=>!wanted.has(key(value)));
+    dropped.push(...rule.values.filter(value=>wanted.has(key(value))));
+    return values.length?[{...rule,values}]:[];
+  });
+  intent.hard.exclusions=intent.hard.exclusions.filter(term=>{const conflict=wanted.has(key(term));if(conflict)dropped.push(term);return!conflict;});
+  return dropped;
+}

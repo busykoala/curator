@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {configuredIntent,canonicalIntent} from './intent-schema';import {defaultConfig,type PlaylistDefinition} from './types';
-import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion,groundFavouritesScope,groundPianoPresence,groundRetentionRequest} from './intent-preferences';
+import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion,groundFavouritesScope,groundPianoPresence,groundRetentionRequest,dropContradictingExclusions} from './intent-preferences';
 const base=()=>configuredIntent({config:defaultConfig('mood'),intent:''} as PlaylistDefinition,'revision');
 test('ordinary mood/context preferences cannot become mandatory all-term filters',()=>{
   const intent=base();intent.hard.requirements=[{field:'genre',values:['trip_hop'],match:'all'},{field:'mood',values:['dark','atmospheric'],match:'all'},{field:'listeningContexts',values:['late_night'],match:'all'},{field:'mood',values:['aggressive'],match:'none'}];
@@ -117,4 +117,14 @@ test('a correction without a real retention request cannot create new pins or po
   assert.equal(groundRetentionRequest(intent,['Relaxed jazz.','Make every song instrumental piano jazz.'],saved),true);
   assert.deepEqual(intent.pinnedRecordings,saved.pinnedRecordings);assert.deepEqual(intent.positionLocks,saved.positionLocks);
   for(const direction of ['Keep the first two.','Bitte die ersten beiden behalten.'])assert.equal(groundRetentionRequest(intent,[direction],saved),false);
+});
+test('requested styles cannot also be excluded by the compiled intent',()=>{
+  const intent=base();intent.soft.styles=['vocal_jazz','cool_jazz','bossa_nova'];
+  const configured={field:'style' as const,values:['cool_jazz'],match:'none' as const};
+  intent.hard.requirements=[{field:'genre',values:['jazz'],match:'any'},{field:'style',values:['fusion','cool_jazz','vocal_jazz','bossa_nova'],match:'none'},{field:'genre',values:['jazz','pop'],match:'none'},configured];
+  intent.hard.exclusions=['fusion','vocal jazz'];
+  const dropped=dropContradictingExclusions(intent,[configured]);
+  assert.deepEqual(intent.hard.requirements,[{field:'genre',values:['jazz'],match:'any'},{field:'style',values:['fusion'],match:'none'},{field:'genre',values:['pop'],match:'none'},configured]);
+  assert.deepEqual(intent.hard.exclusions,['fusion']);
+  assert.deepEqual(dropped.sort(),['bossa_nova','cool_jazz','jazz','vocal jazz','vocal_jazz']);
 });

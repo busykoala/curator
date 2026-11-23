@@ -11,9 +11,9 @@ import {canonicalIntent,configuredIntent,playlistIntentSchema,type PlaylistInten
 import type {EvidencedCandidate} from './selection-policy';
 import type {PlaylistDefinition} from './types';
 import {playlistAttemptRecorder} from './inference-metrics';
-import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion,groundFavouritesScope,groundPianoPresence,groundRetentionRequest} from './intent-preferences';
+import {enforceSoftPreferences,enforceDiscoveryStylePreferences,groundFestivalExclusion,groundClimaxExclusion,groundFavouritesScope,groundPianoPresence,groundRetentionRequest,dropContradictingExclusions} from './intent-preferences';
 
-const compilerVersion=16;
+const compilerVersion=17;
 export type ChatIntentContext=ReturnType<typeof chatState>;
 const compiledSchema=playlistIntentSchema.omit({version:true,sourceRevision:true,pinnedRecordings:true,excludedFileIds:true,excludedRecordings:true}).extend({
   pinFileIds:z.array(z.number().int().positive()).max(100),conflicts:z.array(z.string().max(240)).max(10),
@@ -108,7 +108,8 @@ ${canonicalPrompt}`,
     const groundedFavouritesScope=groundFavouritesScope(intent,directions,base.hard);
     const groundedPianoPresence=groundPianoPresence(intent,directions,preserved);
     const groundedRetention=groundRetentionRequest(intent,directions,base);
-    detail={...detail,usage:output.usage,latencyMs:Date.now()-started,demotedPreferences:demoted,groundedFestivalExclusion,groundedClimaxExclusion,groundedFavouritesScope,groundedPianoPresence,groundedRetention,replaceUnpinned:compiled.replaceUnpinned};
+    const droppedContradictions=dropContradictingExclusions(intent,preserved);
+    detail={...detail,usage:output.usage,latencyMs:Date.now()-started,demotedPreferences:demoted,groundedFestivalExclusion,groundedClimaxExclusion,groundedFavouritesScope,groundedPianoPresence,groundedRetention,droppedContradictions,replaceUnpinned:compiled.replaceUnpinned};
   }
   intent=canonicalIntent(intent);
   db().prepare('INSERT INTO playlist_intents(playlist_id,source_hash,intent_json,detail_json) VALUES(?,?,?,?) ON CONFLICT(playlist_id) DO UPDATE SET source_hash=excluded.source_hash,intent_json=excluded.intent_json,detail_json=excluded.detail_json,updated_at=CURRENT_TIMESTAMP')
